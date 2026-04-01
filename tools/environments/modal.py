@@ -153,6 +153,7 @@ class ModalEnvironment(BaseEnvironment):
         modal_sandbox_kwargs: Optional[Dict[str, Any]] = None,
         persistent_filesystem: bool = True,
         task_id: str = "default",
+        add_python: Optional[str] = None,
     ):
         super().__init__(cwd=cwd, timeout=timeout)
 
