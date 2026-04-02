@@ -290,14 +290,6 @@ class LocalEnvironment(BaseEnvironment):
             preexec_fn=None if _IS_WINDOWS else os.setsid,
         )
 
-    def _read_file_in_env(self, path: str) -> str:
-        """Local override: direct file read, no subprocess needed."""
-        try:
-            with open(path) as f:
-                return f.read()
-        except OSError:
-            return ""
-
     def _kill_process(self, proc):
         """Local override: kill process group for child cleanup."""
         try:
@@ -318,7 +310,7 @@ class LocalEnvironment(BaseEnvironment):
                 pass
 
     def cleanup(self):
-        for p in (self._snapshot_path, self._cwdfile_path):
+        for p in (self._snapshot_path,):
             if p:
                 try:
                     os.remove(p)

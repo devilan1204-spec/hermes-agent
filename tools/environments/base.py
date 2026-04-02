@@ -16,6 +16,10 @@ from tools.interrupt import is_interrupted
 
 logger = logging.getLogger(__name__)
 
+# Marker echoed to stdout by the wrapping template so the local Hermes
+# process can extract the remote shell's cwd without a separate round-trip.
+_CWD_MARKER = "__HERMES_CWD__"
+
 
 def get_sandbox_dir() -> Path:
     """Return the host-side root for all sandbox storage (Docker workspaces,
@@ -70,7 +74,6 @@ class BaseEnvironment(ABC):
         self.timeout = timeout
         self.env = env or {}
         self._snapshot_path: str | None = None
-        self._cwdfile_path: str | None = None
         self._snapshot_ready: bool = False
         self._session_id: str = ""
 
@@ -117,6 +120,9 @@ class BaseEnvironment(ABC):
         """
         return self._run_bash(cmd_string)
 
+    # Subclasses may increase for slow backends (Modal, Daytona cold start)
+    _snapshot_timeout: int = 15
+
     def init_session(self):
         """Capture the login-shell environment into a snapshot file.
 
@@ -125,7 +131,6 @@ class BaseEnvironment(ABC):
         """
         self._session_id = uuid.uuid4().hex[:12]
         self._snapshot_path = f"/tmp/hermes-snap-{self._session_id}.sh"
-        self._cwdfile_path = f"/tmp/hermes-cwd-{self._session_id}"
 
         bootstrap = (
             f"set +e\n"
@@ -135,12 +140,13 @@ class BaseEnvironment(ABC):
             f"alias -p >> {self._snapshot_path} 2>/dev/null || true\n"
             f"echo 'set +e' >> {self._snapshot_path}\n"
             f"echo 'set +u' >> {self._snapshot_path}\n"
-            f"pwd -P >| {self._cwdfile_path}\n"
+            f"printf '{_CWD_MARKER}%s{_CWD_MARKER}' \"$(pwd -P)\"\n"
         )
 
+        result = {}
         try:
             proc = self._run_bash_login(bootstrap)
-            result = self._wait_for_process(proc, timeout=15)
+            result = self._wait_for_process(proc, timeout=self._snapshot_timeout)
             if result["returncode"] == 0:
                 self._snapshot_ready = True
                 logger.info(
@@ -154,10 +160,8 @@ class BaseEnvironment(ABC):
         except Exception as e:
             logger.warning("Snapshot creation failed: %s", e)
 
-        # Pick up the reported cwd if available
-        reported_cwd = self._read_file_in_env(self._cwdfile_path).strip()
-        if reported_cwd:
-            self.cwd = reported_cwd
+        # Pick up the reported cwd from bootstrap stdout
+        self._extract_cwd_from_output(result)
 
     # ------------------------------------------------------------------
     # Command wrapping
@@ -185,10 +189,11 @@ class BaseEnvironment(ABC):
         escaped = command.replace("'", "'\\''")
         parts.append(f"eval '{escaped}'")
 
-        # 4. Capture exit code, then record CWD
+        # 4. Capture exit code, echo CWD to stdout for local parsing
         parts.append("__hermes_ec=$?")
-        if self._cwdfile_path:
-            parts.append(f"pwd -P >| {self._cwdfile_path}")
+        parts.append(
+            f"printf '\\n{_CWD_MARKER}%s{_CWD_MARKER}\\n' \"$(pwd -P)\""
+        )
         parts.append("exit $__hermes_ec")
 
         return "\n".join(parts)
@@ -220,8 +225,8 @@ class BaseEnvironment(ABC):
         proc = self._run_bash(wrapped, stdin_data=effective_stdin)
         result = self._wait_for_process(proc, timeout=effective_timeout)
 
-        # Update CWD from the cwdfile written by the wrapping template
-        self._update_cwd_from_file()
+        # Extract CWD from stdout (in-band, no remote file read needed)
+        self._extract_cwd_from_output(result)
 
         return result
 
@@ -283,29 +288,34 @@ class BaseEnvironment(ABC):
             pass
 
     # ------------------------------------------------------------------
-    # CWD tracking
+    # CWD tracking (in-band via stdout, no remote file reads)
     # ------------------------------------------------------------------
 
-    def _update_cwd_from_file(self):
-        """Read the cwdfile after process exit, update self.cwd."""
-        if not self._cwdfile_path:
-            return
-        try:
-            new_cwd = self._read_file_in_env(self._cwdfile_path).strip()
-            if new_cwd:
-                self.cwd = new_cwd
-        except Exception:
-            pass  # CWD tracking is best-effort
+    def _extract_cwd_from_output(self, result: dict) -> dict:
+        """Parse CWD marker from command output, update self.cwd, strip marker.
 
-    def _read_file_in_env(self, path: str) -> str:
-        """Read a file inside the backend's execution context.
-
-        Default: run ``cat <path>`` via _run_bash.  Backends with faster
-        methods (local: ``open()``) should override.
+        The wrapping template echoes ``__HERMES_CWD__/path__HERMES_CWD__``
+        to stdout.  This method extracts the path, updates ``self.cwd``,
+        and removes the marker from the output so the caller sees clean output.
         """
-        proc = self._run_bash(f"cat {shlex.quote(path)} 2>/dev/null")
-        result = self._wait_for_process(proc, timeout=5)
-        return result.get("output", "")
+        output = result.get("output", "")
+        ml = len(_CWD_MARKER)
+        # Find the last pair: look for the second-to-last marker (open),
+        # then the last marker (close).
+        close = output.rfind(_CWD_MARKER)
+        if close == -1:
+            return result
+        open_ = output.rfind(_CWD_MARKER, 0, close)
+        if open_ == -1:
+            return result
+        cwd = output[open_ + ml:close].strip()
+        if cwd:
+            self.cwd = cwd
+        # Strip the marker and surrounding whitespace from output
+        before = output[:open_].rstrip("\n")
+        after = output[close + ml:].lstrip("\n")
+        result["output"] = (before + after) if after else before
+        return result
 
     # ------------------------------------------------------------------
     # Hooks for subclasses

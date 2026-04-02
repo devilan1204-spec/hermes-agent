@@ -181,26 +181,10 @@ class SSHEnvironment(BaseEnvironment):
             stdin=subprocess.DEVNULL, text=True,
         )
 
-    def _read_file_in_env(self, path: str) -> str:
-        """SSH override: use subprocess.run for single-shot cat, suppress stderr.
-
-        SSH connection warnings (post-quantum, etc.) must not pollute
-        the cwdfile read — use separate stderr to discard them.
-        """
-        cmd = self._build_ssh_command()
-        cmd.append(f"cat {shlex.quote(path)} 2>/dev/null")
-        try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=10,
-            )
-            return result.stdout
-        except (subprocess.TimeoutExpired, OSError):
-            return ""
-
     def cleanup(self):
-        # Clean up remote snapshot and cwdfile before closing ControlMaster
-        if self._snapshot_path or self._cwdfile_path:
-            paths = " ".join(p for p in (self._snapshot_path, self._cwdfile_path) if p)
+        # Clean up remote snapshot before closing ControlMaster
+        if self._snapshot_path:
+            paths = self._snapshot_path
             try:
                 cmd = self._build_ssh_command()
                 cmd.append(f"rm -f {paths}")
