@@ -1,23 +1,18 @@
-"""Local execution environment with interrupt support and non-blocking I/O."""
+"""Local execution environment — spawn-per-call with snapshot."""
 
-import glob
+import logging
 import os
 import platform
 import shutil
 import signal
 import subprocess
 import threading
-import time
 
 _IS_WINDOWS = platform.system() == "Windows"
 
 from tools.environments.base import BaseEnvironment
-from tools.environments.persistent_shell import PersistentShellMixin
-from tools.interrupt import is_interrupted
 
-# Unique marker to isolate real command output from shell init/exit noise.
-# printf (no trailing newline) keeps the boundaries clean for splitting.
-_OUTPUT_FENCE = "__HERMES_FENCE_a9f7b3__"
+logger = logging.getLogger(__name__)
 
 # Hermes-internal env vars that should NOT leak into terminal subprocesses.
 # These are loaded from ~/.hermes/.env for Hermes' own LLM/provider calls
@@ -314,173 +309,94 @@ def _extract_fenced_output(raw: str) -> str:
     return raw[start:last]
 
 
-class LocalEnvironment(PersistentShellMixin, BaseEnvironment):
+class LocalEnvironment(BaseEnvironment):
     """Run commands directly on the host machine.
 
-    Features:
-    - Popen + polling for interrupt support (user can cancel mid-command)
-    - Background stdout drain thread to prevent pipe buffer deadlocks
+    Uses the unified spawn-per-call model:
+    - bash -l once at session start to capture env snapshot
+    - bash -c for every subsequent command (fast, no shell init overhead)
+    - CWD tracked via cwdfile written after each command
+    - Process group kill (os.setsid) for clean child cleanup
     - stdin_data support for piping content (bypasses ARG_MAX limits)
-    - sudo -S transform via SUDO_PASSWORD env var
-    - Uses interactive login shell so full user env is available
-    - Optional persistent shell mode (cwd/env vars survive across calls)
     """
 
     def __init__(self, cwd: str = "", timeout: int = 60, env: dict = None,
-                 persistent: bool = False):
+                 **kwargs):
         super().__init__(cwd=cwd or os.getcwd(), timeout=timeout, env=env)
-        self.persistent = persistent
-        if self.persistent:
-            self._init_persistent_shell()
+        self.init_session()
 
-    @property
-    def _temp_prefix(self) -> str:
-        return f"/tmp/hermes-local-{self._session_id}"
-
-    def _spawn_shell_process(self) -> subprocess.Popen:
-        user_shell = _find_bash()
+    def _run_bash(self, cmd_string: str, *,
+                  stdin_data: str | None = None) -> subprocess.Popen:
         run_env = _make_run_env(self.env)
-        return subprocess.Popen(
-            [user_shell, "-l"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            env=run_env,
-            preexec_fn=None if _IS_WINDOWS else os.setsid,
-        )
-
-    def _read_temp_files(self, *paths: str) -> list[str]:
-        results = []
-        for path in paths:
-            if os.path.exists(path):
-                with open(path) as f:
-                    results.append(f.read())
-            else:
-                results.append("")
-        return results
-
-    def _kill_shell_children(self):
-        if self._shell_pid is None:
-            return
-        try:
-            subprocess.run(
-                ["pkill", "-P", str(self._shell_pid)],
-                capture_output=True, timeout=5,
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-    def _cleanup_temp_files(self):
-        for f in glob.glob(f"{self._temp_prefix}-*"):
-            if os.path.exists(f):
-                os.remove(f)
-
-    def _execute_oneshot(self, command: str, cwd: str = "", *,
-                         timeout: int | None = None,
-                         stdin_data: str | None = None) -> dict:
-        work_dir = cwd or self.cwd or os.getcwd()
-        effective_timeout = timeout or self.timeout
-        exec_command, sudo_stdin = self._prepare_command(command)
-
-        if sudo_stdin is not None and stdin_data is not None:
-            effective_stdin = sudo_stdin + stdin_data
-        elif sudo_stdin is not None:
-            effective_stdin = sudo_stdin
-        else:
-            effective_stdin = stdin_data
-
-        user_shell = _find_bash()
-        # Newline-separated wrapper (not `cmd; __hermes_rc=...` on one line).
-        # A trailing `; __hermes_rc` glued to `<<EOF` / a closing `EOF` line breaks
-        # heredoc parsing: the delimiter must be alone on its line, otherwise the
-        # rest of this script becomes heredoc body and leaks into stdout (e.g. gh
-        # issue/PR flows that use here-documents for bodies).
-        fenced_cmd = (
-            f"printf '{_OUTPUT_FENCE}'\n"
-            f"{exec_command}\n"
-            f"__hermes_rc=$?\n"
-            f"printf '{_OUTPUT_FENCE}'\n"
-            f"exit $__hermes_rc\n"
-        )
-        run_env = _make_run_env(self.env)
-
         proc = subprocess.Popen(
-            [user_shell, "-lic", fenced_cmd],
+            [_find_bash(), "-c", cmd_string],
             text=True,
-            cwd=work_dir,
+            cwd="/",  # CWD set inside the script via cd
             env=run_env,
             encoding="utf-8",
             errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            stdin=subprocess.PIPE if effective_stdin is not None else subprocess.DEVNULL,
+            stdin=subprocess.PIPE if stdin_data is not None else subprocess.DEVNULL,
             preexec_fn=None if _IS_WINDOWS else os.setsid,
         )
-
-        if effective_stdin is not None:
-            def _write_stdin():
+        if stdin_data is not None:
+            def _write():
                 try:
-                    proc.stdin.write(effective_stdin)
+                    proc.stdin.write(stdin_data)
                     proc.stdin.close()
                 except (BrokenPipeError, OSError):
                     pass
-            threading.Thread(target=_write_stdin, daemon=True).start()
+            threading.Thread(target=_write, daemon=True).start()
+        return proc
 
-        _output_chunks: list[str] = []
+    def _run_bash_login(self, cmd_string: str) -> subprocess.Popen:
+        """For snapshot creation: uses bash -l -c."""
+        run_env = _make_run_env(self.env)
+        return subprocess.Popen(
+            [_find_bash(), "-l", "-c", cmd_string],
+            text=True,
+            cwd="/",
+            env=run_env,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            preexec_fn=None if _IS_WINDOWS else os.setsid,
+        )
 
-        def _drain_stdout():
+    def _read_file_in_env(self, path: str) -> str:
+        """Local override: direct file read, no subprocess needed."""
+        try:
+            with open(path) as f:
+                return f.read()
+        except OSError:
+            return ""
+
+    def _kill_process(self, proc):
+        """Local override: kill process group for child cleanup."""
+        try:
+            if _IS_WINDOWS:
+                proc.terminate()
+            else:
+                pgid = os.getpgid(proc.pid)
+                os.killpg(pgid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=1.0)
+                    return
+                except subprocess.TimeoutExpired:
+                    os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
             try:
-                for line in proc.stdout:
-                    _output_chunks.append(line)
-            except ValueError:
+                proc.kill()
+            except Exception:
                 pass
-            finally:
+
+    def cleanup(self):
+        for p in (self._snapshot_path, self._cwdfile_path):
+            if p:
                 try:
-                    proc.stdout.close()
-                except Exception:
+                    os.remove(p)
+                except OSError:
                     pass
-
-        reader = threading.Thread(target=_drain_stdout, daemon=True)
-        reader.start()
-        deadline = time.monotonic() + effective_timeout
-
-        while proc.poll() is None:
-            if is_interrupted():
-                try:
-                    if _IS_WINDOWS:
-                        proc.terminate()
-                    else:
-                        pgid = os.getpgid(proc.pid)
-                        os.killpg(pgid, signal.SIGTERM)
-                        try:
-                            proc.wait(timeout=1.0)
-                        except subprocess.TimeoutExpired:
-                            os.killpg(pgid, signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    proc.kill()
-                reader.join(timeout=2)
-                return {
-                    "output": "".join(_output_chunks) + "\n[Command interrupted — user sent a new message]",
-                    "returncode": 130,
-                }
-            if time.monotonic() > deadline:
-                try:
-                    if _IS_WINDOWS:
-                        proc.terminate()
-                    else:
-                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except (ProcessLookupError, PermissionError):
-                    proc.kill()
-                reader.join(timeout=2)
-                partial = "".join(_output_chunks)
-                timeout_msg = f"\n[Command timed out after {effective_timeout}s]"
-                return {
-                    "output": partial + timeout_msg if partial else timeout_msg.lstrip(),
-                    "returncode": 124,
-                }
-            time.sleep(0.2)
-
-        reader.join(timeout=5)
-        output = _extract_fenced_output("".join(_output_chunks))
-        return {"output": output, "returncode": proc.returncode}
