@@ -164,6 +164,11 @@ class HermesAgentLoop:
         self.max_tokens = max_tokens
         self.extra_body = extra_body
 
+        # Tool result persistence (L2+L3)
+        from pathlib import Path
+        self._tool_result_storage_dir = Path(f"/tmp/hermes_tool_results/{self.task_id}")
+        self._tool_result_storage_dir.mkdir(parents=True, exist_ok=True)
+
     async def run(self, messages: List[Dict[str, Any]]) -> AgentResult:
         """
         Execute the full agent loop using standard OpenAI tool calling.
@@ -446,8 +451,18 @@ class HermesAgentLoop:
                         except (json.JSONDecodeError, TypeError):
                             pass
 
-                    # Add tool response to conversation
+                    # L2: Persist oversized results to disk
                     tc_id = tc.get("id", "") if isinstance(tc, dict) else tc.id
+                    try:
+                        from tools.tool_result_storage import maybe_persist_tool_result
+                        tool_result = maybe_persist_tool_result(
+                            content=tool_result,
+                            tool_name=tool_name,
+                            tool_use_id=tc_id,
+                            storage_dir=self._tool_result_storage_dir,
+                        )
+                    except Exception:
+                        pass  # Persistence is best-effort in eval path
                     messages.append(
                         {
                             "role": "tool",
@@ -455,6 +470,17 @@ class HermesAgentLoop:
                             "content": tool_result,
                         }
                     )
+
+                # L3: Per-turn aggregate budget enforcement
+                try:
+                    from tools.tool_result_storage import enforce_turn_budget
+                    num_tcs = len(assistant_msg.tool_calls)
+                    if num_tcs > 0:
+                        turn_msgs = [m for m in messages[-num_tcs * 2:]
+                                     if m.get("role") == "tool"]
+                        enforce_turn_budget(turn_msgs, self._tool_result_storage_dir)
+                except Exception:
+                    pass  # Best-effort in eval path
 
                 turn_elapsed = _time.monotonic() - turn_start
                 logger.info(
