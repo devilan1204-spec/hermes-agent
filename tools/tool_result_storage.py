@@ -1,12 +1,24 @@
-"""Tool result persistence — preserves large outputs to disk instead of destroying them.
+"""Tool result persistence -- preserves large outputs to disk instead of truncating.
 
-Implements a 3-layer defense against context overflow:
-- Layer 2: Per-result persistence when output exceeds tool-specific threshold
-- Layer 3: Per-turn aggregate budget enforcement across all tool results
-(Layer 1 is per-tool pre-truncation, handled inside each tool.)
+Defense against context-window overflow operates at three levels:
+
+1. **Per-tool output cap** (inside each tool): Tools like search_files
+   pre-truncate their own output before returning. This is the first line
+   of defense and the only one the tool author controls.
+
+2. **Per-result persistence** (maybe_persist_tool_result): After a tool
+   returns, if its output exceeds the tool's registered threshold
+   (registry.get_max_result_size), the full output is written to disk and
+   the in-context content is replaced with a preview + file path reference.
+   The model can read_file to access the full output.
+
+3. **Per-turn aggregate budget** (enforce_turn_budget): After all tool
+   results in a single assistant turn are collected, if the total exceeds
+   MAX_TURN_BUDGET_CHARS (200K), the largest non-persisted results are
+   spilled to disk until the aggregate is under budget. This catches cases
+   where many medium-sized results combine to overflow context.
 """
 
-import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +27,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_RESULT_SIZE_CHARS: int = 50_000
 MAX_TURN_BUDGET_CHARS: int = 200_000
-PREVIEW_SIZE_BYTES: int = 2000
+PREVIEW_SIZE_CHARS: int = 2000
+PREVIEW_SIZE_BYTES = PREVIEW_SIZE_CHARS  # deprecated alias
 PERSISTED_OUTPUT_TAG = "<persisted-output>"
 PERSISTED_OUTPUT_CLOSING_TAG = "</persisted-output>"
 
@@ -37,14 +50,14 @@ def get_storage_dir(session_id: str) -> Path:
     return d
 
 
-def generate_preview(content: str, max_bytes: int = PREVIEW_SIZE_BYTES) -> tuple[str, bool]:
-    """Truncate at last newline within max_bytes. Returns (preview, has_more)."""
-    if len(content) <= max_bytes:
+def generate_preview(content: str, max_chars: int = PREVIEW_SIZE_CHARS) -> tuple[str, bool]:
+    """Truncate at last newline within max_chars. Returns (preview, has_more)."""
+    if len(content) <= max_chars:
         return content, False
     # Find last newline within budget
-    truncated = content[:max_bytes]
+    truncated = content[:max_chars]
     last_nl = truncated.rfind("\n")
-    if last_nl > max_bytes // 2:  # Only use newline boundary if it's past halfway
+    if last_nl > max_chars // 2:  # Only use newline boundary if it's past halfway
         truncated = truncated[:last_nl + 1]
     return truncated, True
 
@@ -53,13 +66,14 @@ def persist_large_result(
     content: str,
     tool_use_id: str,
     storage_dir: Path,
+    threshold: int = DEFAULT_MAX_RESULT_SIZE_CHARS,
 ) -> PersistedResult | None:
-    """Write full content to disk if it exceeds DEFAULT_MAX_RESULT_SIZE_CHARS.
+    """Write full content to disk if it exceeds *threshold*.
 
     Uses open(path, 'x') for atomic exclusive create — dedup on retry.
     Returns None if content is small enough to keep inline.
     """
-    if len(content) <= DEFAULT_MAX_RESULT_SIZE_CHARS:
+    if len(content) <= threshold:
         return None
 
     file_path = storage_dir / f"{tool_use_id}.txt"
@@ -105,7 +119,7 @@ def maybe_persist_tool_result(
     tool_use_id: str,
     storage_dir: Path,
 ) -> str:
-    """Layer 2 entry point. Check per-tool threshold, persist if needed.
+    """Per-result persistence entry point (level 2). Check per-tool threshold, persist if needed.
 
     Returns original content (if small) or the <persisted-output> replacement.
     """
@@ -119,7 +133,8 @@ def maybe_persist_tool_result(
     if len(content) <= threshold:
         return content
 
-    result = persist_large_result(content, tool_use_id, storage_dir)
+    result = persist_large_result(content, tool_use_id, storage_dir,
+                                  threshold=threshold)
     if result is None:
         return content
 
@@ -135,7 +150,7 @@ def enforce_turn_budget(
     storage_dir: Path,
     budget: int = MAX_TURN_BUDGET_CHARS,
 ) -> list[dict]:
-    """Layer 3 entry point. After all tool results in a turn, enforce aggregate budget.
+    """Per-turn aggregate budget entry point (level 3). After all tool results in a turn, enforce aggregate budget.
 
     If total chars exceed budget, persist the largest results first until under budget.
     Already-persisted results (containing <persisted-output>) are skipped.

@@ -164,7 +164,7 @@ class HermesAgentLoop:
         self.max_tokens = max_tokens
         self.extra_body = extra_body
 
-        # Tool result persistence (L2+L3)
+        # Per-result and per-turn output persistence (see tools/tool_result_storage.py)
         from pathlib import Path
         self._tool_result_storage_dir = Path(f"/tmp/hermes_tool_results/{self.task_id}")
         self._tool_result_storage_dir.mkdir(parents=True, exist_ok=True)
@@ -451,7 +451,7 @@ class HermesAgentLoop:
                         except (json.JSONDecodeError, TypeError):
                             pass
 
-                    # L2: Persist oversized results to disk
+                    # Persist oversized results to disk
                     tc_id = tc.get("id", "") if isinstance(tc, dict) else tc.id
                     try:
                         from tools.tool_result_storage import maybe_persist_tool_result
@@ -471,7 +471,7 @@ class HermesAgentLoop:
                         }
                     )
 
-                # L3: Per-turn aggregate budget enforcement
+                # Per-turn aggregate budget enforcement
                 try:
                     from tools.tool_result_storage import enforce_turn_budget
                     num_tcs = len(assistant_msg.tool_calls)

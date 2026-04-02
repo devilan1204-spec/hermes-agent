@@ -961,7 +961,7 @@ class AIAgent:
             short_uuid = uuid.uuid4().hex[:6]
             self.session_id = f"{timestamp_str}_{short_uuid}"
         
-        # Tool result persistence (Layer 2+3)
+        # Per-result and per-turn output persistence (see tools/tool_result_storage.py)
         from tools.tool_result_storage import get_storage_dir as _get_tool_storage_dir
         self._tool_result_storage_dir = _get_tool_storage_dir(self.session_id)
 
@@ -6257,7 +6257,7 @@ class AIAgent:
                 except Exception as cb_err:
                     logging.debug(f"Tool complete callback error: {cb_err}")
 
-            # L2: Persist oversized results to disk (data preserved, model can read_file)
+            # Persist oversized results to disk (model can read_file to access full output)
             from tools.tool_result_storage import maybe_persist_tool_result
             function_result = maybe_persist_tool_result(
                 content=function_result,
@@ -6280,7 +6280,7 @@ class AIAgent:
             }
             messages.append(tool_msg)
 
-        # ── L3: Per-turn aggregate budget enforcement ─────────────────────
+        # ── Per-turn aggregate budget enforcement ─────────────────────────
         from tools.tool_result_storage import enforce_turn_budget
         num_tools = len(parsed_calls)
         if num_tools > 0:
@@ -6571,7 +6571,7 @@ class AIAgent:
                 except Exception as cb_err:
                     logging.debug(f"Tool complete callback error: {cb_err}")
 
-            # L2: Persist oversized results to disk (data preserved, model can read_file)
+            # Persist oversized results to disk (model can read_file to access full output)
             from tools.tool_result_storage import maybe_persist_tool_result
             function_result = maybe_persist_tool_result(
                 content=function_result,
@@ -6617,7 +6617,7 @@ class AIAgent:
             if self.tool_delay > 0 and i < len(assistant_message.tool_calls):
                 time.sleep(self.tool_delay)
 
-        # ── L3: Per-turn aggregate budget enforcement ─────────────────
+        # ── Per-turn aggregate budget enforcement ─────────────────────────
         from tools.tool_result_storage import enforce_turn_budget as _enforce_budget
         num_tools_seq = len(assistant_message.tool_calls)
         if num_tools_seq > 0:
