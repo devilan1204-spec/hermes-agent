@@ -269,7 +269,7 @@ class TestExecute:
         sb.process.exec.reset_mock()
         sb.process.exec.return_value = _make_exec_response(result="ok", exit_code=0)
         env.execute("echo hello")
-        # The command sent to _DaytonaProcessHandle should be wrapped with
+        # The command sent to _ThreadedProcessHandle should be wrapped with
         # `timeout N bash -c '...'`
         call_args = sb.process.exec.call_args_list[-1]
         cmd = call_args[0][0]
@@ -329,7 +329,7 @@ class TestExecute:
         sb.process.exec.return_value = _make_exec_response(result="/tmp", exit_code=0)
         env.execute("pwd", cwd="/tmp")
         # In the unified model, cwd is embedded in the _wrap_command output
-        # and the _DaytonaProcessHandle also passes cwd to the SDK
+        # and the _ThreadedProcessHandle also passes cwd to the SDK
         call_args = sb.process.exec.call_args_list[-1]
         cmd = call_args[0][0]
         # The wrapped command includes a cd to the cwd

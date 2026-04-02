@@ -155,7 +155,7 @@ class ModalEnvironment(BaseEnvironment):
     """Modal cloud execution via native Modal sandboxes.
 
     Uses the unified spawn-per-call model: _run_bash() returns a
-    _ModalProcessHandle that wraps Modal's async SDK in a thread + OS pipe,
+    _ThreadedProcessHandle that wraps Modal's async SDK in a thread + OS pipe,
     satisfying the ProcessHandle protocol for BaseEnvironment._wait_for_process().
     """
 
