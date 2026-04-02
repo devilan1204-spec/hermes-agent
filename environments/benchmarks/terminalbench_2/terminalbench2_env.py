@@ -374,9 +374,18 @@ class TerminalBench2EvalEnv(HermesAgentBaseEnv):
         log_dir = os.path.join(os.path.dirname(__file__), "logs")
         os.makedirs(log_dir, exist_ok=True)
         run_ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._streaming_path = os.path.join(log_dir, f"samples_{run_ts}.jsonl")
+        model_name = self.server.servers[0].config.model_name
+        model_slug = model_name.replace("/", "_").replace(":", "_")
+        self._streaming_path = os.path.join(log_dir, f"samples_{run_ts}_{model_slug}.jsonl")
         self._streaming_file = open(self._streaming_path, "w")
         self._streaming_lock = __import__("threading").Lock()
+        self._run_meta = {
+            "model_name": model_name,
+            "temperature": self.config.agent_temperature,
+            "max_agent_turns": self.config.max_agent_turns,
+            "task_timeout": self.config.task_timeout,
+            "terminal_backend": self.config.terminal_backend,
+        }
         print(f"  Streaming results to: {self._streaming_path}")
 
         print(f"TB2 ready: {len(self.all_eval_items)} tasks across {len(self.category_index)} categories")
@@ -639,6 +648,7 @@ class TerminalBench2EvalEnv(HermesAgentBaseEnv):
             )
 
             out = {
+                **self._run_meta,
                 "passed": passed,
                 "reward": reward,
                 "task_name": task_name,
@@ -655,6 +665,7 @@ class TerminalBench2EvalEnv(HermesAgentBaseEnv):
             logger.error("Task %s: rollout failed: %s", task_name, e, exc_info=True)
             tqdm.write(f"  [ERROR] {task_name}: {e} ({elapsed:.0f}s)")
             out = {
+                **self._run_meta,
                 "passed": False, "reward": 0.0,
                 "task_name": task_name, "category": category,
                 "error": str(e),
@@ -817,6 +828,7 @@ class TerminalBench2EvalEnv(HermesAgentBaseEnv):
             tqdm.write(f"  [TIMEOUT] {task_name} (exceeded {elapsed}s wall-clock limit)")
             logger.error("Task %s: wall-clock timeout after %ds", task_name, elapsed)
             out = {
+                **self._run_meta,
                 "passed": False, "reward": 0.0,
                 "task_name": task_name, "category": category,
                 "error": f"timeout ({elapsed}s)",
