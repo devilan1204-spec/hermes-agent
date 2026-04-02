@@ -72,6 +72,7 @@ rl = [
   "wandb>=0.15.0,<1",
 ]
 yc-bench = ["yc-bench @ git+https://github.com/collinear-ai/yc-bench.git ; python_version >= '3.12'"]
+taubench = ["tau-bench @ git+https://github.com/sierra-research/tau-bench.git"]
 all = [
   "hermes-agent[modal]",
   "hermes-agent[daytona]",
