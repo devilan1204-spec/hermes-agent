@@ -336,7 +336,7 @@ class TestExecute:
         assert "/tmp" in cmd
 
     def test_daytona_error_returns_error_result(self, make_env, daytona_sdk):
-        """In the unified model, SDK errors are caught by _DaytonaProcessHandle
+        """In the unified model, SDK errors are caught by _ThreadedProcessHandle
         and returned as error results (no automatic retry)."""
         sb = _make_sandbox()
         sb.state = "started"
@@ -347,7 +347,7 @@ class TestExecute:
         sb.process.exec.side_effect = daytona_sdk.DaytonaError("transient")
         result = env.execute("echo retry")
         assert result["returncode"] == 1
-        assert "Daytona execution error" in result["output"]
+        assert "transient" in result["output"]
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +408,7 @@ class TestInterrupt:
 
 class TestSdkError:
     def test_sdk_error_returns_error_result(self, make_env, daytona_sdk):
-        """SDK errors in _DaytonaProcessHandle are caught and returned cleanly."""
+        """SDK errors in _ThreadedProcessHandle are caught and returned cleanly."""
         sb = _make_sandbox()
         sb.state = "started"
         sb.process.exec.return_value = _make_exec_response(result="/root")
@@ -418,7 +418,7 @@ class TestSdkError:
         sb.process.exec.side_effect = daytona_sdk.DaytonaError("fail")
         result = env.execute("echo x")
         assert result["returncode"] == 1
-        assert "Daytona execution error" in result["output"]
+        assert "fail" in result["output"]
 
 
 # ---------------------------------------------------------------------------

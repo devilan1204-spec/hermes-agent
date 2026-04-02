@@ -7,10 +7,9 @@ wrapper, while preserving Hermes' persistent snapshot behavior across sessions.
 import asyncio
 import json
 import logging
-import os
+import re
 import shlex
 import threading
-import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -21,6 +20,13 @@ logger = logging.getLogger(__name__)
 
 _SNAPSHOT_STORE = get_hermes_home() / "modal_snapshots.json"
 _DIRECT_SNAPSHOT_NAMESPACE = "direct"
+
+# Matches official Python Docker Hub tags: python:3.12, python:3.12-slim,
+# python:3.12.3-bookworm, etc.  Rejects alpine (not Debian-based) and
+# ambiguous tags like python:3 or python:latest.
+_PYTHON_IMAGE_RE = re.compile(
+    r"^python:(\d+\.\d+)(?:\.\d+)?(?:-(slim|bookworm|bullseye|slim-bookworm|slim-bullseye))?$"
+)
 
 
 def _load_snapshots() -> Dict[str, str]:
@@ -85,7 +91,13 @@ def _delete_direct_snapshot(task_id: str, snapshot_id: str | None = None) -> Non
 
 
 def _resolve_modal_image(image_spec: Any) -> Any:
-    """Convert registry references or snapshot ids into Modal image objects."""
+    """Convert registry references or snapshot ids into Modal image objects.
+
+    Official ``python:X.Y*`` images are mapped to
+    ``modal.Image.debian_slim(python_version=X.Y)`` because the stock
+    Docker Hub images lack build tools (gcc/g++) required by Modal's
+    internal pip bootstrap.
+    """
     import modal as _modal
 
     if not isinstance(image_spec, str):
@@ -93,6 +105,10 @@ def _resolve_modal_image(image_spec: Any) -> Any:
 
     if image_spec.startswith("im-"):
         return _modal.Image.from_id(image_spec)
+
+    m = _PYTHON_IMAGE_RE.match(image_spec)
+    if m:
+        return _modal.Image.debian_slim(python_version=m.group(1))
 
     return _modal.Image.from_registry(
         image_spec,
@@ -135,75 +151,6 @@ class _AsyncWorker:
             self._thread.join(timeout=10)
 
 
-class _ModalProcessHandle:
-    """Adapter making Modal's async sandbox.exec look like Popen."""
-
-    def __init__(self, worker, sandbox, cmd_string, timeout):
-        self._done = threading.Event()
-        self._returncode = None
-        self._read_fd, self._write_fd = os.pipe()
-        self.stdout = os.fdopen(self._read_fd, "r")
-        self.stdin = None
-
-        def _run():
-            try:
-                async def _exec():
-                    process = await sandbox.exec.aio(
-                        "bash", "-c", cmd_string, timeout=timeout,
-                    )
-                    stdout = await process.stdout.read.aio()
-                    stderr = await process.stderr.read.aio()
-                    exit_code = await process.wait.aio()
-                    return stdout, stderr, exit_code
-
-                stdout, stderr, exit_code = worker.run_coroutine(
-                    _exec(), timeout=timeout + 30,
-                )
-                writer = os.fdopen(self._write_fd, "w")
-                if stdout:
-                    writer.write(
-                        stdout if isinstance(stdout, str)
-                        else stdout.decode("utf-8", errors="replace")
-                    )
-                if stderr:
-                    writer.write(
-                        stderr if isinstance(stderr, str)
-                        else stderr.decode("utf-8", errors="replace")
-                    )
-                writer.close()
-                self._returncode = exit_code
-            except Exception as e:
-                try:
-                    writer = os.fdopen(self._write_fd, "w")
-                    writer.write(f"Modal execution error: {e}")
-                    writer.close()
-                except Exception:
-                    try:
-                        os.close(self._write_fd)
-                    except Exception:
-                        pass
-                self._returncode = 1
-            finally:
-                self._done.set()
-
-        self._thread = threading.Thread(target=_run, daemon=True)
-        self._thread.start()
-
-    def poll(self):
-        return self._returncode if self._done.is_set() else None
-
-    def kill(self):
-        pass  # Handled by sandbox termination in environment
-
-    def wait(self, timeout=None):
-        self._done.wait(timeout=timeout)
-        return self._returncode
-
-    @property
-    def returncode(self):
-        return self._returncode
-
-
 class ModalEnvironment(BaseEnvironment):
     """Modal cloud execution via native Modal sandboxes.
 
@@ -211,6 +158,8 @@ class ModalEnvironment(BaseEnvironment):
     _ModalProcessHandle that wraps Modal's async SDK in a thread + OS pipe,
     satisfying the ProcessHandle protocol for BaseEnvironment._wait_for_process().
     """
+
+    _snapshot_timeout = 60  # Modal sandbox cold start can be slow
 
     def __init__(
         self,
@@ -297,10 +246,10 @@ class ModalEnvironment(BaseEnvironment):
         try:
             target_image_spec = restored_snapshot_id or image
             try:
-                # _resolve_modal_image keeps the Modal bootstrap fix together:
-                # it applies setup_dockerfile_commands with ensurepip before
-                # Modal builds registry images, while snapshot ids restore via
-                # modal.Image.from_id() without rebuilding.
+                # _resolve_modal_image routes python:X.Y images to
+                # debian_slim (avoiding build-tool failures) and applies
+                # setup_dockerfile_commands with ensurepip for other
+                # registry images.  Snapshot ids restore via from_id().
                 effective_image = _resolve_modal_image(target_image_spec)
                 self._app, self._sandbox = self._worker.run_coroutine(
                     _create_sandbox(effective_image),
@@ -400,20 +349,44 @@ class ModalEnvironment(BaseEnvironment):
     def _before_execute(self) -> None:
         self._sync_files()
 
-    def _run_bash(self, cmd_string: str, *, stdin_data: str | None = None):
-        """Spawn ``bash -c <cmd_string>`` inside the Modal sandbox.
-
-        Returns a _ModalProcessHandle (satisfies the ProcessHandle protocol).
-        stdin_data is embedded as a heredoc since Modal cannot pipe stdin.
-        """
+    def _run_bash(self, cmd_string: str, *, timeout: int | None = None,
+                  stdin_data: str | None = None):
+        """Spawn ``bash -c <cmd_string>`` inside the Modal sandbox."""
+        effective_timeout = timeout or self.timeout
         if stdin_data is not None:
-            marker = f"HERMES_EOF_{uuid.uuid4().hex[:8]}"
-            while marker in stdin_data:
-                marker = f"HERMES_EOF_{uuid.uuid4().hex[:8]}"
-            cmd_string = f"{cmd_string} << '{marker}'\n{stdin_data}\n{marker}"
-        return _ModalProcessHandle(
-            self._worker, self._sandbox, cmd_string, self.timeout,
-        )
+            cmd_string = self._embed_stdin_heredoc(cmd_string, stdin_data)
+        return self._modal_exec(cmd_string, effective_timeout, login=False)
+
+    def _run_bash_login(self, cmd_string: str, *,
+                        timeout: int | None = None):
+        """Spawn ``bash -l -c <cmd_string>`` for snapshot creation."""
+        effective_timeout = timeout or self._snapshot_timeout
+        return self._modal_exec(cmd_string, effective_timeout, login=True)
+
+    def _modal_exec(self, cmd_string: str, timeout: int, login: bool):
+        """Create a _ThreadedProcessHandle wrapping Modal's async exec."""
+        from tools.environments.base import _ThreadedProcessHandle
+        worker = self._worker
+        sandbox = self._sandbox
+
+        def exec_fn():
+            async def _exec():
+                args = ["bash", "-l", "-c", cmd_string] if login else ["bash", "-c", cmd_string]
+                process = await sandbox.exec.aio(*args, timeout=timeout)
+                stdout = await process.stdout.read.aio()
+                stderr = await process.stderr.read.aio()
+                exit_code = await process.wait.aio()
+                return stdout, stderr, exit_code
+
+            stdout, stderr, exit_code = worker.run_coroutine(
+                _exec(), timeout=timeout + 30,
+            )
+            output = stdout if isinstance(stdout, str) else stdout.decode("utf-8", errors="replace")
+            if stderr:
+                output += stderr if isinstance(stderr, str) else stderr.decode("utf-8", errors="replace")
+            return output, exit_code
+
+        return _ThreadedProcessHandle(exec_fn)
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 import logging
 import os
 import shlex
-import subprocess
 import threading
 import time
 import uuid
@@ -55,6 +54,55 @@ class ProcessHandle(Protocol):
     def returncode(self) -> int | None: ...
 
 
+class _ThreadedProcessHandle:
+    """ProcessHandle adapter for SDK backends that run in a background thread."""
+
+    def __init__(self, exec_fn):
+        self._done = threading.Event()
+        self._returncode = None
+        self._read_fd, self._write_fd = os.pipe()
+        self.stdout = os.fdopen(self._read_fd, "r")
+        self.stdin = None
+
+        def _run():
+            try:
+                output, exit_code = exec_fn()
+                writer = os.fdopen(self._write_fd, "w")
+                writer.write(output)
+                writer.close()
+                self._returncode = exit_code
+            except Exception as e:
+                try:
+                    writer = os.fdopen(self._write_fd, "w")
+                    writer.write(str(e))
+                    writer.close()
+                except Exception:
+                    try:
+                        os.close(self._write_fd)
+                    except Exception:
+                        pass
+                self._returncode = 1
+            finally:
+                self._done.set()
+
+        self._thread = threading.Thread(target=_run, daemon=True)
+        self._thread.start()
+
+    def poll(self):
+        return self._returncode if self._done.is_set() else None
+
+    def kill(self):
+        pass
+
+    def wait(self, timeout=None):
+        self._done.wait(timeout=timeout)
+        return self._returncode
+
+    @property
+    def returncode(self):
+        return self._returncode
+
+
 class BaseEnvironment(ABC):
     """Common interface for all Hermes execution backends.
 
@@ -82,11 +130,17 @@ class BaseEnvironment(ABC):
     # ------------------------------------------------------------------
 
     def _run_bash(self, cmd_string: str, *,
+                  timeout: int | None = None,
                   stdin_data: str | None = None) -> ProcessHandle:
         """Spawn ``bash -c <cmd_string>`` in the backend.
 
         Returns a ProcessHandle (subprocess.Popen or equivalent adapter).
         The caller owns polling, timeout, output collection, and cleanup.
+
+        *timeout* is the effective per-command timeout.  Backends that use
+        SDK-level or shell-level timeouts (Modal, Daytona) should forward
+        this value.  Backends where timeout is enforced by
+        ``_wait_for_process`` (local, docker, ssh, singularity) may ignore it.
 
         If *stdin_data* is provided, write it to the process's stdin and
         close.  Backends that cannot pipe stdin (Modal, Daytona) must embed
@@ -112,15 +166,15 @@ class BaseEnvironment(ABC):
     # Snapshot — login-shell env capture (called once at session init)
     # ------------------------------------------------------------------
 
-    def _run_bash_login(self, cmd_string: str) -> ProcessHandle:
+    def _run_bash_login(self, cmd_string: str, *,
+                        timeout: int | None = None) -> ProcessHandle:
         """Spawn ``bash -l -c <cmd_string>`` for snapshot creation.
 
         Defaults to ``_run_bash`` — backends override this when the login
         flag needs different handling (e.g. local adds ``-l`` to Popen args).
         """
-        return self._run_bash(cmd_string)
+        return self._run_bash(cmd_string, timeout=timeout)
 
-    # Subclasses may increase for slow backends (Modal, Daytona cold start)
     _snapshot_timeout: int = 15
 
     def init_session(self):
@@ -145,7 +199,7 @@ class BaseEnvironment(ABC):
 
         result = {}
         try:
-            proc = self._run_bash_login(bootstrap)
+            proc = self._run_bash_login(bootstrap, timeout=self._snapshot_timeout)
             result = self._wait_for_process(proc, timeout=self._snapshot_timeout)
             if result["returncode"] == 0:
                 self._snapshot_ready = True
@@ -160,12 +214,38 @@ class BaseEnvironment(ABC):
         except Exception as e:
             logger.warning("Snapshot creation failed: %s", e)
 
-        # Pick up the reported cwd from bootstrap stdout
         self._extract_cwd_from_output(result)
 
     # ------------------------------------------------------------------
     # Command wrapping
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _embed_stdin_heredoc(cmd_string: str, stdin_data: str) -> str:
+        """Wrap *stdin_data* as a shell heredoc appended to *cmd_string*.
+
+        Used by backends that cannot pipe stdin (Modal, Daytona, ManagedModal).
+        """
+        marker = f"HERMES_EOF_{uuid.uuid4().hex[:8]}"
+        while marker in stdin_data:
+            marker = f"HERMES_EOF_{uuid.uuid4().hex[:8]}"
+        return f"{cmd_string} << '{marker}'\n{stdin_data}\n{marker}"
+
+    def _resolve_tilde(self, path: str) -> str:
+        """Expand ``~`` to the actual home directory path.
+
+        Remote backends (SSH, Daytona) set ``_remote_home`` during init;
+        local uses ``os.path.expanduser``.  Tilde must be resolved before
+        ``shlex.quote`` since single-quoting prevents shell tilde expansion.
+        """
+        if not path or not path.startswith("~"):
+            return path
+        home = getattr(self, "_remote_home", None) or os.path.expanduser("~")
+        if path == "~":
+            return home
+        if path.startswith("~/"):
+            return home + path[1:]
+        return path  # ~otheruser — leave for shell to handle
 
     def _wrap_command(self, command: str, cwd: str) -> str:
         """Wrap a user command with snapshot sourcing and CWD tracking.
@@ -180,16 +260,17 @@ class BaseEnvironment(ABC):
                 f"source {self._snapshot_path} 2>/dev/null || true"
             )
 
-        # 2. cd to working directory
+        # 2. cd to working directory (resolve ~ before quoting)
         work_dir = cwd or self.cwd
         if work_dir:
+            work_dir = self._resolve_tilde(work_dir)
             parts.append(f"cd {shlex.quote(work_dir)} || exit 1")
 
         # 3. The actual command (eval to handle complex shell syntax)
         escaped = command.replace("'", "'\\''")
         parts.append(f"eval '{escaped}'")
 
-        # 4. Capture exit code, echo CWD to stdout for local parsing
+        # 4. Capture exit code, record CWD
         parts.append("__hermes_ec=$?")
         parts.append(
             f"printf '\\n{_CWD_MARKER}%s{_CWD_MARKER}\\n' \"$(pwd -P)\""
@@ -222,10 +303,10 @@ class BaseEnvironment(ABC):
         wrapped = self._wrap_command(exec_command, cwd)
         effective_timeout = timeout or self.timeout
 
-        proc = self._run_bash(wrapped, stdin_data=effective_stdin)
+        proc = self._run_bash(wrapped, timeout=effective_timeout,
+                              stdin_data=effective_stdin)
         result = self._wait_for_process(proc, timeout=effective_timeout)
 
-        # Extract CWD from stdout (in-band, no remote file read needed)
         self._extract_cwd_from_output(result)
 
         return result
@@ -250,28 +331,36 @@ class BaseEnvironment(ABC):
         reader.start()
         deadline = time.monotonic() + timeout
 
-        while proc.poll() is None:
-            if is_interrupted():
-                self._kill_process(proc)
-                reader.join(timeout=2)
-                partial = "".join(output_chunks)
-                return {
-                    "output": partial + "\n[Command interrupted]",
-                    "returncode": 130,
-                }
-            if time.monotonic() > deadline:
-                self._kill_process(proc)
-                reader.join(timeout=2)
-                partial = "".join(output_chunks)
-                msg = f"\n[Command timed out after {timeout}s]"
-                return {
-                    "output": (partial + msg) if partial else msg.lstrip(),
-                    "returncode": 124,
-                }
-            time.sleep(0.2)
+        try:
+            while proc.poll() is None:
+                if is_interrupted():
+                    self._kill_process(proc)
+                    reader.join(timeout=2)
+                    partial = "".join(output_chunks)
+                    return {
+                        "output": partial + "\n[Command interrupted]",
+                        "returncode": 130,
+                    }
+                if time.monotonic() > deadline:
+                    self._kill_process(proc)
+                    reader.join(timeout=2)
+                    partial = "".join(output_chunks)
+                    msg = f"\n[Command timed out after {timeout}s]"
+                    return {
+                        "output": (partial + msg) if partial else msg.lstrip(),
+                        "returncode": 124,
+                    }
+                time.sleep(0.2)
 
-        reader.join(timeout=5)
-        return {"output": "".join(output_chunks), "returncode": proc.returncode}
+            reader.join(timeout=5)
+            return {"output": "".join(output_chunks), "returncode": proc.returncode}
+        finally:
+            # Close the stdout pipe to prevent FD leaks, especially for
+            # SDK-backed handles (Modal, Daytona) that use os.pipe().
+            try:
+                proc.stdout.close()
+            except Exception:
+                pass
 
     def _kill_process(self, proc: ProcessHandle):
         """Kill a process.  Backends may override for process-group kill."""
@@ -288,7 +377,7 @@ class BaseEnvironment(ABC):
             pass
 
     # ------------------------------------------------------------------
-    # CWD tracking (in-band via stdout, no remote file reads)
+    # CWD tracking
     # ------------------------------------------------------------------
 
     def _extract_cwd_from_output(self, result: dict) -> dict:
@@ -340,47 +429,10 @@ class BaseEnvironment(ABC):
             pass
 
     # ------------------------------------------------------------------
-    # Shared helpers (kept for backward compat during migration)
+    # Shared helpers
     # ------------------------------------------------------------------
 
     def _prepare_command(self, command: str) -> tuple[str, str | None]:
         """Transform sudo commands if SUDO_PASSWORD is available."""
         from tools.terminal_tool import _transform_sudo_command
         return _transform_sudo_command(command)
-
-    def _build_run_kwargs(self, timeout: int | None,
-                          stdin_data: str | None = None) -> dict:
-        """Build common subprocess.run kwargs for non-interactive execution."""
-        kw = {
-            "text": True,
-            "timeout": timeout or self.timeout,
-            "encoding": "utf-8",
-            "errors": "replace",
-            "stdout": subprocess.PIPE,
-            "stderr": subprocess.STDOUT,
-        }
-        if stdin_data is not None:
-            kw["input"] = stdin_data
-        else:
-            kw["stdin"] = subprocess.DEVNULL
-        return kw
-
-    def execute_oneshot(self, command: str, cwd: str = "", *,
-                        timeout: int | None = None,
-                        stdin_data: str | None = None) -> dict:
-        """Execute a command bypassing any persistent shell.
-
-        Safe for concurrent use alongside a long-running execute() call.
-        Backends that maintain a persistent shell (SSH, Local) override this
-        to route through their oneshot path, avoiding the shell lock.
-        Non-persistent backends delegate to execute().
-        """
-        return self.execute(command, cwd=cwd, timeout=timeout,
-                            stdin_data=stdin_data)
-
-    def _timeout_result(self, timeout: int | None) -> dict:
-        """Standard return dict when a command times out."""
-        return {
-            "output": f"Command timed out after {timeout or self.timeout}s",
-            "returncode": 124,
-        }

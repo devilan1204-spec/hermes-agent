@@ -7,10 +7,8 @@ and resumed on next creation, preserving the filesystem across sessions.
 
 import logging
 import math
-import os
 import shlex
 import threading
-import uuid
 import warnings
 from pathlib import Path
 from typing import Dict, Optional
@@ -20,64 +18,14 @@ from tools.environments.base import BaseEnvironment
 logger = logging.getLogger(__name__)
 
 
-class _DaytonaProcessHandle:
-    """Adapter making Daytona's blocking SDK exec look like Popen."""
-
-    def __init__(self, sandbox, cmd_string, cwd, timeout):
-        self._done = threading.Event()
-        self._returncode = None
-        self._read_fd, self._write_fd = os.pipe()
-        self.stdout = os.fdopen(self._read_fd, "r")
-        self.stdin = None
-
-        # Wrap with shell timeout (Daytona SDK timeout is unreliable)
-        timed_cmd = f"timeout {timeout} bash -c {shlex.quote(cmd_string)}"
-
-        def _run():
-            try:
-                response = sandbox.process.exec(timed_cmd, cwd=cwd)
-                writer = os.fdopen(self._write_fd, "w")
-                writer.write(response.result or "")
-                writer.close()
-                self._returncode = response.exit_code
-            except Exception as e:
-                try:
-                    writer = os.fdopen(self._write_fd, "w")
-                    writer.write(f"Daytona execution error: {e}")
-                    writer.close()
-                except Exception:
-                    try:
-                        os.close(self._write_fd)
-                    except Exception:
-                        pass
-                self._returncode = 1
-            finally:
-                self._done.set()
-
-        self._thread = threading.Thread(target=_run, daemon=True)
-        self._thread.start()
-
-    def poll(self):
-        return self._returncode if self._done.is_set() else None
-
-    def kill(self):
-        pass
-
-    def wait(self, timeout=None):
-        self._done.wait(timeout=timeout)
-        return self._returncode
-
-    @property
-    def returncode(self):
-        return self._returncode
-
-
 class DaytonaEnvironment(BaseEnvironment):
     """Daytona cloud sandbox execution backend.
 
     Uses stopped/started sandbox lifecycle for filesystem persistence
     instead of snapshots, making it faster and stateless on the host.
     """
+
+    _snapshot_timeout = 60  # Daytona sandbox startup can be slow
 
     def __init__(
         self,
@@ -245,21 +193,33 @@ class DaytonaEnvironment(BaseEnvironment):
             self._ensure_sandbox_ready()
         self._sync_skills_and_credentials()
 
-    def _run_bash(self, cmd_string: str, *, stdin_data: str | None = None):
-        """Spawn ``bash -c <cmd_string>`` inside the Daytona sandbox.
-
-        Returns a _DaytonaProcessHandle (satisfies the ProcessHandle protocol).
-        stdin_data is embedded as a heredoc since Daytona cannot pipe stdin.
-        """
+    def _run_bash(self, cmd_string: str, *, timeout: int | None = None,
+                  stdin_data: str | None = None):
+        """Spawn ``bash -c <cmd_string>`` inside the Daytona sandbox."""
+        effective_timeout = timeout or self.timeout
         if stdin_data is not None:
-            marker = f"HERMES_EOF_{uuid.uuid4().hex[:8]}"
-            while marker in stdin_data:
-                marker = f"HERMES_EOF_{uuid.uuid4().hex[:8]}"
-            cmd_string = f"{cmd_string} << '{marker}'\n{stdin_data}\n{marker}"
-        effective_cwd = self.cwd or None
-        return _DaytonaProcessHandle(
-            self._sandbox, cmd_string, effective_cwd, self.timeout,
-        )
+            cmd_string = self._embed_stdin_heredoc(cmd_string, stdin_data)
+        return self._daytona_exec(cmd_string, effective_timeout, login=False)
+
+    def _run_bash_login(self, cmd_string: str, *,
+                        timeout: int | None = None):
+        """Spawn ``bash -l -c <cmd_string>`` for snapshot creation."""
+        effective_timeout = timeout or self._snapshot_timeout
+        return self._daytona_exec(cmd_string, effective_timeout, login=True)
+
+    def _daytona_exec(self, cmd_string: str, timeout: int, login: bool):
+        """Create a _ThreadedProcessHandle wrapping Daytona's blocking exec."""
+        from tools.environments.base import _ThreadedProcessHandle
+        sandbox = self._sandbox
+
+        shell_flag = "-l -c" if login else "-c"
+        timed_cmd = f"timeout {timeout} bash {shell_flag} {shlex.quote(cmd_string)}"
+
+        def exec_fn():
+            response = sandbox.process.exec(timed_cmd)
+            return response.result or "", response.exit_code
+
+        return _ThreadedProcessHandle(exec_fn)
 
     # ------------------------------------------------------------------
     # Lifecycle
