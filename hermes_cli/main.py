@@ -3555,13 +3555,14 @@ def cmd_profile(args):
                 else:
                     print(f"Cloned config, .env, SOUL.md from {source_label}.")
 
-            # Auto-clone Honcho config for the new profile
-            try:
-                from plugins.memory.honcho.cli import clone_honcho_for_profile
-                if clone_honcho_for_profile(name):
-                    print(f"Honcho config cloned (host: hermes.{name})")
-            except Exception:
-                pass  # Honcho plugin not installed or not configured
+            # Auto-clone Honcho config for the new profile (only with --clone/--clone-all)
+            if clone or clone_all:
+                try:
+                    from plugins.memory.honcho.cli import clone_honcho_for_profile
+                    if clone_honcho_for_profile(name):
+                        print(f"Honcho config cloned (peer: {name})")
+                except Exception:
+                    pass  # Honcho plugin not installed or not configured
 
             # Seed bundled skills (skip if --clone-all already copied them)
             if not clone_all:

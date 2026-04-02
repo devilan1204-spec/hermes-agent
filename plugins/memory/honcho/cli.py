@@ -55,7 +55,9 @@ def clone_honcho_for_profile(profile_name: str) -> bool:
 
     # AI peer is profile-specific; workspace is shared so all profiles
     # see the same user context, sessions, and project history.
-    new_block["aiPeer"] = new_host
+    # Use the bare profile name as the peer identity (not the host key)
+    # because Honcho's peer ID pattern is ^[a-zA-Z0-9_-]+$ (no dots).
+    new_block["aiPeer"] = profile_name
     new_block["workspace"] = default_block.get("workspace") or cfg.get("workspace") or HOST
     new_block["enabled"] = default_block.get("enabled", True)
 
@@ -112,7 +114,9 @@ def cmd_enable(args) -> None:
         peer_name = default_block.get("peerName") or cfg.get("peerName")
         if peer_name and "peerName" not in block:
             block["peerName"] = peer_name
-        block.setdefault("aiPeer", host)
+        # Use bare profile name as AI peer, not the host key
+        ai_peer = host.split(".", 1)[1] if "." in host else host
+        block.setdefault("aiPeer", ai_peer)
         block.setdefault("workspace", default_block.get("workspace") or cfg.get("workspace") or HOST)
 
     _write_config(cfg)
@@ -422,7 +426,7 @@ def cmd_setup(args) -> None:
     try:
         from plugins.memory.honcho.client import HonchoClientConfig, get_honcho_client, reset_honcho_client
         reset_honcho_client()
-        hcfg = HonchoClientConfig.from_global_config()
+        hcfg = HonchoClientConfig.from_global_config(host=_host_key())
         get_honcho_client(hcfg)
         print("OK")
     except Exception as e:
@@ -517,7 +521,7 @@ def cmd_status(args) -> None:
 
     try:
         from plugins.memory.honcho.client import HonchoClientConfig, get_honcho_client
-        hcfg = HonchoClientConfig.from_global_config()
+        hcfg = HonchoClientConfig.from_global_config(host=_host_key())
     except Exception as e:
         print(f"  Config error: {e}\n")
         return
@@ -836,7 +840,7 @@ def cmd_identity(args) -> None:
     try:
         from plugins.memory.honcho.client import HonchoClientConfig, get_honcho_client
         from plugins.memory.honcho.session import HonchoSessionManager
-        hcfg = HonchoClientConfig.from_global_config()
+        hcfg = HonchoClientConfig.from_global_config(host=_host_key())
         client = get_honcho_client(hcfg)
         mgr = HonchoSessionManager(honcho=client, config=hcfg)
         session_key = hcfg.resolve_session_name()
