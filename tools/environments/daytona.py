@@ -9,6 +9,7 @@ import logging
 import math
 import shlex
 import threading
+import time as _time
 import warnings
 from pathlib import Path
 from typing import Dict, Optional
@@ -16,6 +17,8 @@ from typing import Dict, Optional
 from tools.environments.base import BaseEnvironment
 
 logger = logging.getLogger(__name__)
+
+_SYNC_INTERVAL_SECONDS = 5.0
 
 
 class DaytonaEnvironment(BaseEnvironment):
@@ -113,6 +116,10 @@ class DaytonaEnvironment(BaseEnvironment):
             logger.info("Daytona: created sandbox %s for task %s",
                         self._sandbox.id, task_id)
 
+        # The sandbox is freshly created/started — no need to refresh yet.
+        self._needs_refresh = False
+        self._last_sync_time: float = 0.0
+
         # Detect remote home dir first so mounts go to the right place.
         self._remote_home = "/root"
         try:
@@ -178,10 +185,13 @@ class DaytonaEnvironment(BaseEnvironment):
 
     def _ensure_sandbox_ready(self):
         """Restart sandbox if it was stopped (e.g., by a previous interrupt)."""
+        if not self._needs_refresh:
+            return
         self._sandbox.refresh_data()
         if self._sandbox.state in (self._SandboxState.STOPPED, self._SandboxState.ARCHIVED):
             self._sandbox.start()
             logger.info("Daytona: restarted sandbox %s", self._sandbox.id)
+        self._needs_refresh = False
 
     # ------------------------------------------------------------------
     # Unified execution hooks
@@ -191,7 +201,10 @@ class DaytonaEnvironment(BaseEnvironment):
         """Ensure sandbox is ready and sync credentials before each command."""
         with self._lock:
             self._ensure_sandbox_ready()
-        self._sync_skills_and_credentials()
+        now = _time.monotonic()
+        if now - self._last_sync_time >= _SYNC_INTERVAL_SECONDS:
+            self._sync_skills_and_credentials()
+            self._last_sync_time = now
 
     def _run_bash(self, cmd_string: str, *, timeout: int | None = None,
                   stdin_data: str | None = None):
@@ -229,6 +242,7 @@ class DaytonaEnvironment(BaseEnvironment):
         with self._lock:
             if self._sandbox is None:
                 return
+            self._needs_refresh = True
             try:
                 if self._persistent:
                     self._sandbox.stop()

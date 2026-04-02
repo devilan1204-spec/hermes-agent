@@ -10,6 +10,7 @@ import logging
 import re
 import shlex
 import threading
+import time as _time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -18,6 +19,7 @@ from tools.environments.base import BaseEnvironment
 
 logger = logging.getLogger(__name__)
 
+_SYNC_INTERVAL_SECONDS = 5.0
 _SNAPSHOT_STORE = get_hermes_home() / "modal_snapshots.json"
 _DIRECT_SNAPSHOT_NAMESPACE = "direct"
 
@@ -179,6 +181,7 @@ class ModalEnvironment(BaseEnvironment):
         self._app = None
         self._worker = _AsyncWorker()
         self._synced_files: Dict[str, tuple] = {}
+        self._last_sync_time: float = 0.0
 
         sandbox_kwargs = dict(modal_sandbox_kwargs or {})
 
@@ -347,7 +350,10 @@ class ModalEnvironment(BaseEnvironment):
     # ------------------------------------------------------------------
 
     def _before_execute(self) -> None:
-        self._sync_files()
+        now = _time.monotonic()
+        if now - self._last_sync_time >= _SYNC_INTERVAL_SECONDS:
+            self._sync_files()
+            self._last_sync_time = now
 
     def _run_bash(self, cmd_string: str, *, timeout: int | None = None,
                   stdin_data: str | None = None):

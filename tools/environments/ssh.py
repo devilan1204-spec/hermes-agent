@@ -5,11 +5,14 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import time as _time
 from pathlib import Path
 
 from tools.environments.base import BaseEnvironment
 
 logger = logging.getLogger(__name__)
+
+_SYNC_INTERVAL_SECONDS = 5.0
 
 
 def _ensure_ssh_available() -> None:
@@ -39,6 +42,15 @@ class SSHEnvironment(BaseEnvironment):
     def __init__(self, host: str, user: str, cwd: str = "~",
                  timeout: int = 60, port: int = 22, key_path: str = "",
                  **kwargs):
+        if kwargs.get("persistent") is not None:
+            import warnings
+            warnings.warn(
+                "The 'persistent' parameter is no longer supported. "
+                "SSH backend now uses the unified spawn-per-call model "
+                "with login-shell snapshot sourcing.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         super().__init__(cwd=cwd, timeout=timeout)
         self.host = host
         self.user = user
@@ -53,6 +65,7 @@ class SSHEnvironment(BaseEnvironment):
         self._synced_files: dict[str, tuple] = {}    # remote_path → (mtime, size)
         self._skills_fingerprint: set | None = None   # {(relpath, mtime, size), ...}
         self._created_remote_dirs: set[str] = set()
+        self._last_sync_time: float = 0.0
 
         _ensure_ssh_available()
         self._establish_connection()
@@ -213,9 +226,12 @@ class SSHEnvironment(BaseEnvironment):
     def _before_execute(self):
         """Incremental sync before each command so mid-session credential
         refreshes and skill updates are picked up."""
-        self._sync_skills_and_credentials()
+        now = _time.monotonic()
+        if now - self._last_sync_time >= _SYNC_INTERVAL_SECONDS:
+            self._sync_skills_and_credentials()
+            self._last_sync_time = now
 
-    def _run_bash(self, cmd_string, *, stdin_data=None):
+    def _run_bash(self, cmd_string, *, timeout=None, stdin_data=None):
         cmd = self._build_ssh_command()
         cmd.extend(["bash", "-c", shlex.quote(cmd_string)])
         proc = subprocess.Popen(
@@ -232,7 +248,7 @@ class SSHEnvironment(BaseEnvironment):
                 pass
         return proc
 
-    def _run_bash_login(self, cmd_string):
+    def _run_bash_login(self, cmd_string, *, timeout=None):
         cmd = self._build_ssh_command()
         cmd.extend(["bash", "-l", "-c", shlex.quote(cmd_string)])
         return subprocess.Popen(

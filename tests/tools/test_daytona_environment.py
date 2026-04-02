@@ -428,12 +428,20 @@ class TestSdkError:
 class TestEnsureSandboxReady:
     def test_restarts_stopped_sandbox(self, make_env):
         env = make_env()
+        env._needs_refresh = True
         env._sandbox.state = "stopped"
         env._ensure_sandbox_ready()
         env._sandbox.start.assert_called()
 
     def test_no_restart_when_running(self, make_env):
         env = make_env()
+        env._needs_refresh = True
         env._sandbox.state = "started"
         env._ensure_sandbox_ready()
         env._sandbox.start.assert_not_called()
+
+    def test_skips_refresh_when_not_needed(self, make_env):
+        env = make_env()
+        env._needs_refresh = False
+        env._ensure_sandbox_ready()
+        env._sandbox.refresh_data.assert_not_called()

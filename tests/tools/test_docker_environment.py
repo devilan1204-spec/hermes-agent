@@ -239,10 +239,14 @@ def _make_execute_only_env(forward_env=None):
     env = docker_env.DockerEnvironment.__new__(docker_env.DockerEnvironment)
     env.cwd = "/root"
     env.timeout = 60
+    env.env = {}
     env._forward_env = forward_env or []
     env._env = {}
     env._prepare_command = lambda command: (command, None)
-    env._timeout_result = lambda timeout: {"output": f"timed out after {timeout}", "returncode": 124}
+    env._snapshot_path = None
+    env._snapshot_ready = False
+    env._session_id = ""
+    env._cached_forward_env_args = None
     env._container_id = "test-container"
     env._docker_exe = "/usr/bin/docker"
     return env

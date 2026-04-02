@@ -218,6 +218,7 @@ class DockerEnvironment(BaseEnvironment):
         self._persistent = persistent_filesystem
         self._task_id = task_id
         self._forward_env = _normalize_forward_env_names(forward_env)
+        self._cached_forward_env_args: list[str] | None = None
         self._container_id: Optional[str] = None
         logger.info(f"DockerEnvironment volumes: {volumes}")
         # Ensure volumes is a list (config.yaml could be malformed)
@@ -424,7 +425,13 @@ class DockerEnvironment(BaseEnvironment):
         ``env_passthrough`` vars so skills that declare
         ``required_environment_variables`` (e.g. Notion) have their keys
         forwarded into the container automatically.
+
+        Result is cached at instance level to avoid re-reading ~/.hermes/.env
+        and rebuilding the arg list on every command.
         """
+        if self._cached_forward_env_args is not None:
+            return self._cached_forward_env_args
+
         forward_keys = set(self._forward_env)
         try:
             from tools.env_passthrough import get_all_passthrough
@@ -440,9 +447,11 @@ class DockerEnvironment(BaseEnvironment):
                 value = hermes_env.get(key)
             if value is not None:
                 args.extend(["-e", f"{key}={value}"])
+        self._cached_forward_env_args = args
         return args
 
     def _run_bash(self, cmd_string: str, *,
+                  timeout: int | None = None,
                   stdin_data: str | None = None) -> subprocess.Popen:
         """Spawn ``bash -c <cmd_string>`` inside the Docker container."""
         assert self._container_id, "Container not started"
@@ -465,7 +474,8 @@ class DockerEnvironment(BaseEnvironment):
                 pass
         return proc
 
-    def _run_bash_login(self, cmd_string: str) -> subprocess.Popen:
+    def _run_bash_login(self, cmd_string: str, *,
+                        timeout: int | None = None) -> subprocess.Popen:
         """Spawn ``bash -l -c <cmd_string>`` for snapshot creation."""
         assert self._container_id, "Container not started"
         cmd = [self._docker_exe, "exec", self._container_id,
@@ -479,9 +489,9 @@ class DockerEnvironment(BaseEnvironment):
     def cleanup(self):
         """Stop and remove the container. Bind-mount dirs persist if persistent=True."""
         if self._container_id:
-            # Clean up snapshot and cwdfile inside the container
+            # Clean up snapshot inside the container
             paths_to_rm = " ".join(
-                p for p in (self._snapshot_path, self._cwdfile_path) if p
+                p for p in (self._snapshot_path,) if p
             )
             if paths_to_rm:
                 try:
