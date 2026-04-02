@@ -293,10 +293,10 @@ class ByteRoverMemoryProvider(MemoryProvider):
         t = threading.Thread(target=_write, daemon=True, name="brv-memwrite")
         t.start()
 
-    def on_pre_compress(self, messages: List[Dict[str, Any]]) -> None:
+    def on_pre_compress(self, messages: List[Dict[str, Any]]) -> str:
         """Extract insights before context compression discards turns."""
         if not messages:
-            return
+            return ""
 
         # Build a summary of messages about to be compressed
         parts = []
@@ -307,7 +307,7 @@ class ByteRoverMemoryProvider(MemoryProvider):
                 parts.append(f"{role}: {content[:500]}")
 
         if not parts:
-            return
+            return ""
 
         combined = "\n".join(parts)
 
@@ -323,6 +323,7 @@ class ByteRoverMemoryProvider(MemoryProvider):
 
         t = threading.Thread(target=_flush, daemon=True, name="brv-flush")
         t.start()
+        return ""
 
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
         return [QUERY_SCHEMA, CURATE_SCHEMA, STATUS_SCHEMA]
