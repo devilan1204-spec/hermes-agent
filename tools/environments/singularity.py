@@ -8,7 +8,6 @@ via writable overlay directories that survive across sessions.
 import json
 import logging
 import os
-import shlex
 import shutil
 import subprocess
 import tempfile
@@ -19,7 +18,6 @@ from typing import Any, Dict, Optional
 
 from hermes_constants import get_hermes_home
 from tools.environments.base import BaseEnvironment
-from tools.interrupt import is_interrupted
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +239,7 @@ class SingularityEnvironment(BaseEnvironment):
             self._overlay_dir.mkdir(parents=True, exist_ok=True)
 
         self._start_instance()
+        self.init_session()
 
     def _start_instance(self):
         cmd = [self.executable, "instance", "start"]
@@ -266,7 +265,8 @@ class SingularityEnvironment(BaseEnvironment):
                     mount_entry["host_path"],
                     mount_entry["container_path"],
                 )
-            for skills_mount in get_skills_directory_mount():
+            skills_mount = get_skills_directory_mount()
+            if skills_mount:
                 cmd.extend(["--bind", f"{skills_mount['host_path']}:{skills_mount['container_path']}:ro"])
                 logger.info(
                     "Singularity: binding skills dir %s -> %s",
@@ -294,86 +294,42 @@ class SingularityEnvironment(BaseEnvironment):
         except subprocess.TimeoutExpired:
             raise RuntimeError("Instance start timed out")
 
-    def execute(self, command: str, cwd: str = "", *,
-                timeout: int | None = None,
-                stdin_data: str | None = None) -> dict:
+    # ------------------------------------------------------------------
+    # Unified execution model — _run_bash is the only execution method
+    # ------------------------------------------------------------------
+
+    def _run_bash(self, cmd_string: str, *,
+                  stdin_data: str | None = None) -> subprocess.Popen:
         if not self._instance_started:
-            return {"output": "Instance not started", "returncode": -1}
-
-        effective_timeout = timeout or self.timeout
-        work_dir = cwd or self.cwd
-        exec_command, sudo_stdin = self._prepare_command(command)
-
-        # Merge sudo password (if any) with caller-supplied stdin_data.
-        if sudo_stdin is not None and stdin_data is not None:
-            effective_stdin = sudo_stdin + stdin_data
-        elif sudo_stdin is not None:
-            effective_stdin = sudo_stdin
-        else:
-            effective_stdin = stdin_data
-
-        # apptainer exec --pwd doesn't expand ~, so prepend a cd into the command.
-        # Keep ~ unquoted (for shell expansion) and quote only the subpath.
-        if work_dir == "~":
-            exec_command = f"cd ~ && {exec_command}"
-            work_dir = "/tmp"
-        elif work_dir.startswith("~/"):
-            exec_command = f"cd ~/{shlex.quote(work_dir[2:])} && {exec_command}"
-            work_dir = "/tmp"
-
-        cmd = [self.executable, "exec", "--pwd", work_dir,
+            raise RuntimeError("Singularity instance not started")
+        cmd = [self.executable, "exec",
                f"instance://{self.instance_id}",
-               "bash", "-c", exec_command]
+               "bash", "-c", cmd_string]
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            stdin=subprocess.PIPE if stdin_data is not None else subprocess.DEVNULL,
+            text=True,
+        )
+        if stdin_data is not None:
+            try:
+                proc.stdin.write(stdin_data)
+                proc.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
+        return proc
 
-        try:
-            import time as _time
-            _output_chunks = []
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                stdin=subprocess.PIPE if effective_stdin else subprocess.DEVNULL,
-                text=True,
-            )
-            if effective_stdin:
-                try:
-                    proc.stdin.write(effective_stdin)
-                    proc.stdin.close()
-                except Exception:
-                    pass
-
-            def _drain():
-                try:
-                    for line in proc.stdout:
-                        _output_chunks.append(line)
-                except Exception:
-                    pass
-
-            reader = threading.Thread(target=_drain, daemon=True)
-            reader.start()
-            deadline = _time.monotonic() + effective_timeout
-
-            while proc.poll() is None:
-                if is_interrupted():
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=1)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
-                    reader.join(timeout=2)
-                    return {
-                        "output": "".join(_output_chunks) + "\n[Command interrupted]",
-                        "returncode": 130,
-                    }
-                if _time.monotonic() > deadline:
-                    proc.kill()
-                    reader.join(timeout=2)
-                    return self._timeout_result(effective_timeout)
-                _time.sleep(0.2)
-
-            reader.join(timeout=5)
-            return {"output": "".join(_output_chunks), "returncode": proc.returncode}
-        except Exception as e:
-            return {"output": f"Singularity execution error: {e}", "returncode": 1}
+    def _run_bash_login(self, cmd_string: str) -> subprocess.Popen:
+        if not self._instance_started:
+            raise RuntimeError("Singularity instance not started")
+        cmd = [self.executable, "exec",
+               f"instance://{self.instance_id}",
+               "bash", "-l", "-c", cmd_string]
+        return subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL, text=True,
+        )
 
     def cleanup(self):
         """Stop the instance. If persistent, the overlay dir survives for next creation."""
