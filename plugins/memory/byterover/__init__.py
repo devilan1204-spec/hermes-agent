@@ -215,7 +215,7 @@ class ByteRoverMemoryProvider(MemoryProvider):
             "important facts, brv_status to check state."
         )
 
-    def prefetch(self, query: str) -> str:
+    def prefetch(self, query: str, *, session_id: str = "") -> str:
         if self._prefetch_thread and self._prefetch_thread.is_alive():
             self._prefetch_thread.join(timeout=3.0)
         with self._prefetch_lock:
@@ -225,7 +225,7 @@ class ByteRoverMemoryProvider(MemoryProvider):
             return ""
         return f"## ByteRover Context\n{result}"
 
-    def queue_prefetch(self, query: str) -> None:
+    def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
         if not query or len(query.strip()) < _MIN_QUERY_LEN:
             return
 
@@ -248,7 +248,7 @@ class ByteRoverMemoryProvider(MemoryProvider):
         )
         self._prefetch_thread.start()
 
-    def sync_turn(self, user_content: str, assistant_content: str) -> None:
+    def sync_turn(self, user_content: str, assistant_content: str, *, session_id: str = "") -> None:
         """Curate the conversation turn in background (non-blocking)."""
         self._turn_count += 1
 

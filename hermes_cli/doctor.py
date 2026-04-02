@@ -714,12 +714,12 @@ def run_doctor(args):
         _honcho_cfg_path = resolve_config_path()
 
         if not _honcho_cfg_path.exists():
-            check_warn("Honcho config not found", "run: hermes honcho setup")
+            check_warn("Honcho config not found", "run: hermes memory setup")
         elif not hcfg.enabled:
             check_info(f"Honcho disabled (set enabled: true in {_honcho_cfg_path} to activate)")
         elif not (hcfg.api_key or hcfg.base_url):
-            check_fail("Honcho API key or base URL not set", "run: hermes honcho setup")
-            issues.append("No Honcho API key — run 'hermes honcho setup'")
+            check_fail("Honcho API key or base URL not set", "run: hermes memory setup")
+            issues.append("No Honcho API key — run 'hermes memory setup'")
         else:
             from plugins.memory.honcho.client import get_honcho_client, reset_honcho_client
             reset_honcho_client()

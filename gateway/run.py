@@ -1226,6 +1226,14 @@ class GatewayRunner:
                     )
                     try:
                         await self._async_flush_memories(entry.session_id, key)
+                        # Shut down memory provider on the cached agent
+                        cached_agent = self._running_agents.get(key)
+                        if cached_agent and cached_agent is not _AGENT_PENDING_SENTINEL:
+                            try:
+                                if hasattr(cached_agent, 'shutdown_memory_provider'):
+                                    cached_agent.shutdown_memory_provider()
+                            except Exception:
+                                pass
                         # Mark as flushed and persist to disk so the flag
                         # survives gateway restarts.
                         with self.session_store._lock:
@@ -1359,6 +1367,12 @@ class GatewayRunner:
                 logger.debug("Interrupted running agent for session %s during shutdown", session_key[:20])
             except Exception as e:
                 logger.debug("Failed interrupting agent during shutdown: %s", e)
+            # Shut down memory provider at actual session boundary
+            try:
+                if hasattr(agent, 'shutdown_memory_provider'):
+                    agent.shutdown_memory_provider()
+            except Exception:
+                pass
 
         for platform, adapter in list(self.adapters.items()):
             try:
@@ -4082,7 +4096,6 @@ class GatewayRunner:
                     user_message=btw_prompt,
                     conversation_history=history_snapshot,
                     task_id=task_id,
-                    sync_honcho=False,
                 )
 
             loop = asyncio.get_event_loop()

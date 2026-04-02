@@ -47,14 +47,14 @@ class FakeMemoryProvider(MemoryProvider):
     def system_prompt_block(self) -> str:
         return self._prompt_block
 
-    def prefetch(self, query):
+    def prefetch(self, query, *, session_id=""):
         self.prefetch_queries.append(query)
         return self._prefetch_result
 
-    def queue_prefetch(self, query):
+    def queue_prefetch(self, query, *, session_id=""):
         self.queued_prefetches.append(query)
 
-    def sync_turn(self, user_content, assistant_content):
+    def sync_turn(self, user_content, assistant_content, *, session_id=""):
         self.synced_turns.append((user_content, assistant_content))
 
     def get_tool_schemas(self):

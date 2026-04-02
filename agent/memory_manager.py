@@ -137,7 +137,7 @@ class MemoryManager:
 
     # -- Prefetch / recall ---------------------------------------------------
 
-    def prefetch_all(self, query: str) -> str:
+    def prefetch_all(self, query: str, *, session_id: str = "") -> str:
         """Collect prefetch context from all providers.
 
         Returns merged context text labeled by provider. Empty providers
@@ -146,7 +146,7 @@ class MemoryManager:
         parts = []
         for provider in self._providers:
             try:
-                result = provider.prefetch(query)
+                result = provider.prefetch(query, session_id=session_id)
                 if result and result.strip():
                     parts.append(result)
             except Exception as e:
@@ -156,11 +156,11 @@ class MemoryManager:
                 )
         return "\n\n".join(parts)
 
-    def queue_prefetch_all(self, query: str) -> None:
+    def queue_prefetch_all(self, query: str, *, session_id: str = "") -> None:
         """Queue background prefetch on all providers for the next turn."""
         for provider in self._providers:
             try:
-                provider.queue_prefetch(query)
+                provider.queue_prefetch(query, session_id=session_id)
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' queue_prefetch failed (non-fatal): %s",
@@ -169,11 +169,11 @@ class MemoryManager:
 
     # -- Sync ----------------------------------------------------------------
 
-    def sync_all(self, user_content: str, assistant_content: str) -> None:
+    def sync_all(self, user_content: str, assistant_content: str, *, session_id: str = "") -> None:
         """Sync a completed turn to all providers."""
         for provider in self._providers:
             try:
-                provider.sync_turn(user_content, assistant_content)
+                provider.sync_turn(user_content, assistant_content, session_id=session_id)
             except Exception as e:
                 logger.warning(
                     "Memory provider '%s' sync_turn failed: %s",
@@ -230,11 +230,14 @@ class MemoryManager:
 
     # -- Lifecycle hooks -----------------------------------------------------
 
-    def on_turn_start(self, turn_number: int, message: str) -> None:
-        """Notify all providers of a new turn."""
+    def on_turn_start(self, turn_number: int, message: str, **kwargs) -> None:
+        """Notify all providers of a new turn.
+
+        kwargs may include: remaining_tokens, model, platform, tool_count.
+        """
         for provider in self._providers:
             try:
-                provider.on_turn_start(turn_number, message)
+                provider.on_turn_start(turn_number, message, **kwargs)
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_turn_start failed: %s",
@@ -252,16 +255,24 @@ class MemoryManager:
                     provider.name, e,
                 )
 
-    def on_pre_compress(self, messages: List[Dict[str, Any]]) -> None:
-        """Notify all providers before context compression."""
+    def on_pre_compress(self, messages: List[Dict[str, Any]]) -> str:
+        """Notify all providers before context compression.
+
+        Returns combined text from providers to include in the compression
+        summary prompt. Empty string if no provider contributes.
+        """
+        parts = []
         for provider in self._providers:
             try:
-                provider.on_pre_compress(messages)
+                result = provider.on_pre_compress(messages)
+                if result and result.strip():
+                    parts.append(result)
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_pre_compress failed: %s",
                     provider.name, e,
                 )
+        return "\n\n".join(parts)
 
     def on_memory_write(self, action: str, target: str, content: str) -> None:
         """Notify external providers when the built-in memory tool writes.
@@ -276,6 +287,20 @@ class MemoryManager:
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_memory_write failed: %s",
+                    provider.name, e,
+                )
+
+    def on_delegation(self, task: str, result: str, *,
+                      child_session_id: str = "", **kwargs) -> None:
+        """Notify all providers that a subagent completed."""
+        for provider in self._providers:
+            try:
+                provider.on_delegation(
+                    task, result, child_session_id=child_session_id, **kwargs
+                )
+            except Exception as e:
+                logger.debug(
+                    "Memory provider '%s' on_delegation failed: %s",
                     provider.name, e,
                 )
 

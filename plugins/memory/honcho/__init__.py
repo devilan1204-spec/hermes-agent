@@ -201,7 +201,7 @@ class HonchoMemoryProvider(MemoryProvider):
             "honcho_conclude to save facts about the user."
         )
 
-    def prefetch(self, query: str) -> str:
+    def prefetch(self, query: str, *, session_id: str = "") -> str:
         """Return prefetched dialectic context from background thread."""
         if self._prefetch_thread and self._prefetch_thread.is_alive():
             self._prefetch_thread.join(timeout=3.0)
@@ -212,7 +212,7 @@ class HonchoMemoryProvider(MemoryProvider):
             return ""
         return f"## Honcho Context\n{result}"
 
-    def queue_prefetch(self, query: str) -> None:
+    def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
         """Fire a background dialectic query for the upcoming turn."""
         if not self._manager or not self._session_key or not query:
             return
@@ -233,7 +233,7 @@ class HonchoMemoryProvider(MemoryProvider):
         )
         self._prefetch_thread.start()
 
-    def sync_turn(self, user_content: str, assistant_content: str) -> None:
+    def sync_turn(self, user_content: str, assistant_content: str, *, session_id: str = "") -> None:
         """Record the conversation turn in Honcho (non-blocking)."""
         if not self._manager or not self._session_key:
             return

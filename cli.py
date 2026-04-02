@@ -508,6 +508,8 @@ from tools.browser_tool import _emergency_cleanup_all_sessions as _cleanup_all_b
 
 # Guard to prevent cleanup from running multiple times on exit
 _cleanup_done = False
+# Weak reference to the active AIAgent for memory provider shutdown at exit
+_active_agent_ref = None
 
 def _run_cleanup():
     """Run resource cleanup exactly once."""
@@ -534,6 +536,15 @@ def _run_cleanup():
     try:
         from agent.auxiliary_client import shutdown_cached_clients
         shutdown_cached_clients()
+    except Exception:
+        pass
+    # Shut down memory provider (on_session_end + shutdown_all) at actual
+    # session boundary — NOT per-turn inside run_conversation().
+    try:
+        if _active_agent_ref and hasattr(_active_agent_ref, 'shutdown_memory_provider'):
+            _active_agent_ref.shutdown_memory_provider(
+                getattr(_active_agent_ref, 'conversation_history', None) or []
+            )
     except Exception:
         pass
 
@@ -2230,6 +2241,9 @@ class HermesCLI:
                 stream_delta_callback=self._stream_delta if self.streaming_enabled else None,
                 tool_gen_callback=self._on_tool_gen_start if self.streaming_enabled else None,
             )
+            # Store reference for atexit memory provider shutdown
+            global _active_agent_ref
+            _active_agent_ref = self.agent
             # Route agent status output through prompt_toolkit so ANSI escape
             # sequences aren't garbled by patch_stdout's StdoutProxy (#2262).
             self.agent._print_fn = _cprint
@@ -3237,6 +3251,9 @@ class HermesCLI:
 
     def reset_conversation(self):
         """Reset the conversation by starting a new session."""
+        # Shut down memory provider before resetting — actual session boundary
+        if hasattr(self, 'agent') and self.agent:
+            self.agent.shutdown_memory_provider(self.conversation_history)
         self.new_session()
     
     def save_conversation(self):
@@ -4365,7 +4382,6 @@ class HermesCLI:
                     user_message=btw_prompt,
                     conversation_history=history_snapshot,
                     task_id=task_id,
-                    sync_honcho=False,
                 )
 
                 response = (result.get("final_response") or "") if result else ""

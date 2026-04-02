@@ -1066,11 +1066,21 @@ class AIAgent:
                         self._memory_manager.add_provider(_mp)
                     if self._memory_manager.providers:
                         from hermes_constants import get_hermes_home as _ghh
-                        self._memory_manager.initialize_all(
-                            session_id=self.session_id,
-                            platform=platform or "cli",
-                            hermes_home=str(_ghh()),
-                        )
+                        _init_kwargs = {
+                            "session_id": self.session_id,
+                            "platform": platform or "cli",
+                            "hermes_home": str(_ghh()),
+                            "agent_context": "primary",
+                        }
+                        # Profile identity for per-profile provider scoping
+                        try:
+                            from hermes_cli.profiles import get_active_profile_name
+                            _profile = get_active_profile_name()
+                            _init_kwargs["agent_identity"] = _profile
+                            _init_kwargs["agent_workspace"] = "hermes"
+                        except Exception:
+                            pass
+                        self._memory_manager.initialize_all(**_init_kwargs)
                         logger.info("Memory provider '%s' activated", _mem_provider_name)
                     else:
                         logger.debug("Memory provider '%s' not found or not available", _mem_provider_name)
@@ -2229,6 +2239,23 @@ class AIAgent:
         self._interrupt_requested = False
         self._interrupt_message = None
         _set_interrupt(False)
+
+    def shutdown_memory_provider(self, messages: list = None) -> None:
+        """Shut down the memory provider — call at actual session boundaries.
+
+        This calls on_session_end() then shutdown_all() on the memory
+        manager. NOT called per-turn — only at CLI exit, /reset, gateway
+        session expiry, etc.
+        """
+        if self._memory_manager:
+            try:
+                self._memory_manager.on_session_end(messages or [])
+            except Exception:
+                pass
+            try:
+                self._memory_manager.shutdown_all()
+            except Exception:
+                pass
     
     def _hydrate_todo_store(self, history: List[Dict[str, Any]]) -> None:
         """
@@ -6335,7 +6362,18 @@ class AIAgent:
         
         # Clear any stale interrupt state at start
         self.clear_interrupt()
-        
+
+        # External memory provider: prefetch once before the tool loop.
+        # Reuse the cached result on every iteration to avoid re-calling
+        # prefetch_all() on each tool call (10 tool calls = 10x latency + cost).
+        _ext_prefetch_cache = ""
+        if self._memory_manager:
+            try:
+                _query = user_message if isinstance(user_message, str) else ""
+                _ext_prefetch_cache = self._memory_manager.prefetch_all(_query) or ""
+            except Exception:
+                pass
+
         while api_call_count < self.max_iterations and self.iteration_budget.remaining > 0:
             # Reset per-turn checkpoint dedup so each iteration can take one snapshot
             self._checkpoint_mgr.new_turn()
@@ -6384,18 +6422,11 @@ class AIAgent:
             for idx, msg in enumerate(messages):
                 api_msg = msg.copy()
 
-                # External memory provider prefetch: inject recalled context
-                if idx == current_turn_user_idx and msg.get("role") == "user" and self._memory_manager:
-                    try:
-                        _ext_prefetch = self._memory_manager.prefetch_all(
-                            api_msg.get("content", "") if isinstance(api_msg.get("content"), str) else ""
-                        )
-                        if _ext_prefetch:
-                            _base = api_msg.get("content", "")
-                            if isinstance(_base, str):
-                                api_msg["content"] = _base + "\n\n" + _ext_prefetch
-                    except Exception:
-                        pass
+                # External memory provider prefetch: inject cached recalled context
+                if idx == current_turn_user_idx and msg.get("role") == "user" and _ext_prefetch_cache:
+                    _base = api_msg.get("content", "")
+                    if isinstance(_base, str):
+                        api_msg["content"] = _base + "\n\n" + _ext_prefetch_cache
 
                 # For ALL assistant messages, pass reasoning back to the API
                 # This ensures multi-turn reasoning context is preserved
@@ -8161,13 +8192,12 @@ class AIAgent:
             except Exception:
                 pass  # Background review is best-effort
 
-        # Memory provider: session end + shutdown
-        if self._memory_manager:
-            try:
-                self._memory_manager.on_session_end(messages)
-                self._memory_manager.shutdown_all()
-            except Exception:
-                pass
+        # Note: Memory provider on_session_end() + shutdown_all() are NOT
+        # called here — run_conversation() is called once per user message in
+        # multi-turn sessions. Shutting down after every turn would kill the
+        # provider before the second message. Actual session-end cleanup is
+        # handled by the CLI (atexit / /reset) and gateway (session expiry /
+        # _reset_session).
 
         # Plugin hook: on_session_end
         # Fired at the very end of every run_conversation call.
