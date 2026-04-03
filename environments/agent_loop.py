@@ -224,7 +224,6 @@ class HermesAgentLoop:
             api_start = _time.monotonic()
             try:
                 response = await self.server.chat_completion(**chat_kwargs)
-                print(response)
             except Exception as e:
                 api_elapsed = _time.monotonic() - api_start
                 logger.error("API call failed on turn %d (%.1fs): %s", turn + 1, api_elapsed, e)
@@ -235,9 +234,6 @@ class HermesAgentLoop:
                     finished_naturally=False,
                     reasoning_per_turn=reasoning_per_turn,
                     tool_errors=tool_errors,
-                    # prompt_token_ids=response.choices[0].message.prompt_token_ids if hasattr(response.choices[0].message, "prompt_token_ids") else None,
-                    # generation_token_ids=response.choices[0].message.generation_token_ids if hasattr(response.choices[0].message, "generation_token_ids") else None,
-                    # generation_log_probs=response.choices[0].message.generation_log_probs if hasattr(response.choices[0].message, "generation_log_probs") else None,
                 )
 
             api_elapsed = _time.monotonic() - api_start
