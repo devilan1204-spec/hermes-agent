@@ -193,6 +193,10 @@ class HermesAgentLoop:
 
         import time as _time
 
+        prompt_token_ids = None
+        generation_token_ids = None
+        generation_log_probs = None
+
         for turn in range(self.max_turns):
             turn_start = _time.monotonic()
 
@@ -220,6 +224,7 @@ class HermesAgentLoop:
             api_start = _time.monotonic()
             try:
                 response = await self.server.chat_completion(**chat_kwargs)
+                print(response)
             except Exception as e:
                 api_elapsed = _time.monotonic() - api_start
                 logger.error("API call failed on turn %d (%.1fs): %s", turn + 1, api_elapsed, e)
@@ -230,6 +235,9 @@ class HermesAgentLoop:
                     finished_naturally=False,
                     reasoning_per_turn=reasoning_per_turn,
                     tool_errors=tool_errors,
+                    # prompt_token_ids=response.choices[0].message.prompt_token_ids if hasattr(response.choices[0].message, "prompt_token_ids") else None,
+                    # generation_token_ids=response.choices[0].message.generation_token_ids if hasattr(response.choices[0].message, "generation_token_ids") else None,
+                    # generation_log_probs=response.choices[0].message.generation_log_probs if hasattr(response.choices[0].message, "generation_log_probs") else None,
                 )
 
             api_elapsed = _time.monotonic() - api_start
@@ -246,6 +254,12 @@ class HermesAgentLoop:
                 )
 
             assistant_msg = response.choices[0].message
+            if hasattr(assistant_msg, "prompt_token_ids"):
+                prompt_token_ids = assistant_msg.prompt_token_ids
+            if hasattr(assistant_msg, "generation_token_ids"):
+                generation_token_ids = assistant_msg.generation_token_ids
+            if hasattr(assistant_msg, "generation_log_probs"):
+                generation_log_probs = assistant_msg.generation_log_probs
 
             # Extract reasoning content from the response (all provider formats)
             reasoning = _extract_reasoning_from_message(assistant_msg)
@@ -308,7 +322,10 @@ class HermesAgentLoop:
                     "content": assistant_msg.content or "",
                     "tool_calls": [_tc_to_dict(tc) for tc in assistant_msg.tool_calls],
                 }
-
+                if prompt_token_ids is not None:
+                    msg_dict["prompt_token_ids"] = prompt_token_ids
+                    msg_dict["generation_token_ids"] = generation_token_ids
+                    msg_dict["generation_log_probs"] = generation_log_probs
                 # Preserve reasoning_content for multi-turn chat template handling
                 # (e.g., Kimi-K2's template renders <think> blocks differently
                 # for history vs. the latest turn based on this field)
@@ -471,6 +488,10 @@ class HermesAgentLoop:
                 }
                 if reasoning:
                     msg_dict["reasoning_content"] = reasoning
+                if prompt_token_ids is not None:
+                    msg_dict["prompt_token_ids"] = prompt_token_ids
+                    msg_dict["generation_token_ids"] = generation_token_ids
+                    msg_dict["generation_log_probs"] = generation_log_probs
                 messages.append(msg_dict)
 
                 turn_elapsed = _time.monotonic() - turn_start
