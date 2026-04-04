@@ -1916,7 +1916,11 @@ class AIAgent:
                         "from": "gpt",
                         "value": content.rstrip()
                     })
-                    
+
+                    if hasattr(msg, "prompt_token_ids") is not None:
+                        trajectory[-1]["prompt_token_ids"] = msg["prompt_token_ids"]
+                        trajectory[-1]["generation_token_ids"] = msg["generation_token_ids"]
+                        trajectory[-1]["generation_log_probs"] = msg["generation_log_probs"]
                     # Collect all subsequent tool responses
                     tool_responses = []
                     j = i + 1
@@ -1978,6 +1982,10 @@ class AIAgent:
                         "from": "gpt",
                         "value": content.strip()
                     })
+                    if hasattr(msg, "prompt_token_ids") is not None:
+                        trajectory[-1]["prompt_token_ids"] = msg["prompt_token_ids"]
+                        trajectory[-1]["generation_token_ids"] = msg["generation_token_ids"]
+                        trajectory[-1]["generation_log_probs"] = msg["generation_log_probs"]
             
             elif msg["role"] == "user":
                 trajectory.append({
@@ -5229,6 +5237,11 @@ class AIAgent:
             "reasoning": reasoning_text,
             "finish_reason": finish_reason,
         }
+        
+        if hasattr(assistant_message, "prompt_token_ids") is not None:
+            msg["prompt_token_ids"] = assistant_message.prompt_token_ids
+            msg["generation_token_ids"] = assistant_message.generation_token_ids
+            msg["generation_log_probs"] = assistant_message.generation_log_probs
 
         if hasattr(assistant_message, 'reasoning_details') and assistant_message.reasoning_details:
             # Pass reasoning_details back unmodified so providers (OpenRouter,
@@ -7789,6 +7802,9 @@ class AIAgent:
                 break
 
             try:
+                prompt_token_ids = None
+                generation_token_ids = None
+                generation_log_probs = None
                 if self.api_mode == "codex_responses":
                     assistant_message, finish_reason = self._normalize_codex_response(response)
                 elif self.api_mode == "anthropic_messages":
@@ -7798,6 +7814,12 @@ class AIAgent:
                     )
                 else:
                     assistant_message = response.choices[0].message
+                    if hasattr(assistant_msg, "prompt_token_ids"):
+                        prompt_token_ids = assistant_msg.prompt_token_ids
+                    if hasattr(assistant_msg, "generation_token_ids"):
+                        generation_token_ids = assistant_msg.generation_token_ids
+                    if hasattr(assistant_msg, "generation_log_probs"):
+                        generation_log_probs = assistant_msg.generation_log_probs
                 
                 # Normalize content to string — some OpenAI-compatible servers
                 # (llama-server, etc.) return content as a dict or list instead
