@@ -427,11 +427,6 @@ def _rpc_server_loop(
 # Remote execution support (file-based RPC via terminal backend)
 # ---------------------------------------------------------------------------
 
-def _get_env_type() -> str:
-    """Return the configured terminal environment type."""
-    return os.getenv("TERMINAL_ENV", "local")
-
-
 def _get_or_create_env(task_id: str):
     """Get or create the terminal environment for *task_id*.
 
@@ -896,7 +891,8 @@ def execute_code(
         return json.dumps({"error": "No code provided."})
 
     # Dispatch: remote backends use file-based RPC, local uses UDS
-    env_type = _get_env_type()
+    from tools.terminal_tool import _get_env_config
+    env_type = _get_env_config()["env_type"]
     if env_type != "local":
         return _execute_remote(code, task_id, enabled_tools)
 
