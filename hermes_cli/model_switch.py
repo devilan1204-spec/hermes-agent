@@ -558,15 +558,19 @@ def list_authenticated_providers(
     user_providers: dict = None,
     max_models: int = 8,
 ) -> List[dict]:
-    """Detect which providers have credentials and list their top models.
+    """Detect which providers have credentials and list their curated models.
+
+    Uses the curated model lists from hermes_cli/models.py (OPENROUTER_MODELS,
+    _PROVIDER_MODELS) — NOT the full models.dev catalog.  These are hand-picked
+    agentic models that work well as agent backends.
 
     Returns a list of dicts, each with:
       - slug: str — the --provider value to use
       - name: str — display name
       - is_current: bool
       - is_user_defined: bool
-      - models: list[str] — top model IDs
-      - total_models: int — total available
+      - models: list[str] — curated model IDs (up to max_models)
+      - total_models: int — total curated count
       - source: str — "built-in", "models.dev", "user-config"
 
     Only includes providers that have API keys set or are user-defined endpoints.
@@ -574,15 +578,22 @@ def list_authenticated_providers(
     import os
     from agent.models_dev import (
         PROVIDER_TO_MODELS_DEV,
-        list_provider_models as _list_models,
         fetch_models_dev,
         get_provider_info as _mdev_pinfo,
     )
+    from hermes_cli.models import OPENROUTER_MODELS, _PROVIDER_MODELS
 
     results: List[dict] = []
     seen_slugs: set = set()
 
     data = fetch_models_dev()
+
+    # Build curated model lists keyed by hermes provider ID
+    curated: dict[str, list[str]] = dict(_PROVIDER_MODELS)
+    curated["openrouter"] = [mid for mid, _ in OPENROUTER_MODELS]
+    # "nous" shares OpenRouter's curated list if not separately defined
+    if "nous" not in curated:
+        curated["nous"] = curated["openrouter"]
 
     # --- 1. Check Hermes-mapped providers ---
     for hermes_id, mdev_id in PROVIDER_TO_MODELS_DEV.items():
@@ -599,26 +610,9 @@ def list_authenticated_providers(
         if not has_creds:
             continue
 
-        # Get models
-        models_dict = pdata.get("models", {})
-        if not isinstance(models_dict, dict):
-            models_dict = {}
-
-        # Filter out deprecated
-        model_ids = [
-            mid for mid, mdata in models_dict.items()
-            if isinstance(mdata, dict) and mdata.get("status") != "deprecated"
-        ]
+        # Use curated list, falling back to models.dev if no curated list
+        model_ids = curated.get(hermes_id, [])
         total = len(model_ids)
-
-        # Pick top models — prefer ones with tool_call support and higher context
-        def _model_sort_key(mid):
-            m = models_dict.get(mid, {})
-            tc = 1 if m.get("tool_call") else 0
-            ctx = m.get("limit", {}).get("context", 0) if isinstance(m.get("limit"), dict) else 0
-            return (-tc, -ctx)
-
-        model_ids.sort(key=_model_sort_key)
         top = model_ids[:max_models]
 
         slug = hermes_id
@@ -657,9 +651,8 @@ def list_authenticated_providers(
         if not has_creds:
             continue
 
-        # Get models from models.dev if available
-        mdev_id = PROVIDER_TO_MODELS_DEV.get(pid, pid)
-        model_ids = _list_models(mdev_id)
+        # Use curated list
+        model_ids = curated.get(pid, [])
         total = len(model_ids)
         top = model_ids[:max_models]
 
