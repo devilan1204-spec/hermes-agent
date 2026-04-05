@@ -550,6 +550,163 @@ def switch_model(
 
 
 # ---------------------------------------------------------------------------
+# Authenticated providers listing (for /model no-args display)
+# ---------------------------------------------------------------------------
+
+def list_authenticated_providers(
+    current_provider: str = "",
+    user_providers: dict = None,
+    max_models: int = 8,
+) -> List[dict]:
+    """Detect which providers have credentials and list their top models.
+
+    Returns a list of dicts, each with:
+      - slug: str — the --provider value to use
+      - name: str — display name
+      - is_current: bool
+      - is_user_defined: bool
+      - models: list[str] — top model IDs
+      - total_models: int — total available
+      - source: str — "built-in", "models.dev", "user-config"
+
+    Only includes providers that have API keys set or are user-defined endpoints.
+    """
+    import os
+    from agent.models_dev import (
+        PROVIDER_TO_MODELS_DEV,
+        list_provider_models as _list_models,
+        fetch_models_dev,
+        get_provider_info as _mdev_pinfo,
+    )
+
+    results: List[dict] = []
+    seen_slugs: set = set()
+
+    data = fetch_models_dev()
+
+    # --- 1. Check Hermes-mapped providers ---
+    for hermes_id, mdev_id in PROVIDER_TO_MODELS_DEV.items():
+        pdata = data.get(mdev_id)
+        if not isinstance(pdata, dict):
+            continue
+
+        env_vars = pdata.get("env", [])
+        if not isinstance(env_vars, list):
+            continue
+
+        # Check if any env var is set
+        has_creds = any(os.environ.get(ev) for ev in env_vars)
+        if not has_creds:
+            continue
+
+        # Get models
+        models_dict = pdata.get("models", {})
+        if not isinstance(models_dict, dict):
+            models_dict = {}
+
+        # Filter out deprecated
+        model_ids = [
+            mid for mid, mdata in models_dict.items()
+            if isinstance(mdata, dict) and mdata.get("status") != "deprecated"
+        ]
+        total = len(model_ids)
+
+        # Pick top models — prefer ones with tool_call support and higher context
+        def _model_sort_key(mid):
+            m = models_dict.get(mid, {})
+            tc = 1 if m.get("tool_call") else 0
+            ctx = m.get("limit", {}).get("context", 0) if isinstance(m.get("limit"), dict) else 0
+            return (-tc, -ctx)
+
+        model_ids.sort(key=_model_sort_key)
+        top = model_ids[:max_models]
+
+        slug = hermes_id
+        pinfo = _mdev_pinfo(mdev_id)
+        display_name = pinfo.name if pinfo else mdev_id
+
+        results.append({
+            "slug": slug,
+            "name": display_name,
+            "is_current": slug == current_provider or mdev_id == current_provider,
+            "is_user_defined": False,
+            "models": top,
+            "total_models": total,
+            "source": "built-in",
+        })
+        seen_slugs.add(slug)
+
+    # --- 2. Check Hermes-only providers (nous, openai-codex, copilot) ---
+    from hermes_cli.providers import HERMES_OVERLAYS
+    for pid, overlay in HERMES_OVERLAYS.items():
+        if pid in seen_slugs:
+            continue
+        # Check if credentials exist
+        has_creds = False
+        if overlay.extra_env_vars:
+            has_creds = any(os.environ.get(ev) for ev in overlay.extra_env_vars)
+        if overlay.auth_type in ("oauth_device_code", "oauth_external", "external_process"):
+            # These use auth stores, not env vars — check for auth.json entries
+            try:
+                from hermes_cli.auth import _read_auth_store
+                store = _read_auth_store()
+                if store and pid in store:
+                    has_creds = True
+            except Exception:
+                pass
+        if not has_creds:
+            continue
+
+        # Get models from models.dev if available
+        mdev_id = PROVIDER_TO_MODELS_DEV.get(pid, pid)
+        model_ids = _list_models(mdev_id)
+        total = len(model_ids)
+        top = model_ids[:max_models]
+
+        results.append({
+            "slug": pid,
+            "name": get_label(pid),
+            "is_current": pid == current_provider,
+            "is_user_defined": False,
+            "models": top,
+            "total_models": total,
+            "source": "hermes",
+        })
+        seen_slugs.add(pid)
+
+    # --- 3. User-defined endpoints from config ---
+    if user_providers and isinstance(user_providers, dict):
+        for ep_name, ep_cfg in user_providers.items():
+            if not isinstance(ep_cfg, dict):
+                continue
+            display_name = ep_cfg.get("name", "") or ep_name
+            api_url = ep_cfg.get("api", "") or ep_cfg.get("url", "") or ""
+            default_model = ep_cfg.get("default_model", "")
+
+            models_list = []
+            if default_model:
+                models_list.append(default_model)
+
+            # Try to probe /v1/models if URL is set (but don't block on it)
+            # For now just show what we know from config
+            results.append({
+                "slug": ep_name,
+                "name": display_name,
+                "is_current": ep_name == current_provider,
+                "is_user_defined": True,
+                "models": models_list,
+                "total_models": len(models_list) if models_list else 0,
+                "source": "user-config",
+                "api_url": api_url,
+            })
+
+    # Sort: current provider first, then by model count descending
+    results.sort(key=lambda r: (not r["is_current"], -r["total_models"]))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Fuzzy suggestions
 # ---------------------------------------------------------------------------
 

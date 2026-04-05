@@ -3529,7 +3529,7 @@ class HermesCLI:
           /model <name> --provider <provider> — switch provider + model
           /model --provider <provider>        — switch to provider, auto-detect model
         """
-        from hermes_cli.model_switch import switch_model, parse_model_flags
+        from hermes_cli.model_switch import switch_model, parse_model_flags, list_authenticated_providers
         from hermes_cli.providers import get_label
 
         # Parse args from the original command
@@ -3539,36 +3539,56 @@ class HermesCLI:
         # Parse --provider and --global flags
         model_input, explicit_provider, persist_global = parse_model_flags(raw_args)
 
-        # No args at all: show current model info and usage
+        # No args at all: show available providers + models
         if not model_input and not explicit_provider:
             model_display = self.model or "unknown"
             provider_display = get_label(self.provider) if self.provider else "unknown"
-            _cprint(f"  Current model: {model_display}")
-            _cprint(f"  Provider:      {provider_display} ({self.provider})")
-            if self.base_url:
-                _cprint(f"  Endpoint:      {self.base_url}")
+            _cprint(f"  Current: {model_display} on {provider_display}")
+            _cprint("")
 
-            # Show model metadata if available
+            # Show authenticated providers with top models
             try:
-                from agent.models_dev import get_model_info
-                mi = get_model_info(self.provider, self.model)
-                if mi:
-                    _cprint(f"  Context:       {mi.context_window:,} tokens")
-                    if mi.max_output:
-                        _cprint(f"  Max output:    {mi.max_output:,} tokens")
-                    if mi.has_cost_data():
-                        _cprint(f"  Cost:          {mi.format_cost()}")
-                    _cprint(f"  Capabilities:  {mi.format_capabilities()}")
+                # Load user providers from config
+                user_provs = None
+                try:
+                    from hermes_cli.config import load_config
+                    cfg = load_config()
+                    user_provs = cfg.get("providers")
+                except Exception:
+                    pass
+
+                providers = list_authenticated_providers(
+                    current_provider=self.provider or "",
+                    user_providers=user_provs,
+                    max_models=6,
+                )
+                if providers:
+                    for p in providers:
+                        tag = " (current)" if p["is_current"] else ""
+                        _cprint(f"  {p['name']} [--provider {p['slug']}]{tag}:")
+                        if p["models"]:
+                            model_strs = ", ".join(p["models"])
+                            extra = f"  (+{p['total_models'] - len(p['models'])} more)" if p["total_models"] > len(p["models"]) else ""
+                            _cprint(f"    {model_strs}{extra}")
+                        elif p.get("api_url"):
+                            _cprint(f"    {p['api_url']} (use /model <name> --provider {p['slug']})")
+                        else:
+                            _cprint(f"    (no models listed)")
+                        _cprint("")
+                else:
+                    _cprint("  No authenticated providers found.")
+                    _cprint("")
             except Exception:
                 pass
 
+            # Aliases
+            from hermes_cli.model_switch import MODEL_ALIASES
+            alias_list = ", ".join(sorted(MODEL_ALIASES.keys()))
+            _cprint(f"  Aliases: {alias_list}")
             _cprint("")
-            _cprint("  Usage:")
-            _cprint("    /model sonnet                            (alias)")
-            _cprint("    /model anthropic/claude-sonnet-4.6       (full name)")
-            _cprint("    /model sonnet --provider anthropic       (switch provider)")
-            _cprint("    /model --provider my-ollama              (auto-detect model)")
-            _cprint("    /model sonnet --global                   (persist to config)")
+            _cprint("  /model <name>                        switch model")
+            _cprint("  /model <name> --provider <slug>      switch provider")
+            _cprint("  /model <name> --global               persist to config")
             return
 
         # Perform the switch

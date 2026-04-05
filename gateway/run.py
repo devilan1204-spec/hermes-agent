@@ -3289,7 +3289,10 @@ class GatewayRunner:
           /model --provider <provider>        — switch to provider, auto-detect model
         """
         import yaml
-        from hermes_cli.model_switch import switch_model as _switch_model, parse_model_flags
+        from hermes_cli.model_switch import (
+            switch_model as _switch_model, parse_model_flags,
+            list_authenticated_providers,
+        )
         from hermes_cli.providers import get_label
 
         raw_args = event.get_command_args().strip()
@@ -3302,6 +3305,7 @@ class GatewayRunner:
         current_provider = "openrouter"
         current_base_url = ""
         current_api_key = ""
+        user_provs = None
         config_path = _hermes_home / "config.yaml"
         try:
             if config_path.exists():
@@ -3312,6 +3316,7 @@ class GatewayRunner:
                     current_model = model_cfg.get("name", "")
                     current_provider = model_cfg.get("provider", current_provider)
                     current_base_url = model_cfg.get("base_url", "")
+                user_provs = cfg.get("providers")
         except Exception:
             pass
 
@@ -3325,36 +3330,33 @@ class GatewayRunner:
             current_base_url = override.get("base_url", current_base_url)
             current_api_key = override.get("api_key", current_api_key)
 
-        # No args: show current model info
+        # No args: show authenticated providers with models
         if not model_input and not explicit_provider:
             provider_label = get_label(current_provider)
-            lines = [
-                f"Current model: `{current_model or 'unknown'}`",
-                f"Provider: {provider_label} (`{current_provider}`)",
-            ]
-            if current_base_url:
-                lines.append(f"Endpoint: `{current_base_url}`")
+            lines = [f"Current: `{current_model or 'unknown'}` on {provider_label}", ""]
 
-            # Show model metadata from models.dev
             try:
-                from agent.models_dev import get_model_info
-                mi = get_model_info(current_provider, current_model)
-                if mi:
-                    lines.append(f"Context: {mi.context_window:,} tokens")
-                    if mi.max_output:
-                        lines.append(f"Max output: {mi.max_output:,} tokens")
-                    if mi.has_cost_data():
-                        lines.append(f"Cost: {mi.format_cost()}")
-                    lines.append(f"Capabilities: {mi.format_capabilities()}")
+                providers = list_authenticated_providers(
+                    current_provider=current_provider,
+                    user_providers=user_provs,
+                    max_models=5,
+                )
+                for p in providers:
+                    tag = " (current)" if p["is_current"] else ""
+                    lines.append(f"**{p['name']}** `--provider {p['slug']}`{tag}:")
+                    if p["models"]:
+                        model_strs = ", ".join(f"`{m}`" for m in p["models"])
+                        extra = f" (+{p['total_models'] - len(p['models'])} more)" if p["total_models"] > len(p["models"]) else ""
+                        lines.append(f"  {model_strs}{extra}")
+                    elif p.get("api_url"):
+                        lines.append(f"  `{p['api_url']}`")
+                    lines.append("")
             except Exception:
                 pass
 
-            lines.append("")
-            lines.append("**Usage:**")
-            lines.append("`/model sonnet` — alias")
-            lines.append("`/model sonnet --provider anthropic` — switch provider")
-            lines.append("`/model --provider my-ollama` — auto-detect model")
-            lines.append("`/model sonnet --global` — persist to config")
+            lines.append("`/model <name>` — switch model")
+            lines.append("`/model <name> --provider <slug>` — switch provider")
+            lines.append("`/model <name> --global` — persist")
             return "\n".join(lines)
 
         # Perform the switch
