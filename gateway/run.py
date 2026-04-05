@@ -1748,9 +1748,17 @@ class GatewayRunner:
         _quick_key = self._session_key_for_source(source)
         _update_prompts = getattr(self, "_update_prompt_pending", {})
         if _update_prompts.get(_quick_key):
-            response_path = _hermes_home / ".update_response"
-            response_text = (event.text or "").strip()
+            raw = (event.text or "").strip()
+            # Accept /approve and /deny as shorthand for yes/no
+            cmd = event.get_command()
+            if cmd in ("approve", "yes"):
+                response_text = "y"
+            elif cmd in ("deny", "no"):
+                response_text = "n"
+            else:
+                response_text = raw
             if response_text:
+                response_path = _hermes_home / ".update_response"
                 try:
                     tmp = response_path.with_suffix(".tmp")
                     tmp.write_text(response_text)
@@ -1759,7 +1767,8 @@ class GatewayRunner:
                     logger.warning("Failed to write update response: %s", e)
                     return f"✗ Failed to send response to update process: {e}"
                 _update_prompts.pop(_quick_key, None)
-                return f"✓ Sent `{response_text}` to the update process."
+                label = response_text if len(response_text) <= 20 else response_text[:20] + "…"
+                return f"✓ Sent `{label}` to the update process."
 
         # PRIORITY handling when an agent is already running for this session.
         # Default behavior is to interrupt immediately so user text/stop messages
@@ -5199,13 +5208,28 @@ class GatewayRunner:
                         # Flush any buffered output first so the user sees
                         # context before the prompt
                         await _flush_buffer()
-                        default_hint = f" (default: {default})" if default else ""
-                        await adapter.send(
-                            chat_id,
-                            f"⚕ **Update needs your input:**\n\n"
-                            f"{prompt_text}{default_hint}\n\n"
-                            f"_Reply with your answer, or wait 5 min for default._"
-                        )
+                        # Try platform-native buttons first (Discord, Telegram)
+                        sent_buttons = False
+                        if getattr(type(adapter), "send_update_prompt", None) is not None:
+                            try:
+                                await adapter.send_update_prompt(
+                                    chat_id=chat_id,
+                                    prompt=prompt_text,
+                                    default=default,
+                                    session_key=session_key,
+                                )
+                                sent_buttons = True
+                            except Exception as btn_err:
+                                logger.debug("Button-based update prompt failed: %s", btn_err)
+                        if not sent_buttons:
+                            default_hint = f" (default: {default})" if default else ""
+                            await adapter.send(
+                                chat_id,
+                                f"⚕ **Update needs your input:**\n\n"
+                                f"{prompt_text}{default_hint}\n\n"
+                                f"Reply `/approve` (yes) or `/deny` (no), "
+                                f"or type your answer directly."
+                            )
                         self._update_prompt_pending[session_key] = True
                         logger.info("Forwarded update prompt to %s: %s", session_key, prompt_text[:80])
                 except (json.JSONDecodeError, OSError) as e:
