@@ -25,7 +25,6 @@ import tempfile
 import threading
 import time
 import uuid
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, Any, List
@@ -7187,18 +7186,23 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception:
         pass
 
-    # Configure rotating file log so gateway output is persisted for debugging
-    log_dir = _hermes_home / 'logs'
-    log_dir.mkdir(parents=True, exist_ok=True)
-    file_handler = RotatingFileHandler(
-        log_dir / 'gateway.log',
-        maxBytes=5 * 1024 * 1024,
-        backupCount=3,
-    )
+    # Centralized logging — agent.log (INFO+) and errors.log (WARNING+).
+    # Idempotent, so repeated calls from AIAgent.__init__ won't duplicate.
+    from hermes_logging import setup_logging
+    log_dir = setup_logging(hermes_home=_hermes_home, mode="gateway")
+
+    # Gateway-specific rotating log — captures all gateway-level messages
+    # (session management, platform adapters, slash commands, etc.).
     from agent.redact import RedactingFormatter
-    file_handler.setFormatter(RedactingFormatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-    logging.getLogger().addHandler(file_handler)
-    logging.getLogger().setLevel(logging.INFO)
+    from hermes_logging import _add_rotating_handler
+    _add_rotating_handler(
+        logging.getLogger(),
+        log_dir / 'gateway.log',
+        level=logging.INFO,
+        max_bytes=5 * 1024 * 1024,
+        backup_count=3,
+        formatter=RedactingFormatter('%(asctime)s %(levelname)s %(name)s: %(message)s'),
+    )
 
     # Optional stderr handler — level driven by -v/-q flags on the CLI.
     # verbosity=None (-q/--quiet): no stderr output
@@ -7214,16 +7218,6 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
         # Lower root logger level if needed so DEBUG records can reach the handler
         if _stderr_level < logging.getLogger().level:
             logging.getLogger().setLevel(_stderr_level)
-
-    # Separate errors-only log for easy debugging
-    error_handler = RotatingFileHandler(
-        log_dir / 'errors.log',
-        maxBytes=2 * 1024 * 1024,
-        backupCount=2,
-    )
-    error_handler.setLevel(logging.WARNING)
-    error_handler.setFormatter(RedactingFormatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-    logging.getLogger().addHandler(error_handler)
 
     runner = GatewayRunner(config)
     

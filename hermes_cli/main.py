@@ -142,6 +142,13 @@ from hermes_cli.config import get_hermes_home
 from hermes_cli.env_loader import load_hermes_dotenv
 load_hermes_dotenv(project_env=PROJECT_ROOT / '.env')
 
+# Initialize centralized file logging early — all `hermes` subcommands
+# (chat, setup, gateway, config, etc.) write to agent.log + errors.log.
+try:
+    from hermes_logging import setup_logging as _setup_logging
+    _setup_logging(mode="cli")
+except Exception:
+    pass  # best-effort — don't crash the CLI if logging setup fails
 
 import logging
 import time as _time

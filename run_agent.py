@@ -716,77 +716,23 @@ class AIAgent:
         self._current_tool: str | None = None
         self._api_call_count: int = 0
 
-        # Persistent error log -- always writes WARNING+ to ~/.hermes/logs/errors.log
-        # so tool failures, API errors, etc. are inspectable after the fact.
-        # In gateway mode, each incoming message creates a new AIAgent instance,
-        # while the root logger is process-global. Re-adding the same errors.log
-        # handler would cause each warning/error line to be written multiple times.
-        from logging.handlers import RotatingFileHandler
-        root_logger = logging.getLogger()
-        error_log_dir = _hermes_home / "logs"
-        error_log_path = error_log_dir / "errors.log"
-        resolved_error_log_path = error_log_path.resolve()
-        has_errors_log_handler = any(
-            isinstance(handler, RotatingFileHandler)
-            and Path(getattr(handler, "baseFilename", "")).resolve() == resolved_error_log_path
-            for handler in root_logger.handlers
-        )
-        from agent.redact import RedactingFormatter
-        if not has_errors_log_handler:
-            error_log_dir.mkdir(parents=True, exist_ok=True)
-            error_file_handler = RotatingFileHandler(
-                error_log_path, maxBytes=2 * 1024 * 1024, backupCount=2,
-            )
-            error_file_handler.setLevel(logging.WARNING)
-            error_file_handler.setFormatter(RedactingFormatter(
-                '%(asctime)s %(levelname)s %(name)s: %(message)s',
-            ))
-            root_logger.addHandler(error_file_handler)
+        # Centralized logging — agent.log (INFO+) and errors.log (WARNING+)
+        # both live under ~/.hermes/logs/.  Idempotent, so gateway mode
+        # (which creates a new AIAgent per message) won't duplicate handlers.
+        from hermes_logging import setup_logging, setup_verbose_logging
+        setup_logging(hermes_home=_hermes_home)
 
         if self.verbose_logging:
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                datefmt='%H:%M:%S'
-            )
-            for handler in logging.getLogger().handlers:
-                handler.setFormatter(RedactingFormatter(
-                    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    datefmt='%H:%M:%S',
-                ))
-            # Keep third-party libraries at WARNING level to reduce noise
-            # We have our own retry and error logging that's more informative
-            logging.getLogger('openai').setLevel(logging.WARNING)
-            logging.getLogger('openai._base_client').setLevel(logging.WARNING)
-            logging.getLogger('httpx').setLevel(logging.WARNING)
-            logging.getLogger('httpcore').setLevel(logging.WARNING)
-            logging.getLogger('asyncio').setLevel(logging.WARNING)
-            # Suppress Modal/gRPC related debug spam
-            logging.getLogger('hpack').setLevel(logging.WARNING)
-            logging.getLogger('hpack.hpack').setLevel(logging.WARNING)
-            logging.getLogger('grpc').setLevel(logging.WARNING)
-            logging.getLogger('modal').setLevel(logging.WARNING)
-            logging.getLogger('rex-deploy').setLevel(logging.INFO)  # Keep INFO for sandbox status
+            setup_verbose_logging()
             logger.info("Verbose logging enabled (third-party library logs suppressed)")
         else:
-            # Set logging to INFO level for important messages only
-            logging.basicConfig(
-                level=logging.INFO,
-                format='%(asctime)s - %(levelname)s - %(message)s',
-                datefmt='%H:%M:%S'
-            )
-            # Suppress noisy library logging
-            logging.getLogger('openai').setLevel(logging.ERROR)
-            logging.getLogger('openai._base_client').setLevel(logging.ERROR)
-            logging.getLogger('httpx').setLevel(logging.ERROR)
-            logging.getLogger('httpcore').setLevel(logging.ERROR)
             if self.quiet_mode:
                 # In quiet mode (CLI default), suppress all tool/infra log
-                # noise. The TUI has its own rich display for status; logger
-                # INFO/WARNING messages just clutter it.
+                # noise on the *console*. The TUI has its own rich display
+                # for status; logger INFO/WARNING messages just clutter it.
+                # File handlers (agent.log, errors.log) still capture everything.
                 for quiet_logger in [
                     'tools',               # all tools.* (terminal, browser, web, file, etc.)
-                    
                     'run_agent',            # agent runner internals
                     'trajectory_compressor',
                     'cron',                 # scheduler (only relevant in daemon mode)
