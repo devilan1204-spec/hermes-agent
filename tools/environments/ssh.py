@@ -1,6 +1,7 @@
 """SSH remote execution environment with ControlMaster connection persistence."""
 
 import logging
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -228,7 +229,7 @@ class SSHEnvironment(PersistentShellMixin, BaseEnvironment):
                          stdin_data: str | None = None) -> dict:
         work_dir = cwd or self.cwd
         exec_command, sudo_stdin = self._prepare_command(command)
-        wrapped = f'cd {work_dir} && {exec_command}'
+        wrapped = f'cd {shlex.quote(work_dir)} && {exec_command}'
         effective_timeout = timeout or self.timeout
 
         if sudo_stdin is not None and stdin_data is not None:
