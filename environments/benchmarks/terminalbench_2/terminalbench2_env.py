@@ -56,6 +56,7 @@ from atroposlib.envs.base import EvalHandlingEnum
 from atroposlib.envs.server_handling.server_manager import APIServerConfig
 from pydantic import Field
 
+from agent.prompt_builder import DEFAULT_AGENT_IDENTITY
 from environments.agent_loop import AgentResult, HermesAgentLoop
 from environments.hermes_base_env import HermesAgentBaseEnv, HermesAgentEnvConfig
 from environments.tool_context import ToolContext
@@ -146,11 +147,14 @@ MODAL_INCOMPATIBLE_TASKS = {
 # Injected as a user message when the model responds with plain text instead of
 # calling a tool or including a <task_status> tag.
 _FORMAT_NUDGE_MESSAGE = (
-    "Your response must be one of the following:\n"
-    "1. A tool call (e.g. terminal, read_file, write_file) to continue working on the task.\n"
-    "2. <task_status>DONE</task_status> — if you have fully completed the task.\n"
-    "3. <task_status>UNFINISHED</task_status> — if you are unable to complete the task.\n\n"
-    "Plain text responses are not accepted. Please continue working or report your final status."
+    "You wrote a plain text response instead of using your tools. "
+    "Plain text responses do not affect the environment — nothing was executed or saved.\n\n"
+    "You MUST use your tools (terminal, read_file, write_file) to actually complete the task. "
+    "Do not describe what you would do — execute it now by making tool calls.\n\n"
+    "If you have already completed all required work using tools in previous turns, "
+    "respond with exactly: <task_status>DONE</task_status>\n"
+    "If you have exhausted all approaches and cannot make further progress, "
+    "respond with exactly: <task_status>UNFINISHED</task_status>"
 )
 
 # Maximum number of format nudges before giving up and moving on to scoring.
@@ -279,7 +283,7 @@ class TerminalBench2EvalEnv(HermesAgentBaseEnv):
             max_agent_turns=60,
             max_token_length=16000,
             agent_temperature=0.6,
-            system_prompt=None,
+            system_prompt=DEFAULT_AGENT_IDENTITY,
             # Modal backend for per-task cloud-isolated sandboxes
             terminal_backend="modal",
             terminal_timeout=300,  # 5 min per command (builds, pip install, etc.)
