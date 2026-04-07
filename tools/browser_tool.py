@@ -1368,31 +1368,40 @@ def browser_scroll(direction: str, task_id: Optional[str] = None) -> str:
     Returns:
         JSON string with scroll result
     """
-    if _is_camofox_mode():
-        from tools.browser_camofox import camofox_scroll
-        return camofox_scroll(direction, task_id)
-
-    effective_task_id = task_id or "default"
-    
     # Validate direction
     if direction not in ["up", "down"]:
         return json.dumps({
             "success": False,
             "error": f"Invalid direction '{direction}'. Use 'up' or 'down'."
         }, ensure_ascii=False)
-    
-    result = _run_browser_command(effective_task_id, "scroll", [direction])
-    
-    if result.get("success"):
-        return json.dumps({
-            "success": True,
-            "scrolled": direction
-        }, ensure_ascii=False)
-    else:
-        return json.dumps({
-            "success": False,
-            "error": result.get("error", f"Failed to scroll {direction}")
-        }, ensure_ascii=False)
+
+    # Repeat the scroll 5 times to get meaningful page movement.
+    # Most backends scroll ~100px per call, which is barely visible.
+    # 5x gives roughly half a viewport of travel, backend-agnostic.
+    _SCROLL_REPEATS = 5
+
+    if _is_camofox_mode():
+        from tools.browser_camofox import camofox_scroll
+        result = None
+        for _ in range(_SCROLL_REPEATS):
+            result = camofox_scroll(direction, task_id)
+        return result
+
+    effective_task_id = task_id or "default"
+
+    result = None
+    for _ in range(_SCROLL_REPEATS):
+        result = _run_browser_command(effective_task_id, "scroll", [direction])
+        if not result.get("success"):
+            return json.dumps({
+                "success": False,
+                "error": result.get("error", f"Failed to scroll {direction}")
+            }, ensure_ascii=False)
+
+    return json.dumps({
+        "success": True,
+        "scrolled": direction
+    }, ensure_ascii=False)
 
 
 def browser_back(task_id: Optional[str] = None) -> str:
