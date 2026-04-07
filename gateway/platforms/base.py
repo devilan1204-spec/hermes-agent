@@ -12,6 +12,7 @@ import random
 import re
 import uuid
 from abc import ABC, abstractmethod
+from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
@@ -34,6 +35,43 @@ GATEWAY_SECRET_CAPTURE_UNSUPPORTED_MESSAGE = (
     "Secure secret entry is not supported over messaging. "
     "Load this skill in the local CLI to be prompted, or add the key to ~/.hermes/.env manually."
 )
+
+
+def _safe_url_for_log(url: str, max_len: int = 80) -> str:
+    """Return a URL string safe for logs (no query/fragment/userinfo)."""
+    if max_len <= 0:
+        return ""
+
+    if url is None:
+        return ""
+
+    raw = str(url)
+    if not raw:
+        return ""
+
+    try:
+        parsed = urlsplit(raw)
+    except Exception:
+        return raw[:max_len]
+
+    if parsed.scheme and parsed.netloc:
+        # Strip potential embedded credentials (user:pass@host).
+        netloc = parsed.netloc.rsplit("@", 1)[-1]
+        base = f"{parsed.scheme}://{netloc}"
+        path = parsed.path or ""
+        if path and path != "/":
+            basename = path.rsplit("/", 1)[-1]
+            safe = f"{base}/.../{basename}" if basename else f"{base}/..."
+        else:
+            safe = base
+    else:
+        safe = raw
+
+    if len(safe) <= max_len:
+        return safe
+    if max_len <= 3:
+        return "." * max_len
+    return f"{safe[:max_len - 3]}..."
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +150,14 @@ async def cache_image_from_url(url: str, ext: str = ".jpg", retries: int = 2) ->
                     raise
                 if attempt < retries:
                     wait = 1.5 * (attempt + 1)
-                    _log.debug("Media cache retry %d/%d for %s (%.1fs): %s",
-                               attempt + 1, retries, url[:80], wait, exc)
+                    _log.debug(
+                        "Media cache retry %d/%d for %s (%.1fs): %s",
+                        attempt + 1,
+                        retries,
+                        _safe_url_for_log(url),
+                        wait,
+                        exc,
+                    )
                     await asyncio.sleep(wait)
                     continue
                 raise
@@ -214,8 +258,14 @@ async def cache_audio_from_url(url: str, ext: str = ".ogg", retries: int = 2) ->
                     raise
                 if attempt < retries:
                     wait = 1.5 * (attempt + 1)
-                    _log.debug("Audio cache retry %d/%d for %s (%.1fs): %s",
-                               attempt + 1, retries, url[:80], wait, exc)
+                    _log.debug(
+                        "Audio cache retry %d/%d for %s (%.1fs): %s",
+                        attempt + 1,
+                        retries,
+                        _safe_url_for_log(url),
+                        wait,
+                        exc,
+                    )
                     await asyncio.sleep(wait)
                     continue
                 raise
@@ -377,23 +427,26 @@ class SendResult:
     message_id: Optional[str] = None
     error: Optional[str] = None
     raw_response: Any = None
-    retryable: bool = False  # True for transient errors (network, timeout) — base will retry automatically
+    retryable: bool = False  # True for transient connection errors — base will retry automatically
 
 
-# Error substrings that indicate a transient network failure worth retrying
+# Error substrings that indicate a transient *connection* failure worth retrying.
+# "timeout" / "timed out" / "readtimeout" / "writetimeout" are intentionally
+# excluded: a read/write timeout on a non-idempotent call (e.g. send_message)
+# means the request may have reached the server — retrying risks duplicate
+# delivery.  "connecttimeout" is safe because the connection was never
+# established.  Platforms that know a timeout is safe to retry should set
+# SendResult.retryable = True explicitly.
 _RETRYABLE_ERROR_PATTERNS = (
     "connecterror",
     "connectionerror",
     "connectionreset",
     "connectionrefused",
-    "timeout",
-    "timed out",
+    "connecttimeout",
     "network",
     "broken pipe",
     "remotedisconnected",
     "eoferror",
-    "readtimeout",
-    "writetimeout",
 )
 
 
@@ -515,6 +568,16 @@ class BasePlatformAdapter(ABC):
         an optional response string.
         """
         self._message_handler = handler
+    
+    def set_session_store(self, session_store: Any) -> None:
+        """
+        Set the session store for checking active sessions.
+        
+        Used by adapters that need to check if a thread/conversation
+        has an active session before processing messages (e.g., Slack
+        thread replies without explicit mentions).
+        """
+        self._session_store = session_store
     
     @abstractmethod
     async def connect(self) -> bool:
@@ -927,6 +990,18 @@ class BasePlatformAdapter(ABC):
         lowered = error.lower()
         return any(pat in lowered for pat in _RETRYABLE_ERROR_PATTERNS)
 
+    @staticmethod
+    def _is_timeout_error(error: Optional[str]) -> bool:
+        """Return True if the error string indicates a read/write timeout.
+
+        Timeout errors are NOT retryable and should NOT trigger plain-text
+        fallback — the request may have already been delivered.
+        """
+        if not error:
+            return False
+        lowered = error.lower()
+        return "timed out" in lowered or "readtimeout" in lowered or "writetimeout" in lowered
+
     async def _send_with_retry(
         self,
         chat_id: str,
@@ -957,6 +1032,11 @@ class BasePlatformAdapter(ABC):
 
         error_str = result.error or ""
         is_network = result.retryable or self._is_retryable_error(error_str)
+
+        # Timeout errors are not safe to retry (message may have been
+        # delivered) and not formatting errors — return the failure as-is.
+        if not is_network and self._is_timeout_error(error_str):
+            return result
 
         if is_network:
             # Retry with exponential backoff for transient errors
@@ -1018,20 +1098,25 @@ class BasePlatformAdapter(ABC):
         session_key = build_session_key(
             event.source,
             group_sessions_per_user=self.config.extra.get("group_sessions_per_user", True),
+            thread_sessions_per_user=self.config.extra.get("thread_sessions_per_user", False),
         )
         
         # Check if there's already an active handler for this session
         if session_key in self._active_sessions:
-            # /approve and /deny must bypass the active-session guard.
-            # The agent thread is blocked on threading.Event.wait() inside
-            # tools/approval.py — queuing these commands creates a deadlock:
-            # the agent waits for approval, approval waits for agent to finish.
-            # Dispatch directly to the message handler without touching session
-            # lifecycle (no competing background task, no session guard removal).
+            # Certain commands must bypass the active-session guard and be
+            # dispatched directly to the gateway runner.  Without this, they
+            # are queued as pending messages and either:
+            #   - leak into the conversation as user text (/stop, /new), or
+            #   - deadlock (/approve, /deny — agent is blocked on Event.wait)
+            #
+            # Dispatch inline: call the message handler directly and send the
+            # response.  Do NOT use _process_message_background — it manages
+            # session lifecycle and its cleanup races with the running task
+            # (see PR #4926).
             cmd = event.get_command()
-            if cmd in ("approve", "deny"):
+            if cmd in ("approve", "deny", "status", "stop", "new", "reset"):
                 logger.debug(
-                    "[%s] Approval command '/%s' bypassing active-session guard for %s",
+                    "[%s] Command '/%s' bypassing active-session guard for %s",
                     self.name, cmd, session_key,
                 )
                 try:
@@ -1045,7 +1130,7 @@ class BasePlatformAdapter(ABC):
                             metadata=_thread_meta,
                         )
                 except Exception as e:
-                    logger.error("[%s] Approval dispatch failed: %s", self.name, e, exc_info=True)
+                    logger.error("[%s] Command '/%s' dispatch failed: %s", self.name, cmd, e, exc_info=True)
                 return
 
             # Special case: photo bursts/albums frequently arrive as multiple near-
@@ -1223,7 +1308,12 @@ class BasePlatformAdapter(ABC):
                     if human_delay > 0:
                         await asyncio.sleep(human_delay)
                     try:
-                        logger.info("[%s] Sending image: %s (alt=%s)", self.name, image_url[:80], alt_text[:30] if alt_text else "")
+                        logger.info(
+                            "[%s] Sending image: %s (alt=%s)",
+                            self.name,
+                            _safe_url_for_log(image_url),
+                            alt_text[:30] if alt_text else "",
+                        )
                         # Route animated GIFs through send_animation for proper playback
                         if self._is_animation_url(image_url):
                             img_result = await self.send_animation(

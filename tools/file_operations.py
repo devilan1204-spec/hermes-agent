@@ -580,8 +580,10 @@ class ShellFileOperations(FileOperations):
                 ),
             )
         
-        # Get base64 content
-        b64_cmd = f"base64 -w 0 {self._escape_shell_arg(path)} 2>/dev/null"
+        # Get base64 content — pipe through tr to strip newlines portably.
+        # GNU base64 supports -w 0 but macOS base64 does not; both wrap by
+        # default, so stripping with tr is portable across all backends.
+        b64_cmd = f"base64 {self._escape_shell_arg(path)} 2>/dev/null | tr -d '\\n'"
         b64_result = self._exec(b64_cmd, timeout=30)
         
         if b64_result.exit_code != 0:
@@ -898,7 +900,7 @@ class ShellFileOperations(FileOperations):
         hidden_exclude = "-not -path '*/.*'"
 
         cmd = f"find {self._escape_shell_arg(path)} {hidden_exclude} -type f -name {self._escape_shell_arg(search_pattern)} " \
-              f"-printf '%T@ %p\\\\n' 2>/dev/null | sort -rn | tail -n +{offset + 1} | head -n {limit}"
+              f"-printf '%T@ %p\\n' 2>/dev/null | sort -rn | tail -n +{offset + 1} | head -n {limit}"
 
         result = self._exec(cmd, timeout=60)
 

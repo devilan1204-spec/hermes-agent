@@ -214,6 +214,39 @@ def test_exhausted_entry_resets_after_ttl(tmp_path, monkeypatch):
     assert entry.last_status == "ok"
 
 
+def test_explicit_reset_timestamp_overrides_default_429_ttl(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    _write_auth_store(
+        tmp_path,
+        {
+            "version": 1,
+            "credential_pool": {
+                "openai-codex": [
+                    {
+                        "id": "cred-1",
+                        "label": "weekly-reset",
+                        "auth_type": "oauth",
+                        "priority": 0,
+                        "source": "manual:device_code",
+                        "access_token": "tok-1",
+                        "last_status": "exhausted",
+                        "last_status_at": time.time() - 7200,
+                        "last_error_code": 429,
+                        "last_error_reason": "device_code_exhausted",
+                        "last_error_reset_at": time.time() + 7 * 24 * 60 * 60,
+                    }
+                ]
+            },
+        },
+    )
+
+    from agent.credential_pool import load_pool
+
+    pool = load_pool("openai-codex")
+    assert pool.has_available() is False
+    assert pool.select() is None
+
+
 def test_mark_exhausted_and_rotate_persists_status(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
     _write_auth_store(
@@ -914,7 +947,7 @@ def test_list_custom_pool_providers(tmp_path, monkeypatch):
                         "auth_type": "api_key",
                         "priority": 0,
                         "source": "manual",
-                        "access_token": "sk-ant-xxx",
+                        "access_token": "***",
                     }
                 ],
                 "custom:together.ai": [
@@ -924,7 +957,7 @@ def test_list_custom_pool_providers(tmp_path, monkeypatch):
                         "auth_type": "api_key",
                         "priority": 0,
                         "source": "manual",
-                        "access_token": "sk-tog-xxx",
+                        "access_token": "***",
                     }
                 ],
                 "custom:fireworks": [
@@ -934,7 +967,7 @@ def test_list_custom_pool_providers(tmp_path, monkeypatch):
                         "auth_type": "api_key",
                         "priority": 0,
                         "source": "manual",
-                        "access_token": "sk-fw-xxx",
+                        "access_token": "***",
                     }
                 ],
                 "custom:empty": [],
@@ -947,3 +980,78 @@ def test_list_custom_pool_providers(tmp_path, monkeypatch):
     result = list_custom_pool_providers()
     assert result == ["custom:fireworks", "custom:together.ai"]
     # "custom:empty" not included because it's empty
+
+
+
+def test_acquire_lease_prefers_unleased_entry(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    _write_auth_store(
+        tmp_path,
+        {
+            "version": 1,
+            "credential_pool": {
+                "openrouter": [
+                    {
+                        "id": "cred-1",
+                        "label": "primary",
+                        "auth_type": "api_key",
+                        "priority": 0,
+                        "source": "manual",
+                        "access_token": "***",
+                    },
+                    {
+                        "id": "cred-2",
+                        "label": "secondary",
+                        "auth_type": "api_key",
+                        "priority": 1,
+                        "source": "manual",
+                        "access_token": "***",
+                    },
+                ]
+            },
+        },
+    )
+
+    from agent.credential_pool import load_pool
+
+    pool = load_pool("openrouter")
+    first = pool.acquire_lease()
+    second = pool.acquire_lease()
+
+    assert first == "cred-1"
+    assert second == "cred-2"
+    assert pool.active_lease_count("cred-1") == 1
+    assert pool.active_lease_count("cred-2") == 1
+
+
+
+def test_release_lease_decrements_counter(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    _write_auth_store(
+        tmp_path,
+        {
+            "version": 1,
+            "credential_pool": {
+                "openrouter": [
+                    {
+                        "id": "cred-1",
+                        "label": "primary",
+                        "auth_type": "api_key",
+                        "priority": 0,
+                        "source": "manual",
+                        "access_token": "***",
+                    }
+                ]
+            },
+        },
+    )
+
+    from agent.credential_pool import load_pool
+
+    pool = load_pool("openrouter")
+    leased = pool.acquire_lease()
+    assert leased == "cred-1"
+    assert pool.active_lease_count("cred-1") == 1
+
+    pool.release_lease("cred-1")
+    assert pool.active_lease_count("cred-1") == 0
