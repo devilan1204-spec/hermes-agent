@@ -518,7 +518,7 @@ atexit.register(_stop_browser_cleanup_thread)
 BROWSER_TOOL_SCHEMAS = [
     {
         "name": "browser_navigate",
-        "description": "Navigate to a URL in the browser. Initializes the session and loads the page. Must be called before other browser tools. For simple information retrieval, prefer web_search or web_extract (faster, cheaper). Use browser tools when you need to interact with a page (click, fill forms, dynamic content).",
+        "description": "Navigate to a URL in the browser. Initializes the session and loads the page. Must be called before other browser tools. For simple information retrieval, prefer web_search or web_extract (faster, cheaper). Use browser tools when you need to interact with a page (click, fill forms, dynamic content). Returns a compact page snapshot with interactive elements and ref IDs — no need to call browser_snapshot separately after navigating.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -532,7 +532,7 @@ BROWSER_TOOL_SCHEMAS = [
     },
     {
         "name": "browser_snapshot",
-        "description": "Get a text-based snapshot of the current page's accessibility tree. Returns interactive elements with ref IDs (like @e1, @e2) for browser_click and browser_type. full=false (default): compact view with interactive elements. full=true: complete page content. Snapshots over 8000 chars are truncated or LLM-summarized. Requires browser_navigate first.",
+        "description": "Get a text-based snapshot of the current page's accessibility tree. Returns interactive elements with ref IDs (like @e1, @e2) for browser_click and browser_type. full=false (default): compact view with interactive elements. full=true: complete page content. Snapshots over 8000 chars are truncated or LLM-summarized. Requires browser_navigate first. Note: browser_navigate already returns a compact snapshot — use this to refresh after interactions that change the page, or with full=true for complete content.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -1221,7 +1221,22 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
                     "Consider upgrading Browserbase plan for proxy support."
                 )
             response["stealth_features"] = active_features
-        
+
+        # Auto-take a compact snapshot so the model can act immediately
+        # without a separate browser_snapshot call.
+        try:
+            snap_result = _run_browser_command(effective_task_id, "snapshot", ["-c"])
+            if snap_result.get("success"):
+                snap_data = snap_result.get("data", {})
+                snapshot_text = snap_data.get("snapshot", "")
+                refs = snap_data.get("refs", {})
+                if len(snapshot_text) > SNAPSHOT_SUMMARIZE_THRESHOLD:
+                    snapshot_text = _truncate_snapshot(snapshot_text)
+                response["snapshot"] = snapshot_text
+                response["element_count"] = len(refs) if refs else 0
+        except Exception as e:
+            logger.debug("Auto-snapshot after navigate failed: %s", e)
+
         return json.dumps(response, ensure_ascii=False)
     else:
         return json.dumps({
