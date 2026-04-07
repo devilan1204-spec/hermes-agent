@@ -615,15 +615,7 @@ BROWSER_TOOL_SCHEMAS = [
             "required": ["key"]
         }
     },
-    {
-        "name": "browser_close",
-        "description": "Close the browser session and release resources. Call this when done with browser tasks to free up Browserbase session quota.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
+
     {
         "name": "browser_get_images",
         "description": "Get a list of all images on the current page with their URLs and alt text. Useful for finding images to analyze with the vision tool. Requires browser_navigate to be called first.",
@@ -1463,33 +1455,7 @@ def browser_press(key: str, task_id: Optional[str] = None) -> str:
         }, ensure_ascii=False)
 
 
-def browser_close(task_id: Optional[str] = None) -> str:
-    """
-    Close the browser session.
 
-    Args:
-        task_id: Task identifier for session isolation
-
-    Returns:
-        JSON string with close result
-    """
-    if _is_camofox_mode():
-        from tools.browser_camofox import camofox_close
-        return camofox_close(task_id)
-
-    effective_task_id = task_id or "default"
-    with _cleanup_lock:
-        had_session = effective_task_id in _active_sessions
-
-    cleanup_browser(effective_task_id)
-
-    response = {
-        "success": True,
-        "closed": True,
-    }
-    if not had_session:
-        response["warning"] = "Session may not have been active"
-    return json.dumps(response, ensure_ascii=False)
 
 
 def browser_console(clear: bool = False, expression: Optional[str] = None, task_id: Optional[str] = None) -> str:
@@ -1942,13 +1908,21 @@ def cleanup_browser(task_id: Optional[str] = None) -> None:
     Clean up browser session for a task.
     
     Called automatically when a task completes or when inactivity timeout is reached.
-    Closes both the agent-browser session and the Browserbase session.
+    Closes both the agent-browser/Browserbase session and Camofox sessions.
     
     Args:
         task_id: Task identifier to clean up
     """
     if task_id is None:
         task_id = "default"
+    
+    # Also clean up Camofox session if running in Camofox mode
+    if _is_camofox_mode():
+        try:
+            from tools.browser_camofox import camofox_close
+            camofox_close(task_id)
+        except Exception as e:
+            logger.debug("Camofox cleanup for task %s: %s", task_id, e)
     
     logger.debug("cleanup_browser called for task_id: %s", task_id)
     logger.debug("Active sessions: %s", list(_active_sessions.keys()))
@@ -2168,14 +2142,7 @@ registry.register(
     check_fn=check_browser_requirements,
     emoji="⌨️",
 )
-registry.register(
-    name="browser_close",
-    toolset="browser",
-    schema=_BROWSER_SCHEMA_MAP["browser_close"],
-    handler=lambda args, **kw: browser_close(task_id=kw.get("task_id")),
-    check_fn=check_browser_requirements,
-    emoji="🚪",
-)
+
 registry.register(
     name="browser_get_images",
     toolset="browser",
