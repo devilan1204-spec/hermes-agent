@@ -111,11 +111,8 @@ class BrowserUseProvider(CloudBrowserProvider):
     def _headers(self, config: Dict[str, Any]) -> Dict[str, str]:
         headers = {
             "Content-Type": "application/json",
+            "X-Browser-Use-API-Key": config["api_key"],
         }
-        if config.get("managed_mode"):
-            headers["X-BB-API-Key"] = config["api_key"]
-        else:
-            headers["X-Browser-Use-API-Key"] = config["api_key"]
         return headers
 
     def create_session(self, task_id: str) -> Dict[str, object]:

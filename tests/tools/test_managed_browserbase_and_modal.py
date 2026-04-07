@@ -167,7 +167,7 @@ def test_browser_use_managed_gateway_adds_idempotency_key_and_persists_external_
             session = provider.create_session("task-browser-use-managed")
 
     sent_headers = post.call_args.kwargs["headers"]
-    assert sent_headers["X-BB-API-Key"] == "nous-token"
+    assert sent_headers["X-Browser-Use-API-Key"] == "nous-token"
     assert sent_headers["X-Idempotency-Key"].startswith("browser-use-session-create:")
     assert session["external_call_id"] == "call-browser-use-1"
 
