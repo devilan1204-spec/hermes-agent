@@ -16,12 +16,12 @@ from tools.approval import (
 @pytest.fixture(autouse=True)
 def _clear_approval_state():
     approval_module._permanent_approved.clear()
-    approval_module.clear_session("default")
-    approval_module.clear_session("test-session")
+    approval_module._session_approved.clear()
+    approval_module._pending.clear()
     yield
     approval_module._permanent_approved.clear()
-    approval_module.clear_session("default")
-    approval_module.clear_session("test-session")
+    approval_module._session_approved.clear()
+    approval_module._pending.clear()
 
 
 class TestYoloMode:

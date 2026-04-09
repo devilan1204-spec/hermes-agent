@@ -257,28 +257,10 @@ def has_blocking_approval(session_key: str) -> bool:
         return bool(_gateway_queues.get(session_key))
 
 
-def pending_approval_count(session_key: str) -> int:
-    """Return the number of pending blocking approvals for a session."""
-    with _lock:
-        return len(_gateway_queues.get(session_key, []))
-
-
 def submit_pending(session_key: str, approval: dict):
     """Store a pending approval request for a session."""
     with _lock:
         _pending[session_key] = approval
-
-
-def pop_pending(session_key: str) -> Optional[dict]:
-    """Retrieve and remove a pending approval for a session."""
-    with _lock:
-        return _pending.pop(session_key, None)
-
-
-def has_pending(session_key: str) -> bool:
-    """Check if a session has a pending approval request."""
-    with _lock:
-        return session_key in _pending
 
 
 def approve_session(session_key: str, pattern_key: str):
@@ -312,17 +294,6 @@ def load_permanent(patterns: set):
     with _lock:
         _permanent_approved.update(patterns)
 
-
-def clear_session(session_key: str):
-    """Clear all approvals and pending requests for a session."""
-    with _lock:
-        _session_approved.pop(session_key, None)
-        _pending.pop(session_key, None)
-        _gateway_notify_cbs.pop(session_key, None)
-        # Signal ALL blocked threads so they don't hang forever
-        entries = _gateway_queues.pop(session_key, [])
-        for entry in entries:
-            entry.event.set()
 
 
 # =========================================================================
