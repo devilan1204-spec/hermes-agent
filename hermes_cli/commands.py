@@ -87,8 +87,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("model", "Switch model for this session", "Configuration", args_hint="[model] [--global]"),
     CommandDef("provider", "Show available providers and current provider",
                "Configuration"),
-    CommandDef("prompt", "View/set custom system prompt", "Configuration",
-               cli_only=True, args_hint="[text]", subcommands=("clear",)),
+
     CommandDef("personality", "Set a predefined personality", "Configuration",
                args_hint="[name]"),
     CommandDef("statusbar", "Toggle the context/model status bar", "Configuration",
@@ -100,7 +99,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
                "Configuration"),
     CommandDef("reasoning", "Manage reasoning effort and display", "Configuration",
                args_hint="[level|show|hide]",
-               subcommands=("none", "low", "minimal", "medium", "high", "xhigh", "show", "hide", "on", "off")),
+               subcommands=("none", "minimal", "low", "medium", "high", "xhigh", "show", "hide", "on", "off")),
     CommandDef("skin", "Show or change the display skin/theme", "Configuration",
                cli_only=True, args_hint="[name]"),
     CommandDef("voice", "Toggle voice mode", "Configuration",

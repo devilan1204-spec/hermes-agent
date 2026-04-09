@@ -1592,7 +1592,12 @@ class HermesCLI:
         return f"[{('█' * filled) + ('░' * max(0, width - filled))}]"
 
     def _get_status_bar_snapshot(self) -> Dict[str, Any]:
-        model_name = self.model or "unknown"
+        # Prefer the agent's model name — it updates on fallback.
+        # self.model reflects the originally configured model and never
+        # changes mid-session, so the TUI would show a stale name after
+        # _try_activate_fallback() switches provider/model.
+        agent = getattr(self, "agent", None)
+        model_name = (getattr(agent, "model", None) or self.model or "unknown")
         model_short = model_name.split("/")[-1] if "/" in model_name else model_name
         if model_short.endswith(".gguf"):
             model_short = model_short[:-5]
@@ -1618,7 +1623,6 @@ class HermesCLI:
             "compressions": 0,
         }
 
-        agent = getattr(self, "agent", None)
         if not agent:
             return snapshot
 
@@ -3991,59 +3995,7 @@ class HermesCLI:
 
         print("  To change model or provider, use: hermes model")
 
-    def _handle_prompt_command(self, cmd: str):
-        """Handle the /prompt command to view or set system prompt."""
-        parts = cmd.split(maxsplit=1)
-        
-        if len(parts) > 1:
-            # Set new prompt
-            new_prompt = parts[1].strip()
-            
-            if new_prompt.lower() == "clear":
-                self.system_prompt = ""
-                self.agent = None  # Force re-init
-                if save_config_value("agent.system_prompt", ""):
-                    print("(^_^)b System prompt cleared (saved to config)")
-                else:
-                    print("(^_^) System prompt cleared (session only)")
-            else:
-                self.system_prompt = new_prompt
-                self.agent = None  # Force re-init
-                if save_config_value("agent.system_prompt", new_prompt):
-                    print("(^_^)b System prompt set (saved to config)")
-                else:
-                    print("(^_^) System prompt set (session only)")
-                print(f"  \"{new_prompt[:60]}{'...' if len(new_prompt) > 60 else ''}\"")
-        else:
-            # Show current prompt
-            print()
-            print("+" + "-" * 50 + "+")
-            print("|" + " " * 15 + "(^_^) System Prompt" + " " * 15 + "|")
-            print("+" + "-" * 50 + "+")
-            print()
-            if self.system_prompt:
-                # Word wrap the prompt for display
-                words = self.system_prompt.split()
-                lines = []
-                current_line = ""
-                for word in words:
-                    if len(current_line) + len(word) + 1 <= 50:
-                        current_line += (" " if current_line else "") + word
-                    else:
-                        lines.append(current_line)
-                        current_line = word
-                if current_line:
-                    lines.append(current_line)
-                for line in lines:
-                    print(f"  {line}")
-            else:
-                print("  (no custom prompt set - using default)")
-            print()
-            print("  Usage:")
-            print("    /prompt <text>  - Set a custom system prompt")
-            print("    /prompt clear   - Remove custom prompt")
-            print("    /personality    - Use a predefined personality")
-            print()
+
     
 
     @staticmethod
@@ -4543,9 +4495,7 @@ class HermesCLI:
             self._handle_model_switch(cmd_original)
         elif canonical == "provider":
             self._show_model_and_providers()
-        elif canonical == "prompt":
-            # Use original case so prompt text isn't lowercased
-            self._handle_prompt_command(cmd_original)
+
         elif canonical == "personality":
             # Use original case (handler lowercases the personality name itself)
             self._handle_personality_command(cmd_original)
@@ -5025,6 +4975,9 @@ class HermesCLI:
     def _try_launch_chrome_debug(port: int, system: str) -> bool:
         """Try to launch Chrome/Chromium with remote debugging enabled.
 
+        Uses a dedicated user-data-dir so the debug instance doesn't conflict
+        with an already-running Chrome using the default profile.
+
         Returns True if a launch command was executed (doesn't guarantee success).
         """
         import subprocess as _sp
@@ -5034,10 +4987,20 @@ class HermesCLI:
         if not candidates:
             return False
 
+        # Dedicated profile dir so debug Chrome won't collide with normal Chrome
+        data_dir = str(_hermes_home / "chrome-debug")
+        os.makedirs(data_dir, exist_ok=True)
+
         chrome = candidates[0]
         try:
             _sp.Popen(
-                [chrome, f"--remote-debugging-port={port}"],
+                [
+                    chrome,
+                    f"--remote-debugging-port={port}",
+                    f"--user-data-dir={data_dir}",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ],
                 stdout=_sp.DEVNULL,
                 stderr=_sp.DEVNULL,
                 start_new_session=True,  # detach from terminal
@@ -5112,18 +5075,33 @@ class HermesCLI:
                         print(f"   ✓ Chrome launched and listening on port {_port}")
                     else:
                         print(f"   ⚠ Chrome launched but port {_port} isn't responding yet")
-                        print("     You may need to close existing Chrome windows first and retry")
+                        print("     Try again in a few seconds — the debug instance may still be starting")
                 else:
                     print("   ⚠ Could not auto-launch Chrome")
                     # Show manual instructions as fallback
+                    _data_dir = str(_hermes_home / "chrome-debug")
                     sys_name = _plat.system()
                     if sys_name == "Darwin":
-                        chrome_cmd = 'open -a "Google Chrome" --args --remote-debugging-port=9222'
+                        chrome_cmd = (
+                            'open -a "Google Chrome" --args'
+                            f" --remote-debugging-port=9222"
+                            f' --user-data-dir="{_data_dir}"'
+                            " --no-first-run --no-default-browser-check"
+                        )
                     elif sys_name == "Windows":
-                        chrome_cmd = 'chrome.exe --remote-debugging-port=9222'
+                        chrome_cmd = (
+                            f'chrome.exe --remote-debugging-port=9222'
+                            f' --user-data-dir="{_data_dir}"'
+                            f" --no-first-run --no-default-browser-check"
+                        )
                     else:
-                        chrome_cmd = "google-chrome --remote-debugging-port=9222"
-                    print(f"     Launch Chrome manually: {chrome_cmd}")
+                        chrome_cmd = (
+                            f"google-chrome --remote-debugging-port=9222"
+                            f' --user-data-dir="{_data_dir}"'
+                            f" --no-first-run --no-default-browser-check"
+                        )
+                    print(f"     Launch Chrome manually:")
+                    print(f"     {chrome_cmd}")
             else:
                 print(f"   ⚠ Port {_port} is not reachable at {cdp_url}")
 
@@ -5296,7 +5274,7 @@ class HermesCLI:
 
         Usage:
             /reasoning              Show current effort level and display state
-            /reasoning <level>      Set reasoning effort (none, low, medium, high, xhigh)
+            /reasoning <level>      Set reasoning effort (none, minimal, low, medium, high, xhigh)
             /reasoning show|on      Show model thinking/reasoning in output
             /reasoning hide|off     Hide model thinking/reasoning from output
         """
@@ -5314,7 +5292,7 @@ class HermesCLI:
             display_state = "on ✓" if self.show_reasoning else "off"
             _cprint(f"  {_GOLD}Reasoning effort:  {level}{_RST}")
             _cprint(f"  {_GOLD}Reasoning display: {display_state}{_RST}")
-            _cprint(f"  {_DIM}Usage: /reasoning <none|low|medium|high|xhigh|show|hide>{_RST}")
+            _cprint(f"  {_DIM}Usage: /reasoning <none|minimal|low|medium|high|xhigh|show|hide>{_RST}")
             return
 
         arg = parts[1].strip().lower()
@@ -5340,7 +5318,7 @@ class HermesCLI:
         parsed = _parse_reasoning_config(arg)
         if parsed is None:
             _cprint(f"  {_DIM}(._.) Unknown argument: {arg}{_RST}")
-            _cprint(f"  {_DIM}Valid levels: none, low, minimal, medium, high, xhigh{_RST}")
+            _cprint(f"  {_DIM}Valid levels: none, minimal, low, medium, high, xhigh{_RST}")
             _cprint(f"  {_DIM}Display:      show, hide{_RST}")
             return
 
