@@ -8696,6 +8696,7 @@ def main(
                     route_label=turn_route["label"],
                 ):
                     cli.agent.quiet_mode = True
+                    cli.agent.suppress_status_output = True
                     result = cli.agent.run_conversation(
                         user_message=query,
                         conversation_history=cli.conversation_history,
