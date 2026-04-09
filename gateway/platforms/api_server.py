@@ -1635,6 +1635,15 @@ class APIServerAdapter(BasePlatformAdapter):
             if hasattr(sweep_task, "add_done_callback"):
                 sweep_task.add_done_callback(self._background_tasks.discard)
 
+            # Refuse to start network-accessible without authentication
+            if self._host not in ("127.0.0.1", "::1", "localhost") and not self._api_key:
+                logger.error(
+                    "[%s] Refusing to start: binding to %s requires API_SERVER_KEY. "
+                    "Set API_SERVER_KEY or use the default 127.0.0.1.",
+                    self.name, self._host,
+                )
+                return False
+
             # Port conflict detection — fail fast if port is already in use
             import socket as _socket
             try:
