@@ -363,7 +363,8 @@ class APIServerAdapter(BasePlatformAdapter):
         Validate Bearer token from Authorization header.
 
         Returns None if auth is OK, or a 401 web.Response on failure.
-        If no API key is configured, all requests are allowed.
+        If no API key is configured, all requests are allowed (only when API
+        server is local)
         """
         if not self._api_key:
             return None  # No key configured — allow all (local-only use)
