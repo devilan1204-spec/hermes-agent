@@ -355,6 +355,8 @@ def _wsl_systemd_operational() -> bool:
 def supports_systemd_services() -> bool:
     if not is_linux() or is_termux():
         return False
+    if shutil.which("systemctl") is None:
+        return False
     if is_wsl():
         return _wsl_systemd_operational()
     return True
@@ -2135,7 +2137,7 @@ def _is_service_running() -> bool:
                 )
                 if result.stdout.strip() == "active":
                     return True
-            except subprocess.TimeoutExpired:
+            except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
 
         if system_unit_exists:
@@ -2146,7 +2148,7 @@ def _is_service_running() -> bool:
                 )
                 if result.stdout.strip() == "active":
                     return True
-            except subprocess.TimeoutExpired:
+            except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
 
         return False
