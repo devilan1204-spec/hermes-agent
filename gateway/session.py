@@ -203,8 +203,18 @@ def build_session_context_prompt(
     Platforms like Discord are excluded because mentions need real IDs.
     Routing still uses the original values (they stay in SessionSource).
     """
-    # Only apply redaction on platforms where IDs aren't needed for mentions
-    redact_pii = redact_pii and context.source.platform in _PII_SAFE_PLATFORMS
+    # Only apply redaction on platforms where IDs aren't needed for mentions.
+    # Check both the hardcoded set (builtins) and the plugin registry.
+    _is_pii_safe = context.source.platform in _PII_SAFE_PLATFORMS
+    if not _is_pii_safe:
+        try:
+            from gateway.platform_registry import platform_registry
+            entry = platform_registry.get(context.source.platform.value)
+            if entry and entry.pii_safe:
+                _is_pii_safe = True
+        except Exception:
+            pass
+    redact_pii = redact_pii and _is_pii_safe
     lines = [
         "## Current Session Context",
         "",
