@@ -3430,6 +3430,37 @@ class GatewayRunner:
             except Exception as e:
                 logger.error("Process watcher setup error: %s", e)
 
+            # Drain watch pattern notifications that arrived during the agent run
+            try:
+                from tools.process_registry import process_registry as _pr
+                while not _pr.watch_queue.empty():
+                    watch_evt = _pr.watch_queue.get_nowait()
+                    _wsid = watch_evt.get("session_id", "unknown")
+                    _wcmd = watch_evt.get("command", "unknown")
+                    _wtype = watch_evt.get("type", "watch_match")
+                    if _wtype == "watch_disabled":
+                        synth_text = f"[SYSTEM: {watch_evt.get('message', '')}]"
+                    else:
+                        _wpat = watch_evt.get("pattern", "?")
+                        _wout = watch_evt.get("output", "")
+                        _wsup = watch_evt.get("suppressed", 0)
+                        synth_text = (
+                            f"[SYSTEM: Background process {_wsid} matched "
+                            f"watch pattern \"{_wpat}\".\n"
+                            f"Command: {_wcmd}\n"
+                            f"Matched output:\n{_wout}"
+                        )
+                        if _wsup:
+                            synth_text += f"\n({_wsup} earlier matches were suppressed by rate limit)"
+                        synth_text += "]"
+                    # Inject as synthetic message to trigger a new agent turn
+                    try:
+                        await self._inject_watch_notification(synth_text, event)
+                    except Exception as e2:
+                        logger.error("Watch notification injection error: %s", e2)
+            except Exception as e:
+                logger.debug("Watch queue drain error: %s", e)
+
             # NOTE: Dangerous command approvals are now handled inline by the
             # blocking gateway approval mechanism in tools/approval.py.  The agent
             # thread blocks until the user responds with /approve or /deny, so by
@@ -6707,6 +6738,36 @@ class GatewayRunner:
                 return f"{prefix}\n\n{user_text}"
             return prefix
         return user_text
+
+    async def _inject_watch_notification(self, synth_text: str, original_event) -> None:
+        """Inject a watch-pattern notification as a synthetic message event.
+
+        Uses the source from the original user event to route the notification
+        back to the correct chat/adapter.
+        """
+        source = getattr(original_event, "source", None)
+        if not source:
+            return
+        platform_name = source.platform.value if hasattr(source.platform, "value") else str(source.platform)
+        adapter = None
+        for p, a in self.adapters.items():
+            if p.value == platform_name:
+                adapter = a
+                break
+        if not adapter:
+            return
+        try:
+            from gateway.platforms.base import MessageEvent, MessageType
+            synth_event = MessageEvent(
+                text=synth_text,
+                message_type=MessageType.TEXT,
+                source=source,
+                internal=True,
+            )
+            logger.info("Watch pattern notification — injecting for %s", platform_name)
+            await adapter.handle_message(synth_event)
+        except Exception as e:
+            logger.error("Watch notification injection error: %s", e)
 
     async def _run_process_watcher(self, watcher: dict) -> None:
         """

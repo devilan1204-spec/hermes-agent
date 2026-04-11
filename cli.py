@@ -8887,6 +8887,28 @@ class HermesCLI:
                                         f"Output:\n{_out}]"
                                     )
                                     self._pending_input.put(_synth)
+                                # Check for watch pattern match notifications
+                                if not process_registry.watch_queue.empty():
+                                    watch_evt = process_registry.watch_queue.get_nowait()
+                                    _wsid = watch_evt.get("session_id", "unknown")
+                                    _wcmd = watch_evt.get("command", "unknown")
+                                    _wtype = watch_evt.get("type", "watch_match")
+                                    if _wtype == "watch_disabled":
+                                        _wsynth = f"[SYSTEM: {watch_evt.get('message', '')}]"
+                                    else:
+                                        _wpat = watch_evt.get("pattern", "?")
+                                        _wout = watch_evt.get("output", "")
+                                        _wsup = watch_evt.get("suppressed", 0)
+                                        _wsynth = (
+                                            f"[SYSTEM: Background process {_wsid} matched "
+                                            f"watch pattern \"{_wpat}\".\n"
+                                            f"Command: {_wcmd}\n"
+                                            f"Matched output:\n{_wout}"
+                                        )
+                                        if _wsup:
+                                            _wsynth += f"\n({_wsup} earlier matches were suppressed by rate limit)"
+                                        _wsynth += "]"
+                                    self._pending_input.put(_wsynth)
                             except Exception:
                                 pass
                         continue
@@ -9004,10 +9026,9 @@ class HermesCLI:
                                     _cprint(f"{_DIM}Voice auto-restart failed: {e}{_RST}")
                             threading.Thread(target=_restart_recording, daemon=True).start()
 
-                        # Drain process completion notifications — any background
-                        # process that finished with notify_on_complete while the
-                        # agent was running (or before) gets auto-injected as a
-                        # new user message so the agent can react to it.
+                        # Drain process completion and watch notifications — any
+                        # background process events that arrived while the agent
+                        # was running get auto-injected as a new user message.
                         try:
                             from tools.process_registry import process_registry
                             while not process_registry.completion_queue.empty():
@@ -9023,6 +9044,27 @@ class HermesCLI:
                                     f"Output:\n{_out}]"
                                 )
                                 self._pending_input.put(_synth)
+                            while not process_registry.watch_queue.empty():
+                                watch_evt = process_registry.watch_queue.get_nowait()
+                                _wsid = watch_evt.get("session_id", "unknown")
+                                _wcmd = watch_evt.get("command", "unknown")
+                                _wtype = watch_evt.get("type", "watch_match")
+                                if _wtype == "watch_disabled":
+                                    _wsynth = f"[SYSTEM: {watch_evt.get('message', '')}]"
+                                else:
+                                    _wpat = watch_evt.get("pattern", "?")
+                                    _wout = watch_evt.get("output", "")
+                                    _wsup = watch_evt.get("suppressed", 0)
+                                    _wsynth = (
+                                        f"[SYSTEM: Background process {_wsid} matched "
+                                        f"watch pattern \"{_wpat}\".\n"
+                                        f"Command: {_wcmd}\n"
+                                        f"Matched output:\n{_wout}"
+                                    )
+                                    if _wsup:
+                                        _wsynth += f"\n({_wsup} earlier matches were suppressed by rate limit)"
+                                    _wsynth += "]"
+                                self._pending_input.put(_wsynth)
                         except Exception:
                             pass  # Non-fatal — don't break the main loop
 
