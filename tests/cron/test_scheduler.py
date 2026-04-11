@@ -578,7 +578,9 @@ class TestDeliverResultErrorReturns:
         with patch("gateway.config.load_gateway_config"):
             result = _deliver_result(job, "Output.")
         assert result is not None
-        assert "unknown platform" in result
+        # With the plugin platform registry, unknown names are accepted
+        # as potential plugins but fail at delivery if no adapter exists.
+        assert "fax" in result.lower()
 
     def test_returns_error_when_platform_disabled(self):
         from gateway.config import Platform

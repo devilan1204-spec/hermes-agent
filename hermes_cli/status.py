@@ -319,6 +319,17 @@ def show_status(args):
             status += f" (home: {home_channel})"
         
         print(f"  {name:<12}  {check_mark(has_token)} {status}")
+
+    # Plugin-registered platforms
+    try:
+        from gateway.platform_registry import platform_registry
+        for entry in platform_registry.plugin_entries():
+            configured = entry.check_fn()
+            status_str = "configured" if configured else "not configured"
+            label = entry.label
+            print(f"  {label:<12}  {check_mark(configured)} {status_str} (plugin)")
+    except Exception:
+        pass
     
     # =========================================================================
     # Gateway Status

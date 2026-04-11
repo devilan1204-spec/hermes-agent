@@ -285,11 +285,11 @@ class TestAuthorizationMaps(unittest.TestCase):
 class TestSendMessageToolRouting(unittest.TestCase):
     """Verify email routing in send_message_tool."""
 
-    def test_email_in_platform_map(self):
-        import tools.send_message_tool as smt
-        import inspect
-        source = inspect.getsource(smt._handle_send)
-        self.assertIn('"email"', source)
+    def test_email_platform_resolves(self):
+        """Email platform resolves via Platform() — no hardcoded map needed."""
+        from gateway.config import Platform
+        p = Platform("email")
+        self.assertEqual(p, Platform.EMAIL)
 
     def test_send_to_platform_has_email_branch(self):
         import tools.send_message_tool as smt
@@ -301,11 +301,12 @@ class TestSendMessageToolRouting(unittest.TestCase):
 class TestCronDelivery(unittest.TestCase):
     """Verify email in cron scheduler platform_map."""
 
-    def test_email_in_cron_platform_map(self):
-        import cron.scheduler
-        import inspect
-        source = inspect.getsource(cron.scheduler)
-        self.assertIn('"email"', source)
+    def test_email_resolves_for_cron(self):
+        """Email platform resolves via Platform() for cron delivery."""
+        from gateway.config import Platform
+        p = Platform("email")
+        self.assertEqual(p, Platform.EMAIL)
+        self.assertEqual(p.value, "email")
 
 
 class TestToolset(unittest.TestCase):
