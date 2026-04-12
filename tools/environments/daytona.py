@@ -170,9 +170,9 @@ class DaytonaEnvironment(BaseEnvironment):
 
     def _daytona_bulk_download(self, dest: Path) -> None:
         """Download remote .hermes/ as a tar archive."""
-        base = shlex.quote(self._remote_home)
+        rel_base = f"{self._remote_home}/.hermes".lstrip("/")
         self._sandbox.process.exec(
-            f"tar cf /tmp/.hermes_sync.tar -C {base}/.hermes ."
+            f"tar cf /tmp/.hermes_sync.tar -C / {shlex.quote(rel_base)}"
         )
         self._sandbox.fs.download_file("/tmp/.hermes_sync.tar", str(dest))
 

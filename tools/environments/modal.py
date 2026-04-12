@@ -353,7 +353,7 @@ class ModalEnvironment(BaseEnvironment):
         """Download remote .hermes/ as a tar archive."""
         async def _download():
             proc = await self._sandbox.exec.aio(
-                "bash", "-c", "tar cf - -C /root/.hermes ."
+                "bash", "-c", "tar cf - -C / root/.hermes"
             )
             data = await proc.stdout.read.aio()
             exit_code = await proc.wait.aio()

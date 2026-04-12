@@ -15,10 +15,12 @@ import shutil
 import signal
 import tarfile
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Callable
 
+from hermes_constants import get_hermes_home
 from tools.environments.base import _file_mtime_key
 
 logger = logging.getLogger(__name__)
@@ -211,7 +213,7 @@ class FileSyncManager:
         if self._bulk_download_fn is None:
             return
 
-        lock_path = (hermes_home or Path.home() / ".hermes") / ".sync.lock"
+        lock_path = (hermes_home or get_hermes_home()) / ".sync.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
 
         last_exc: Exception | None = None
@@ -233,22 +235,28 @@ class FileSyncManager:
 
     def _sync_back_once(self, lock_path: Path) -> None:
         """Single sync-back attempt with SIGINT protection and file lock."""
-        # Defer SIGINT so we don't leave host files in a partial state.
+        # signal.signal() only works from the main thread. In gateway
+        # contexts cleanup() may run from a worker thread — skip SIGINT
+        # deferral there rather than crashing.
+        on_main_thread = threading.current_thread() is threading.main_thread()
+
         deferred_sigint: list[object] = []
-        original_handler = signal.getsignal(signal.SIGINT)
+        original_handler = None
+        if on_main_thread:
+            original_handler = signal.getsignal(signal.SIGINT)
 
-        def _defer_sigint(signum, frame):
-            deferred_sigint.append((signum, frame))
-            logger.debug("sync_back: SIGINT deferred until sync completes")
+            def _defer_sigint(signum, frame):
+                deferred_sigint.append((signum, frame))
+                logger.debug("sync_back: SIGINT deferred until sync completes")
 
-        signal.signal(signal.SIGINT, _defer_sigint)
+            signal.signal(signal.SIGINT, _defer_sigint)
         try:
             self._sync_back_locked(lock_path)
         finally:
-            signal.signal(signal.SIGINT, original_handler)
-            # Re-raise deferred SIGINT so the caller can handle it.
-            if deferred_sigint:
-                os.kill(os.getpid(), signal.SIGINT)
+            if on_main_thread and original_handler is not None:
+                signal.signal(signal.SIGINT, original_handler)
+                if deferred_sigint:
+                    os.kill(os.getpid(), signal.SIGINT)
 
     def _sync_back_locked(self, lock_path: Path) -> None:
         """Sync-back under file lock (serializes concurrent gateways)."""
@@ -329,19 +337,18 @@ class FileSyncManager:
     def _infer_host_path(self, remote_path: str) -> str | None:
         """Infer a host path for a new remote file by matching path prefixes.
 
-        Uses the existing file mapping to find a remote->host prefix pair,
-        then applies the same prefix substitution to the new file.
+        Uses the existing file mapping to find a remote->host directory
+        pair, then applies the same prefix substitution to the new file.
+        For example, if the mapping has ``/root/.hermes/skills/a.md`` →
+        ``~/.hermes/skills/a.md``, a new remote file at
+        ``/root/.hermes/skills/b.md`` maps to ``~/.hermes/skills/b.md``.
         """
         try:
             for host, remote in self._get_files_fn():
-                # Find a common prefix (e.g. /root/.hermes/skills -> ~/.hermes/skills)
-                remote_dir = str(Path(remote).parent) + "/"
-                if remote_path.startswith(remote_dir) or remote_path.startswith(
-                    str(Path(remote).parent.parent) + "/"
-                ):
+                remote_dir = str(Path(remote).parent)
+                if remote_path.startswith(remote_dir + "/"):
                     host_dir = str(Path(host).parent)
-                    remote_base_dir = str(Path(remote).parent)
-                    suffix = remote_path[len(remote_base_dir):]
+                    suffix = remote_path[len(remote_dir):]
                     return host_dir + suffix
         except Exception:
             pass

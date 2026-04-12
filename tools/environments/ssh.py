@@ -220,9 +220,11 @@ class SSHEnvironment(BaseEnvironment):
 
     def _ssh_bulk_download(self, dest: Path) -> None:
         """Download remote .hermes/ as a tar archive."""
-        base = f"{self._remote_home}/.hermes"
+        # Tar from / with the full path so archive entries preserve absolute
+        # paths (e.g. home/user/.hermes/skills/f.py), matching _pushed_hashes keys.
+        rel_base = f"{self._remote_home}/.hermes".lstrip("/")
         ssh_cmd = self._build_ssh_command()
-        ssh_cmd.append(f"tar cf - -C {shlex.quote(base)} .")
+        ssh_cmd.append(f"tar cf - -C / {shlex.quote(rel_base)}")
         with open(dest, "wb") as f:
             result = subprocess.run(ssh_cmd, stdout=f, stderr=subprocess.PIPE, timeout=120)
         if result.returncode != 0:

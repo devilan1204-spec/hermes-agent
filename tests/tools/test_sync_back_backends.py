@@ -115,7 +115,8 @@ class TestSSHBulkDownload:
         cmd = mock_run.call_args[0][0]
         cmd_str = " ".join(cmd)
         assert "tar cf -" in cmd_str
-        assert "/home/testuser/.hermes" in cmd_str
+        assert "-C /" in cmd_str
+        assert "home/testuser/.hermes" in cmd_str
         assert "ssh" in cmd_str
         assert "testuser@example.com" in cmd_str
 
@@ -250,7 +251,7 @@ class TestModalBulkDownload:
         assert args[0] == "bash"
         assert args[1] == "-c"
         assert "tar cf -" in args[2]
-        assert "-C /root/.hermes" in args[2]
+        assert "-C / root/.hermes" in args[2]
 
     def test_modal_bulk_download_writes_to_dest(self, tmp_path):
         """Downloaded tar bytes should be written to the dest path."""
@@ -368,7 +369,7 @@ class TestDaytonaBulkDownload:
         env._daytona_bulk_download(dest)
 
         exec_cmd = env._sandbox.process.exec.call_args[0][0]
-        assert "/home/daytona/.hermes" in exec_cmd
+        assert "home/daytona/.hermes" in exec_cmd
 
 
 class TestDaytonaCleanup:
