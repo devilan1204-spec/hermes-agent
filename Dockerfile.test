@@ -1,0 +1,4 @@
+FROM nousresearch/hermes-agent:latest
+COPY hermes_cli/ /opt/hermes/hermes_cli/
+COPY hermes_constants.py /opt/hermes/hermes_constants.py
+COPY tools/voice_mode.py /opt/hermes/tools/voice_mode.py

@@ -181,6 +181,48 @@ def test_setup_gateway_skips_service_install_when_systemctl_missing(monkeypatch,
     assert "hermes gateway" in out
 
 
+def test_setup_gateway_in_container_shows_docker_guidance(monkeypatch, capsys):
+    """setup_gateway() in a Docker container shows Docker-specific restart instructions."""
+    env = {
+        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_HOME_CHANNEL": "",
+        "DISCORD_BOT_TOKEN": "",
+        "DISCORD_HOME_CHANNEL": "",
+        "SLACK_BOT_TOKEN": "",
+        "SLACK_HOME_CHANNEL": "",
+        "MATRIX_HOMESERVER": "https://matrix.example.com",
+        "MATRIX_USER_ID": "@alice:example.com",
+        "MATRIX_PASSWORD": "",
+        "MATRIX_ACCESS_TOKEN": "token",
+        "BLUEBUBBLES_SERVER_URL": "",
+        "BLUEBUBBLES_HOME_CHANNEL": "",
+        "WHATSAPP_ENABLED": "",
+        "WEBHOOK_ENABLED": "",
+    }
+
+    monkeypatch.setattr(setup_mod, "get_env_value", lambda key: env.get(key, ""))
+    monkeypatch.setattr(setup_mod, "prompt_yes_no", lambda *args, **kwargs: False)
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+
+    import hermes_cli.gateway as gateway_mod
+
+    monkeypatch.setattr(gateway_mod, "supports_systemd_services", lambda: False)
+    monkeypatch.setattr(gateway_mod, "is_macos", lambda: False)
+    monkeypatch.setattr(gateway_mod, "_is_service_installed", lambda: False)
+    monkeypatch.setattr(gateway_mod, "_is_service_running", lambda: False)
+
+    # Patch is_container at the import location in setup.py
+    import hermes_constants
+    monkeypatch.setattr(hermes_constants, "is_container", lambda: True)
+
+    setup_mod.setup_gateway({})
+
+    out = capsys.readouterr().out
+    assert "Messaging platforms configured!" in out
+    assert "docker" in out.lower() or "Docker" in out
+    assert "restart" in out.lower()
+
+
 def test_setup_syncs_custom_provider_removal_from_disk(tmp_path, monkeypatch):
     """Removing the last custom provider in model setup should persist."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
