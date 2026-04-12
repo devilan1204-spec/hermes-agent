@@ -267,9 +267,9 @@ class LocalEnvironment(BaseEnvironment):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             stdin=subprocess.PIPE if stdin_data is not None else subprocess.DEVNULL,
-            preexec_fn=None if _IS_WINDOWS else os.setsid,
+            start_new_session=not _IS_WINDOWS,
         )
-
+                      
         if stdin_data is not None:
             _pipe_stdin(proc, stdin_data)
 
