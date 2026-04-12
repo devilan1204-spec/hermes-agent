@@ -571,7 +571,7 @@ def test_cmd_model_forwards_nous_login_tls_options(monkeypatch):
         captured["ca_bundle"] = login_args.ca_bundle
         captured["insecure"] = login_args.insecure
 
-    monkeypatch.setattr("hermes_cli.auth._login_nous", _fake_login)
+    monkeypatch.setattr("hermes_cli.auth.login_nous", _fake_login)
 
     hermes_main.cmd_model(
         SimpleNamespace(

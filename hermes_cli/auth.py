@@ -2821,6 +2821,7 @@ def _prompt_model_selection(
     pricing: Optional[Dict[str, Dict[str, str]]] = None,
     unavailable_models: Optional[List[str]] = None,
     portal_url: str = "",
+    allow_custom = True
 ) -> Optional[str]:
     """Interactive model selection. Puts current_model first with a marker. Returns chosen model ID or None.
 
@@ -2909,8 +2910,16 @@ def _prompt_model_selection(
         from simple_term_menu import TerminalMenu
 
         choices = [f"  {_label(mid)}" for mid in ordered]
-        choices.append("  Enter custom model name")
-        choices.append("  Skip (keep current)")
+
+        custom_idx = None
+        if allow_custom:
+            custom_idx = len(choices)
+            choices.append("  Enter custom model name")
+
+        skip_idx = None
+        if current_model:
+            skip_idx = len(choices)
+            choices.append("  Skip (keep current)")
 
         # Print the unavailable block BEFORE the menu via regular print().
         # simple_term_menu pads title lines to terminal width (causes wrapping),
@@ -2947,21 +2956,29 @@ def _prompt_model_selection(
         print()
         if idx < len(ordered):
             return ordered[idx]
-        elif idx == len(ordered):
+        if idx == custom_idx:
             custom = input("Enter model name: ").strip()
             return custom if custom else None
+        if idx == skip_idx:
+            return None
         return None
     except (ImportError, NotImplementedError, OSError, subprocess.SubprocessError):
         pass
 
     # Fallback: numbered list
     print(menu_title)
-    num_width = len(str(len(ordered) + 2))
+    n = len(ordered)
+    extra = []
+    if allow_custom:
+        extra.append("Enter custom model name")
+    if current_model:
+        extra.append("Skip (keep current)")
+    total = n + len(extra)
+    num_width = len(str(total))
     for i, mid in enumerate(ordered, 1):
         print(f"  {i:>{num_width}}. {_label(mid)}")
-    n = len(ordered)
-    print(f"  {n + 1:>{num_width}}. Enter custom model name")
-    print(f"  {n + 2:>{num_width}}. Skip (keep current)")
+    for j, label in enumerate(extra, n + 1):
+        print(f"  {j:>{num_width}}. {label}")
 
     if _unavailable:
         _upgrade_url = (portal_url or DEFAULT_NOUS_PORTAL_URL).rstrip("/")
@@ -2973,18 +2990,19 @@ def _prompt_model_selection(
 
     while True:
         try:
-            choice = input(f"Choice [1-{n + 2}] (default: skip): ").strip()
+            choice = input(f"Choice [1-{total}]: ").strip()
             if not choice:
                 return None
-            idx = int(choice)
-            if 1 <= idx <= n:
-                return ordered[idx - 1]
-            elif idx == n + 1:
-                custom = input("Enter model name: ").strip()
-                return custom if custom else None
-            elif idx == n + 2:
-                return None
-            print(f"Please enter 1-{n + 2}")
+            val = int(choice)
+            if 1 <= val <= n:
+                return ordered[val - 1]
+            extra_idx = val - n - 1
+            if 0 <= extra_idx < len(extra):
+                if extra[extra_idx] == "Enter custom model name":
+                    custom = input("Enter model name: ").strip()
+                    return custom if custom else None
+                return None  # skip
+            print(f"Please enter 1-{total}")
         except ValueError:
             print("Please enter a number")
         except (KeyboardInterrupt, EOFError):
@@ -3260,7 +3278,6 @@ def _nous_device_code_login(
         open_browser = False
 
     print(f"Starting Hermes login via {pconfig.name}...")
-    print(f"Portal: {portal_base_url}")
     if insecure:
         print("TLS verification: disabled (--insecure)")
     elif ca_bundle:
@@ -3280,19 +3297,18 @@ def _nous_device_code_login(
         interval = int(device_data["interval"])
 
         print()
-        print("To continue:")
-        print(f"  1. Open: {verification_url}")
-        print(f"  2. If prompted, enter code: {user_code}")
-
         if open_browser:
             opened = webbrowser.open(verification_url)
             if opened:
-                print("  (Opened browser for verification)")
+                print("If you don't see a browser window open, navigate to this URL:")
             else:
-                print("  Could not open browser automatically — use the URL above.")
+                print("Navigate to this URL to continue:")
+        print(verification_url)
+        print(f"If you're prompted for a code, use {user_code}")
+        print()
 
         effective_interval = max(1, min(interval, DEVICE_AUTH_POLL_INTERVAL_CAP_SECONDS))
-        print(f"Waiting for approval (polling every {effective_interval}s)...")
+        print(f"Waiting for approval (checking every {effective_interval}s)...")
 
         token_data = _poll_for_token(
             client=client,
@@ -3357,7 +3373,7 @@ def _nous_device_code_login(
         raise
 
 
-def _login_nous(args, pconfig: ProviderConfig) -> None:
+def login_nous(args, pconfig: ProviderConfig) -> None:
     """Nous Portal device authorization flow."""
     timeout_seconds = getattr(args, "timeout", None) or 15.0
     insecure = bool(getattr(args, "insecure", False))
@@ -3419,7 +3435,10 @@ def _login_nous(args, pconfig: ProviderConfig) -> None:
             )
             model_ids = _PROVIDER_MODELS.get("nous", [])
 
+            _portal = auth_state.get("portal_base_url", "")
+
             print()
+
             unavailable_models: list = []
             if model_ids:
                 pricing = get_pricing_for_provider("nous")
@@ -3428,14 +3447,17 @@ def _login_nous(args, pconfig: ProviderConfig) -> None:
                     model_ids, unavailable_models = partition_nous_models_by_tier(
                         model_ids, pricing, free_tier=True,
                     )
-            _portal = auth_state.get("portal_base_url", "")
-            if model_ids:
-                print(f"Showing {len(model_ids)} curated models — use \"Enter custom model name\" for others.")
-                selected_model = _prompt_model_selection(
-                    model_ids, pricing=pricing,
-                    unavailable_models=unavailable_models,
-                    portal_url=_portal,
-                )
+                if not free_tier:
+                    print(f"Showing {len(model_ids)} curated models — use \"Enter custom model name\" for others.")
+                if len(model_ids) > 1:
+                    selected_model = _prompt_model_selection(
+                        model_ids, pricing=pricing,
+                        unavailable_models=unavailable_models,
+                        portal_url=_portal,
+                        allow_custom=not free_tier
+                    )
+                else:
+                    selected_model = model_ids[0]
             elif unavailable_models:
                 _url = (_portal or DEFAULT_NOUS_PORTAL_URL).rstrip("/")
                 print("No free models currently available.")

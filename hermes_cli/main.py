@@ -2124,7 +2124,7 @@ def _model_flow_nous(config, current_model="", args=None):
         resolve_nous_runtime_credentials,
         AuthError,
         format_auth_error,
-        _login_nous,
+        login_nous,
         PROVIDER_REGISTRY,
     )
     from hermes_cli.config import (
@@ -2137,8 +2137,6 @@ def _model_flow_nous(config, current_model="", args=None):
 
     state = get_provider_auth_state("nous")
     if not state or not state.get("access_token"):
-        print("Not logged into Nous Portal. Starting login...")
-        print()
         try:
             mock_args = argparse.Namespace(
                 portal_url=getattr(args, "portal_url", None),
@@ -2150,7 +2148,7 @@ def _model_flow_nous(config, current_model="", args=None):
                 ca_bundle=getattr(args, "ca_bundle", None),
                 insecure=bool(getattr(args, "insecure", False)),
             )
-            _login_nous(mock_args, PROVIDER_REGISTRY["nous"])
+            login_nous(mock_args, PROVIDER_REGISTRY["nous"])
             # Offer Tool Gateway enablement for paid subscribers
             try:
                 _refreshed = load_config() or {}
@@ -2201,7 +2199,7 @@ def _model_flow_nous(config, current_model="", args=None):
                     ca_bundle=None,
                     insecure=False,
                 )
-                _login_nous(mock_args, PROVIDER_REGISTRY["nous"])
+                login_nous(mock_args, PROVIDER_REGISTRY["nous"])
             except Exception as login_exc:
                 print(f"Re-login failed: {login_exc}")
             return
