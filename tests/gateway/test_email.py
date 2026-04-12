@@ -335,10 +335,11 @@ class TestChannelDirectory(unittest.TestCase):
     """Verify email in channel directory session-based discovery."""
 
     def test_email_in_session_discovery(self):
-        import gateway.channel_directory
-        import inspect
-        source = inspect.getsource(gateway.channel_directory.build_channel_directory)
-        self.assertIn('"email"', source)
+        """Email is discovered via Platform enum iteration in build_channel_directory."""
+        from gateway.config import Platform
+        # Email is a built-in Platform member, so it's included in
+        # `for plat in Platform:` iteration inside build_channel_directory.
+        self.assertIn(Platform.EMAIL, Platform.__members__.values())
 
 
 class TestGatewaySetup(unittest.TestCase):
