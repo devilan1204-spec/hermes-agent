@@ -469,7 +469,9 @@ The user has requested that this compaction PRIORITISE preserving all informatio
             # Handle cases where content is not a string (e.g., dict from llama.cpp)
             if not isinstance(content, str):
                 content = str(content) if content else ""
-            summary = content.strip()
+            # Redact the summary output as well — the summarizer LLM may
+            # ignore prompt instructions and echo back secrets verbatim.
+            summary = redact_sensitive_text(content.strip())
             # Store for iterative updates on next compaction
             self._previous_summary = summary
             self._summary_failure_cooldown_until = 0.0

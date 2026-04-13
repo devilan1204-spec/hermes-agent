@@ -781,3 +781,83 @@ class TestTokenBudgetTailProtection:
         # Tool at index 2 is outside the protected tail (last 3 = indices 2,3,4)
         # so it might or might not be pruned depending on boundary
         assert isinstance(pruned, int)
+
+
+class TestSerializeRedactsSecrets:
+    """Verify that _serialize_for_summary strips secrets before they reach the summarizer LLM."""
+
+    def _make_compressor(self):
+        with patch("agent.context_compressor.get_model_context_length", return_value=100000):
+            return ContextCompressor(model="test", quiet_mode=True)
+
+    def test_redacts_api_key_in_tool_result(self):
+        c = self._make_compressor()
+        turns = [{"role": "tool", "content": "OPENAI_API_KEY=sk-proj-abc123def456ghi789jkl012", "tool_call_id": "tc1"}]
+        result = c._serialize_for_summary(turns)
+        assert "abc123def456" not in result
+        assert "sk-proj" not in result
+
+    def test_redacts_api_key_in_user_message(self):
+        c = self._make_compressor()
+        turns = [{"role": "user", "content": "My key is sk-proj-abc123def456ghi789jkl012"}]
+        result = c._serialize_for_summary(turns)
+        assert "abc123def456" not in result
+
+    def test_redacts_secret_in_tool_call_arguments(self):
+        c = self._make_compressor()
+        turns = [{
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "function": {
+                    "name": "bash",
+                    "arguments": '{"command": "export OPENAI_API_KEY=sk-proj-abc123def456ghi789jkl012"}',
+                },
+            }],
+        }]
+        result = c._serialize_for_summary(turns)
+        assert "abc123def456" not in result
+
+    def test_redacts_github_pat_in_assistant_content(self):
+        c = self._make_compressor()
+        turns = [{"role": "assistant", "content": "Found token: ghp_abcdef1234567890abcdef1234567890abcd"}]
+        result = c._serialize_for_summary(turns)
+        assert "abcdef1234567890" not in result
+
+    def test_preserves_non_secret_content(self):
+        c = self._make_compressor()
+        turns = [
+            {"role": "user", "content": "Please fix the bug in src/main.py"},
+            {"role": "assistant", "content": "I found the issue on line 42."},
+        ]
+        result = c._serialize_for_summary(turns)
+        assert "src/main.py" in result
+        assert "line 42" in result
+
+
+class TestGenerateSummaryRedactsOutput:
+    """Verify that _generate_summary redacts the summarizer LLM's output."""
+
+    def test_summary_output_is_redacted(self):
+        """If the summarizer LLM echoes a secret despite instructions, it gets redacted."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            "## Goal\nDeploy app.\n## Critical Context\n"
+            "User's API key: sk-proj-abc123def456ghi789jkl012"
+        )
+
+        with patch("agent.context_compressor.get_model_context_length", return_value=100000):
+            c = ContextCompressor(model="test", quiet_mode=True)
+
+        messages = [
+            {"role": "user", "content": "deploy my app"},
+            {"role": "assistant", "content": "deploying now"},
+        ]
+
+        with patch("agent.context_compressor.call_llm", return_value=mock_response):
+            summary = c._generate_summary(messages)
+
+        assert "abc123def456" not in summary
+        # Also verify _previous_summary is redacted (iterative update path)
+        assert "abc123def456" not in (c._previous_summary or "")
