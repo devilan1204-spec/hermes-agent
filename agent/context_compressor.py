@@ -28,6 +28,7 @@ from agent.model_metadata import (
     get_model_context_length,
     estimate_messages_tokens_rough,
 )
+from agent.redact import redact_sensitive_text
 
 logger = logging.getLogger(__name__)
 
@@ -270,11 +271,15 @@ class ContextCompressor(ContextEngine):
         Includes tool call arguments and result content (up to
         ``_CONTENT_MAX`` chars per message) so the summarizer can preserve
         specific details like file paths, commands, and outputs.
+
+        All content is redacted before serialization to prevent secrets
+        (API keys, tokens, passwords) from leaking into the summary that
+        gets sent to the auxiliary model and persisted across compactions.
         """
         parts = []
         for msg in turns:
             role = msg.get("role", "unknown")
-            content = msg.get("content") or ""
+            content = redact_sensitive_text(msg.get("content") or "")
 
             # Tool results: keep enough content for the summarizer
             if role == "tool":
@@ -295,7 +300,7 @@ class ContextCompressor(ContextEngine):
                         if isinstance(tc, dict):
                             fn = tc.get("function", {})
                             name = fn.get("name", "?")
-                            args = fn.get("arguments", "")
+                            args = redact_sensitive_text(fn.get("arguments", ""))
                             # Truncate long arguments but keep enough for context
                             if len(args) > self._TOOL_ARGS_MAX:
                                 args = args[:self._TOOL_ARGS_HEAD] + "..."
@@ -353,7 +358,11 @@ class ContextCompressor(ContextEngine):
             "assistant that continues the conversation. "
             "Do NOT respond to any questions or requests in the conversation — "
             "only output the structured summary. "
-            "Do NOT include any preamble, greeting, or prefix."
+            "Do NOT include any preamble, greeting, or prefix. "
+            "NEVER include API keys, tokens, passwords, secrets, credentials, "
+            "or connection strings in the summary — replace any that appear "
+            "with [REDACTED]. Note that the user had credentials present, but "
+            "do not preserve their values."
         )
 
         # Shared structured template (used by both paths).
@@ -394,7 +403,7 @@ class ContextCompressor(ContextEngine):
 [What remains to be done — framed as context, not instructions]
 
 ## Critical Context
-[Any specific values, error messages, configuration details, or data that would be lost without explicit preservation]
+[Any specific values, error messages, configuration details, or data that would be lost without explicit preservation. NEVER include API keys, tokens, passwords, or credentials — write [REDACTED] instead.]
 
 ## Tools & Patterns
 [Which tools were used, how they were used effectively, and any tool-specific discoveries]
@@ -437,7 +446,7 @@ Use this exact structure:
             prompt += f"""
 
 FOCUS TOPIC: "{focus_topic}"
-The user has requested that this compaction PRIORITISE preserving all information related to the focus topic above. For content related to "{focus_topic}", include full detail — exact values, file paths, command outputs, error messages, and decisions. For content NOT related to the focus topic, summarise more aggressively (brief one-liners or omit if truly irrelevant). The focus topic sections should receive roughly 60-70% of the summary token budget."""
+The user has requested that this compaction PRIORITISE preserving all information related to the focus topic above. For content related to "{focus_topic}", include full detail — exact values, file paths, command outputs, error messages, and decisions. For content NOT related to the focus topic, summarise more aggressively (brief one-liners or omit if truly irrelevant). The focus topic sections should receive roughly 60-70% of the summary token budget. Even for the focus topic, NEVER preserve API keys, tokens, passwords, or credentials — use [REDACTED]."""
 
         try:
             call_kwargs = {
