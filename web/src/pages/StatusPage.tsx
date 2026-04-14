@@ -29,7 +29,8 @@ const GATEWAY_STATE_DISPLAY: Record<string, { badge: "success" | "warning" | "de
 };
 
 function gatewayValue(status: StatusResponse): string {
-  if (status.gateway_running) return `PID ${status.gateway_pid}`;
+  if (status.gateway_running && status.gateway_pid) return `PID ${status.gateway_pid}`;
+  if (status.gateway_running) return "Running (remote)";
   if (status.gateway_state === "startup_failed") return "Start failed";
   return "Not running";
 }
