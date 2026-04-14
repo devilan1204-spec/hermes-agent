@@ -516,6 +516,9 @@ class AIAgent:
         checkpoint_max_snapshots: int = 50,
         pass_session_id: bool = False,
         persist_session: bool = True,
+        use_streaming: bool = True,
+        temperature: float = None,
+        insert_reasoning: bool = True,
     ):
         """
         Initialize the AI Agent.
@@ -559,11 +562,17 @@ class AIAgent:
                 When provided and Honcho is enabled in config, enables persistent cross-session user modeling.
             honcho_manager: Optional shared HonchoSessionManager owned by the caller.
             honcho_config: Optional HonchoClientConfig corresponding to honcho_manager.
+            use_streaming (bool): Whether to use streaming for API calls (default: True)
+            temperature (float): Temperature for model responses (optional, uses model default if not set)
+            insert_reasoning (bool): Whether to insert reasoning into the API response (default: True)
         """
         _install_safe_stdio()
 
         self.model = model
         self.max_iterations = max_iterations
+        self.use_streaming = use_streaming
+        self.temperature = temperature
+        self.insert_reasoning = insert_reasoning
         # Shared iteration budget — parent creates, children inherit.
         # Consumed by every LLM turn across parent + all subagents.
         self.iteration_budget = iteration_budget or IterationBudget(max_iterations)
@@ -5063,6 +5072,8 @@ class AIAgent:
             "messages": sanitized_messages,
             "timeout": float(os.getenv("HERMES_API_TIMEOUT", 1800.0)),
         }
+        if self.temperature is not None:
+            api_kwargs["temperature"] = self.temperature
         if self.tools:
             api_kwargs["tools"] = self.tools
 
@@ -5390,7 +5401,7 @@ class AIAgent:
                 api_msg = msg.copy()
                 if msg.get("role") == "assistant":
                     reasoning = msg.get("reasoning")
-                    if reasoning:
+                    if reasoning and self.insert_reasoning:
                         api_msg["reasoning_content"] = reasoning
                 api_msg.pop("reasoning", None)
                 api_msg.pop("finish_reason", None)
@@ -6387,6 +6398,7 @@ class AIAgent:
         stream_callback: Optional[callable] = None,
         persist_user_message: Optional[str] = None,
         sync_honcho: bool = True,
+        dont_review: bool = False,
     ) -> Dict[str, Any]:
         """
         Run a complete conversation with tool calling until completion.
@@ -6404,7 +6416,7 @@ class AIAgent:
                 synthetic prefixes.
             sync_honcho: When False, skip writing the final synthetic turn back
                 to Honcho or queuing follow-up prefetch work.
-
+            dont_review: When True, skip reviewing memory and skills.
         Returns:
             Dict: Complete conversation result with final response and message history
         """
@@ -6741,7 +6753,7 @@ class AIAgent:
                 # This ensures multi-turn reasoning context is preserved
                 if msg.get("role") == "assistant":
                     reasoning_text = msg.get("reasoning")
-                    if reasoning_text:
+                    if reasoning_text and self.insert_reasoning:
                         # Add reasoning_content for API compatibility (Moonshot AI, Novita, OpenRouter)
                         api_msg["reasoning_content"] = reasoning_text
 
@@ -6869,7 +6881,7 @@ class AIAgent:
                         if self.thinking_callback:
                             self.thinking_callback("")
 
-                    _use_streaming = True
+                    _use_streaming = self.use_streaming
                     if not self._has_stream_consumers():
                         # No display/TTS consumer. Still prefer streaming for
                         # health checking, but skip for Mock clients in tests
@@ -7520,7 +7532,7 @@ class AIAgent:
                                 force=True,
                             )
                     
-                    if is_context_length_error:
+                    if is_context_length_error and self.compression_enabled:
                         compressor = self.context_compressor
                         old_ctx = compressor.context_length
 
@@ -7589,6 +7601,14 @@ class AIAgent:
                                 "error": f"Context length exceeded ({approx_tokens:,} tokens). Cannot compress further.",
                                 "partial": True
                             }
+                    elif is_context_length_error and not self.compression_enabled:
+                        return {
+                            "messages": messages,
+                            "completed": False,
+                            "api_calls": api_call_count,
+                            "error": f"Context length exceeded ({approx_tokens:,} tokens). Cannot compress further.",
+                            "partial": True
+                        }
 
                     # Check for non-retryable client errors (4xx HTTP status codes).
                     # These indicate a problem with the request itself (bad model ID,
@@ -8493,7 +8513,9 @@ class AIAgent:
                 and "skill_manage" in self.valid_tool_names):
             _should_review_skills = True
             self._iters_since_skill = 0
-
+        if dont_review:
+            _should_review_memory = False
+            _should_review_skills = False
         # Background memory/skill review — runs AFTER the response is delivered
         # so it never competes with the user's task for model attention.
         if final_response and not interrupted and (_should_review_memory or _should_review_skills):
