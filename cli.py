@@ -73,6 +73,7 @@ _COMMAND_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧
 # =============================================================================
 
 _original_terminal_title: str | None = None  # Saved on first _set_terminal_title call
+_last_written_title: str = ""  # Cache last written title to skip redundant writes
 
 
 def _set_terminal_title(title: str) -> None:
@@ -80,14 +81,18 @@ def _set_terminal_title(title: str) -> None:
 
     Saves the original title on first call so it can be restored on exit.
     Only writes to real TTYs — redirected output would leak escape codes.
+    Skips writes when the title hasn't changed (deduplication).
 
     Writes to sys.__stdout__ (not sys.stdout) to bypass prompt_toolkit's
     patch_stdout StdoutProxy, which mangles raw escape sequences.
     """
-    global _original_terminal_title
+    global _original_terminal_title, _last_written_title
     # Use __stdout__ to bypass patch_stdout's StdoutProxy (#terminal-title)
     _out = sys.__stdout__
     if not _out.isatty():
+        return
+    # Skip if title hasn't changed
+    if title == _last_written_title:
         return
     try:
         if _original_terminal_title is None:
@@ -96,13 +101,14 @@ def _set_terminal_title(title: str) -> None:
         # OSC 0 ; <title> BEL — sets icon name and window title
         _out.write(f"\033]0;{title}\007")
         _out.flush()
+        _last_written_title = title
     except Exception:
         pass
 
 
 def _restore_terminal_title() -> None:
     """Restore the original terminal title (if we saved one)."""
-    global _original_terminal_title
+    global _original_terminal_title, _last_written_title
     _out = sys.__stdout__
     if not _out.isatty():
         return
@@ -110,13 +116,17 @@ def _restore_terminal_title() -> None:
         if _original_terminal_title is not None:
             _out.write(f"\033]0;{_original_terminal_title}\007")
             _out.flush()
+            _last_written_title = ""  # Invalidate cache so next _set_terminal_title writes
     except Exception:
         pass
 
 
 def _terminal_title_cwd() -> str:
     """Return a short cwd label for terminal title use."""
-    cwd = os.getcwd()
+    try:
+        cwd = os.getcwd()
+    except (FileNotFoundError, PermissionError, OSError):
+        return "?"
     home = os.path.expanduser("~")
     if cwd.startswith(home):
         cwd = "~" + cwd[len(home):]
@@ -2303,13 +2313,18 @@ class HermesCLI:
         """Called by agent when thinking starts/stops. Updates TUI spinner + terminal title."""
         if not text:
             self._flush_reasoning_preview(force=True)
-        self._spinner_text = text or ""
+            self._spinner_text = ""
+            self._tool_start_time = 0.0
+            if getattr(self, "_agent_running", False):
+                self._set_title("Thinking...")
+            self._invalidate()
+            return
+        self._spinner_text = text
         self._tool_start_time = 0.0  # clear tool timer when switching to thinking
         # Update terminal title with the thinking verb (strip kawaii face prefix)
-        if text:
-            # text is like "(◕‿◕) brainstorming..." — extract just the verb
-            verb = text.split(" ", 1)[-1].strip()  # drop face token
-            self._set_title(verb.capitalize() if verb else "Thinking...")
+        # text is like "(◕‿◕) brainstorming..." — extract just the verb
+        verb = text.split(" ", 1)[-1].strip()  # drop face token
+        self._set_title(verb.capitalize() if verb else "Thinking...")
         self._invalidate()
 
     # ── Streaming display ────────────────────────────────────────────────
