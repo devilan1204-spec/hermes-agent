@@ -7059,6 +7059,15 @@ class AIAgent:
                         finish_reason = response.choices[0].finish_reason
 
                     if finish_reason == "length":
+                        if not self.compression_enabled:
+                            return {
+                                "final_response": None,
+                                "messages": messages,
+                                "api_calls": api_call_count,
+                                "completed": False,
+                                "partial": True,
+                                "error": "Response truncated due to output length limit",
+                            }
                         self._vprint(f"{self.log_prefix}⚠️  Response truncated (finish_reason='length') - model hit max output tokens", force=True)
 
                         # ── Detect thinking-budget exhaustion ──────────────
