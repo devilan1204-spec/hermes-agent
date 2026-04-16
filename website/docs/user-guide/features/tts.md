@@ -10,7 +10,7 @@ Hermes Agent supports both text-to-speech output and voice message transcription
 
 ## Text-to-Speech
 
-Convert text to speech with six providers:
+Convert text to speech with seven providers:
 
 | Provider | Quality | Cost | API Key |
 |----------|---------|------|---------|
@@ -20,6 +20,7 @@ Convert text to speech with six providers:
 | **MiniMax TTS** | Excellent | Paid | `MINIMAX_API_KEY` |
 | **Mistral (Voxtral TTS)** | Excellent | Paid | `MISTRAL_API_KEY` |
 | **NeuTTS** | Good | Free | None needed |
+| **Gemini TTS** | Excellent | Paid (free tier) | `GEMINI_API_KEY` |
 
 ### Platform Delivery
 
@@ -62,6 +63,9 @@ tts:
     ref_text: ''
     model: neuphonic/neutts-air-q4-gguf
     device: cpu
+  gemini:
+    model: "gemini-2.5-flash-preview-tts"  # or gemini-2.5-pro-preview-tts
+    voice: "Kore"                          # 30 prebuilt voices (Zephyr, Puck, Charon, ...)
 ```
 
 **Speed control**: The global `tts.speed` value applies to all providers by default. Each provider can override it with its own `speed` setting (e.g., `tts.openai.speed: 1.5`). Provider-specific speed takes precedence over the global value. Default is `1.0` (normal speed).
@@ -74,6 +78,7 @@ Telegram voice bubbles require Opus/OGG audio format:
 - **Edge TTS** (default) outputs MP3 and needs **ffmpeg** to convert:
 - **MiniMax TTS** outputs MP3 and needs **ffmpeg** to convert for Telegram voice bubbles
 - **NeuTTS** outputs WAV and also needs **ffmpeg** to convert for Telegram voice bubbles
+- **Gemini TTS** returns raw PCM (wrapped in WAV natively) and needs **ffmpeg** to convert for Telegram voice bubbles
 
 ```bash
 # Ubuntu/Debian

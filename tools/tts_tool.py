@@ -2,13 +2,14 @@
 """
 Text-to-Speech Tool Module
 
-Supports six TTS providers:
+Supports seven TTS providers:
 - Edge TTS (default, free, no API key): Microsoft Edge neural voices
 - ElevenLabs (premium): High-quality voices, needs ELEVENLABS_API_KEY
 - OpenAI TTS: Good quality, needs OPENAI_API_KEY
 - MiniMax TTS: High-quality with voice cloning, needs MINIMAX_API_KEY
 - Mistral (Voxtral TTS): Multilingual, native Opus, needs MISTRAL_API_KEY
 - NeuTTS (local, free, no API key): On-device TTS via neutts_cli, needs neutts installed
+- Gemini TTS: Google speech generation, 30 prebuilt voices, needs GEMINI_API_KEY or GOOGLE_API_KEY
 
 Output formats:
 - Opus (.ogg) for Telegram voice bubbles (requires ffmpeg for Edge TTS)
@@ -35,7 +36,10 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import urllib.error
+import urllib.request
 import uuid
+import wave
 from pathlib import Path
 from typing import Callable, Dict, Any, Optional
 from urllib.parse import urljoin
@@ -99,6 +103,12 @@ DEFAULT_XAI_LANGUAGE = "en"
 DEFAULT_XAI_SAMPLE_RATE = 24000
 DEFAULT_XAI_BIT_RATE = 128000
 DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1"
+DEFAULT_GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
+DEFAULT_GEMINI_TTS_VOICE = "Kore"
+DEFAULT_GEMINI_TTS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+GEMINI_TTS_SAMPLE_RATE = 24000
+GEMINI_TTS_CHANNELS = 1
+GEMINI_TTS_SAMPLE_WIDTH = 2  # signed 16-bit PCM
 
 def _get_default_output_dir() -> str:
     from hermes_constants import get_hermes_dir
@@ -583,6 +593,101 @@ def _generate_neutts(text: str, output_path: str, tts_config: Dict[str, Any]) ->
 
 
 # ===========================================================================
+# Provider: Gemini TTS
+# ===========================================================================
+def _generate_gemini_tts(text: str, output_path: str, tts_config: Dict[str, Any]) -> str:
+    """Generate audio using Google's Gemini speech-generation API.
+
+    Gemini returns base64-encoded PCM (signed 16-bit, 24 kHz, mono). This
+    function wraps the PCM in a WAV container natively (no ffmpeg needed
+    for the base case), then converts to the caller's requested extension
+    via ffmpeg if available. Mirrors the NeuTTS output handling.
+
+    Reference: https://ai.google.dev/gemini-api/docs/speech-generation
+    """
+    api_key = (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or ""
+    ).strip()
+    if not api_key:
+        raise ValueError(
+            "GEMINI_API_KEY (or GOOGLE_API_KEY) not set. "
+            "Get one at https://aistudio.google.com/apikey"
+        )
+
+    gm_config = tts_config.get("gemini", {})
+    model = gm_config.get("model", DEFAULT_GEMINI_TTS_MODEL)
+    voice = gm_config.get("voice", DEFAULT_GEMINI_TTS_VOICE)
+    base_url = gm_config.get("base_url", DEFAULT_GEMINI_TTS_BASE_URL).rstrip("/")
+
+    endpoint = f"{base_url}/models/{model}:generateContent"
+    payload = {
+        "contents": [{"parts": [{"text": text}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {"voiceName": voice},
+                },
+            },
+        },
+    }
+
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        endpoint,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            response_data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        err_body = exc.read().decode("utf-8", errors="ignore")[:500]
+        raise RuntimeError(f"Gemini TTS HTTP {exc.code}: {err_body}") from exc
+
+    try:
+        audio_part = response_data["candidates"][0]["content"]["parts"][0]
+        audio_b64 = audio_part["inlineData"]["data"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError(
+            f"Gemini TTS response missing audio payload: {str(response_data)[:300]}"
+        ) from exc
+
+    pcm_bytes = base64.b64decode(audio_b64)
+
+    # Write PCM as WAV natively — ffmpeg is only needed if the caller
+    # asked for a non-WAV extension (mp3/ogg).
+    wav_path = output_path
+    if not output_path.endswith(".wav"):
+        wav_path = output_path.rsplit(".", 1)[0] + ".wav"
+
+    with wave.open(wav_path, "wb") as wf:
+        wf.setnchannels(GEMINI_TTS_CHANNELS)
+        wf.setsampwidth(GEMINI_TTS_SAMPLE_WIDTH)
+        wf.setframerate(GEMINI_TTS_SAMPLE_RATE)
+        wf.writeframes(pcm_bytes)
+
+    if wav_path != output_path:
+        ffmpeg = shutil.which("ffmpeg")
+        if ffmpeg:
+            conv_cmd = [ffmpeg, "-i", wav_path, "-y", "-loglevel", "error", output_path]
+            subprocess.run(conv_cmd, check=True, timeout=30)
+            os.remove(wav_path)
+        else:
+            # No ffmpeg — keep WAV content but honor the caller's path.
+            os.rename(wav_path, output_path)
+
+    return output_path
+
+
+# ===========================================================================
 # Main tool function
 # ===========================================================================
 def text_to_speech_tool(
@@ -697,6 +802,10 @@ def text_to_speech_tool(
             logger.info("Generating speech with NeuTTS (local)...")
             _generate_neutts(text, file_str, tts_config)
 
+        elif provider == "gemini":
+            logger.info("Generating speech with Gemini TTS...")
+            _generate_gemini_tts(text, file_str, tts_config)
+
         else:
             # Default: Edge TTS (free), with NeuTTS as local fallback
             edge_available = True
@@ -736,7 +845,7 @@ def text_to_speech_tool(
         # Try Opus conversion for Telegram compatibility
         # Edge TTS outputs MP3, NeuTTS outputs WAV — both need ffmpeg conversion
         voice_compatible = False
-        if provider in ("edge", "neutts", "minimax", "xai") and not file_str.endswith(".ogg"):
+        if provider in ("edge", "neutts", "minimax", "xai", "gemini") and not file_str.endswith(".ogg"):
             opus_path = _convert_to_opus(file_str)
             if opus_path:
                 file_str = opus_path
@@ -817,6 +926,8 @@ def check_tts_requirements() -> bool:
             return True
     except ImportError:
         pass
+    if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+        return True
     if _check_neutts_available():
         return True
     return False

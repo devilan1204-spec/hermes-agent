@@ -26,7 +26,6 @@ model:
   #   "huggingface"  - Hugging Face Inference (requires: HF_TOKEN)
   #   "xiaomi"       - Xiaomi MiMo (requires: XIAOMI_API_KEY)
   #   "arcee"        - Arcee AI Trinity models (requires: ARCEEAI_API_KEY)
-  #   "ollama-cloud" - Ollama Cloud (requires: OLLAMA_API_KEY — https://ollama.com/settings)
   #   "kilocode"     - KiloCode gateway (requires: KILOCODE_API_KEY)
   #   "ai-gateway"   - Vercel AI Gateway (requires: AI_GATEWAY_API_KEY)
   #
@@ -37,6 +36,12 @@ model:
   #     provider: "lmstudio"
   #     base_url: "http://localhost:1234/v1"
   #   No API key needed — local servers typically ignore auth.
+  #
+  #   For Ollama Cloud (https://ollama.com/pricing):
+  #     provider: "custom"
+  #     base_url: "https://ollama.com/v1"
+  #   Set OLLAMA_API_KEY in .env — automatically picked up when base_url
+  #   points to ollama.com.
   #
   # Can also be overridden with --provider flag or HERMES_INFERENCE_PROVIDER env var.
   provider: "auto"
@@ -332,7 +337,6 @@ compression:
 #   "openrouter" - Force OpenRouter (requires OPENROUTER_API_KEY)
 #   "nous"       - Force Nous Portal (requires: hermes login)
 #   "gemini"      - Force Google AI Studio direct (requires: GOOGLE_API_KEY or GEMINI_API_KEY)
-#   "ollama-cloud" - Ollama Cloud (requires: OLLAMA_API_KEY)
 #   "codex"       - Force Codex OAuth (requires: hermes model → Codex).
 #                  Uses gpt-5.3-codex which supports vision.
 #   "main"       - Use your custom endpoint (OPENAI_BASE_URL + OPENAI_API_KEY).
@@ -593,7 +597,7 @@ platform_toolsets:
 #   skills_hub   - skill_hub (search/install/manage from online registries — user-driven only)
 #   moa          - mixture_of_agents  (requires OPENROUTER_API_KEY)
 #   todo         - todo (in-memory task planning, no deps)
-#   tts          - text_to_speech  (Edge TTS free, or ELEVENLABS/OPENAI/MINIMAX/MISTRAL key)
+#   tts          - text_to_speech  (Edge TTS free, or ELEVENLABS/OPENAI/XAI/MINIMAX/MISTRAL/GEMINI key)
 #   cronjob      - cronjob (create/list/update/pause/resume/run/remove scheduled tasks)
 #   rl           - rl_list_environments, rl_start_training, etc. (requires TINKER_API_KEY)
 #
@@ -622,7 +626,7 @@ platform_toolsets:
 #   todo         - Task planning and tracking for multi-step work
 #   memory       - Persistent memory across sessions (personal notes + user profile)
 #   session_search - Search and recall past conversations (FTS5 + Gemini Flash summarization)
-#   tts          - Text-to-speech (Edge TTS free, ElevenLabs, OpenAI, MiniMax, Mistral)
+#   tts          - Text-to-speech (Edge TTS free, ElevenLabs, OpenAI, xAI, MiniMax, Mistral, Gemini)
 #   cronjob      - Schedule and manage automated tasks (CLI-only)
 #   rl           - RL training tools (Tinker-Atropos)
 #

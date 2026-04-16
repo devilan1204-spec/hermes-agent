@@ -61,9 +61,7 @@ from hermes_cli.colors import Colors, color
 from hermes_cli.default_soul import DEFAULT_SOUL_MD
 
 
-# =============================================================================
 # Managed mode (NixOS declarative config)
-# =============================================================================
 
 _MANAGED_TRUE_VALUES = ("true", "1", "yes")
 _MANAGED_SYSTEM_NAMES = {
@@ -147,9 +145,7 @@ def managed_error(action: str = "modify configuration"):
     print(format_managed_message(action), file=sys.stderr)
 
 
-# =============================================================================
 # Container-aware CLI (NixOS container mode)
-# =============================================================================
 
 def get_container_exec_info() -> Optional[dict]:
     """Read container mode metadata from HERMES_HOME/.container-mode.
@@ -196,9 +192,7 @@ def get_container_exec_info() -> Optional[dict]:
     }
 
 
-# =============================================================================
 # Config paths
-# =============================================================================
 
 # Re-export from hermes_constants — canonical definition lives there.
 from hermes_constants import get_hermes_home  # noqa: F811,E402
@@ -335,9 +329,7 @@ def _ensure_hermes_home_managed(home: Path):
     _ensure_default_soul_md(home)
 
 
-# =============================================================================
 # Config loading/saving
-# =============================================================================
 
 DEFAULT_CONFIG = {
     "model": "",
@@ -570,7 +562,7 @@ DEFAULT_CONFIG = {
     
     # Text-to-speech configuration
     "tts": {
-        "provider": "edge",  # "edge" (free) | "elevenlabs" (premium) | "openai" | "xai" | "minimax" | "mistral" | "neutts" (local)
+        "provider": "edge",  # "edge" (free) | "elevenlabs" (premium) | "openai" | "xai" | "minimax" | "mistral" | "neutts" (local) | "gemini"
         "edge": {
             "voice": "en-US-AriaNeural",
             # Popular: AriaNeural, JennyNeural, AndrewNeural, BrianNeural, SoniaNeural
@@ -599,6 +591,15 @@ DEFAULT_CONFIG = {
             "ref_text": "",   # Path to reference voice transcript (empty = bundled default)
             "model": "neuphonic/neutts-air-q4-gguf",  # HuggingFace model repo
             "device": "cpu",  # cpu, cuda, or mps
+        },
+        "gemini": {
+            "model": "gemini-2.5-flash-preview-tts",
+            "voice": "Kore",
+            # 30 prebuilt voices: Zephyr, Puck, Charon, Kore, Fenrir, Leda,
+            # Orus, Aoede, Callirrhoe, Autonoe, Enceladus, Iapetus, Umbriel,
+            # Algieba, Despina, Erinome, Algenib, Rasalgethi, Laomedeia,
+            # Achernar, Alnilam, Schedar, Gacrux, Pulcherrima, Achird,
+            # Zubenelgenubi, Vindemiatrix, Sadachbia, Sadaltager, Sulafat
         },
     },
     
@@ -781,9 +782,7 @@ DEFAULT_CONFIG = {
     "_config_version": 18,
 }
 
-# =============================================================================
 # Config Migration System
-# =============================================================================
 
 # Track which env vars were introduced in each config version.
 # Migration only mentions vars new since the user's previous version.
@@ -1901,9 +1900,7 @@ def check_config_version() -> Tuple[int, int]:
     return current, latest
 
 
-# =============================================================================
 # Config structure validation
-# =============================================================================
 
 # Fields that are valid at root level of config.yaml
 _KNOWN_ROOT_KEYS = {
@@ -3167,9 +3164,7 @@ def get_env_value(key: str) -> Optional[str]:
     return env_vars.get(key)
 
 
-# =============================================================================
 # Config display
-# =============================================================================
 
 def redact_key(key: str) -> str:
     """Redact an API key for display."""
@@ -3461,9 +3456,7 @@ def set_config_value(key: str, value: str):
     print(f"✓ Set {key} = {value} in {config_path}")
 
 
-# =============================================================================
 # Command handler
-# =============================================================================
 
 def config_command(args):
     """Handle config subcommands."""
