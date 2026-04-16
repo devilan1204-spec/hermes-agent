@@ -186,6 +186,7 @@ AUTHOR_MAP = {
     "danieldoderlein@users.noreply.github.com": "danieldoderlein",
     "lrawnsley@users.noreply.github.com": "lrawnsley",
     "taeuk178@users.noreply.github.com": "taeuk178",
+    "zhonghui5207@users.noreply.github.com": "zhonghui5207",
     "ogzerber@users.noreply.github.com": "ogzerber",
     "cola-runner@users.noreply.github.com": "cola-runner",
     "ygd58@users.noreply.github.com": "ygd58",
