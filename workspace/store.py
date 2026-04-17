@@ -1,0 +1,273 @@
+"""SQLite FTS5 workspace store.
+
+Manages the workspace.sqlite database: schema creation, file/chunk CRUD,
+and BM25 full-text search.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+from typing import Any
+
+from workspace.constants import get_index_db_path, get_index_dir
+from workspace.types import ChunkRecord, FileRecord, SearchResult
+
+_SCHEMA_VERSION = "1"
+
+_SCHEMA_SQL = """\
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS files (
+    abs_path         TEXT PRIMARY KEY,
+    root_path        TEXT NOT NULL,
+    content_hash     TEXT NOT NULL,
+    config_signature TEXT NOT NULL,
+    size_bytes       INTEGER NOT NULL,
+    modified_at      TEXT NOT NULL,
+    indexed_at       TEXT NOT NULL,
+    chunk_count      INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    chunk_id    TEXT PRIMARY KEY,
+    abs_path    TEXT NOT NULL REFERENCES files(abs_path) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content     TEXT NOT NULL,
+    token_count INTEGER NOT NULL,
+    start_line  INTEGER NOT NULL,
+    end_line    INTEGER NOT NULL,
+    start_byte  INTEGER NOT NULL,
+    end_byte    INTEGER NOT NULL,
+    section     TEXT,
+    kind        TEXT NOT NULL,
+    UNIQUE(abs_path, chunk_index)
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    chunk_id UNINDEXED,
+    abs_path UNINDEXED,
+    content,
+    section,
+    tokenize = 'porter unicode61'
+);
+
+CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+    INSERT INTO chunks_fts(chunk_id, abs_path, content, section)
+    VALUES (new.chunk_id, new.abs_path, new.content, new.section);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+    DELETE FROM chunks_fts WHERE chunk_id = old.chunk_id;
+END;
+"""
+
+
+class SQLiteFTS5Store:
+    """Concrete FTS5-based workspace index store."""
+
+    def __init__(self, workspace_root: Path) -> None:
+        self._db_path = get_index_db_path(workspace_root)
+        self._conn: sqlite3.Connection | None = None
+
+    def open(self) -> None:
+        index_dir = get_index_dir(self._db_path.parent.parent)
+        index_dir.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(self._db_path))
+        self._conn.row_factory = sqlite3.Row
+        self._init_schema()
+
+    def close(self) -> None:
+        if self._conn:
+            self._conn.close()
+            self._conn = None
+
+    def __enter__(self) -> SQLiteFTS5Store:
+        self.open()
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        if self._conn is None:
+            raise RuntimeError("Store not open — call open() or use as context manager")
+        return self._conn
+
+    def _init_schema(self) -> None:
+        cur = self.conn.cursor()
+        cur.executescript(_SCHEMA_SQL)
+        existing = cur.execute(
+            "SELECT value FROM meta WHERE key = 'schema_version'"
+        ).fetchone()
+        if existing is None:
+            cur.execute(
+                "INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
+                (_SCHEMA_VERSION,),
+            )
+        self.conn.commit()
+
+    def get_file_record(self, abs_path: str) -> FileRecord | None:
+        row = self.conn.execute(
+            "SELECT * FROM files WHERE abs_path = ?", (abs_path,)
+        ).fetchone()
+        if row is None:
+            return None
+        return FileRecord(
+            abs_path=row["abs_path"],
+            root_path=row["root_path"],
+            content_hash=row["content_hash"],
+            config_signature=row["config_signature"],
+            size_bytes=row["size_bytes"],
+            modified_at=row["modified_at"],
+            indexed_at=row["indexed_at"],
+            chunk_count=row["chunk_count"],
+        )
+
+    def upsert_file(self, record: FileRecord) -> None:
+        self.conn.execute(
+            """INSERT INTO files (abs_path, root_path, content_hash, config_signature,
+                    size_bytes, modified_at, indexed_at, chunk_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(abs_path) DO UPDATE SET
+                    root_path = excluded.root_path,
+                    content_hash = excluded.content_hash,
+                    config_signature = excluded.config_signature,
+                    size_bytes = excluded.size_bytes,
+                    modified_at = excluded.modified_at,
+                    indexed_at = excluded.indexed_at,
+                    chunk_count = excluded.chunk_count""",
+            (
+                record.abs_path,
+                record.root_path,
+                record.content_hash,
+                record.config_signature,
+                record.size_bytes,
+                record.modified_at,
+                record.indexed_at,
+                record.chunk_count,
+            ),
+        )
+
+    def delete_file(self, abs_path: str) -> None:
+        self.conn.execute("DELETE FROM files WHERE abs_path = ?", (abs_path,))
+
+    def insert_chunks(self, chunks: list[ChunkRecord]) -> None:
+        self.conn.executemany(
+            """INSERT INTO chunks (chunk_id, abs_path, chunk_index, content,
+                    token_count, start_line, end_line, start_byte, end_byte,
+                    section, kind)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    c.chunk_id, c.abs_path, c.chunk_index, c.content,
+                    c.token_count, c.start_line, c.end_line,
+                    c.start_byte, c.end_byte, c.section, c.kind,
+                )
+                for c in chunks
+            ],
+        )
+
+    def delete_chunks_for_file(self, abs_path: str) -> None:
+        self.conn.execute("DELETE FROM chunks WHERE abs_path = ?", (abs_path,))
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        path_prefix: str | None = None,
+        file_glob: str | None = None,
+    ) -> list[SearchResult]:
+        if not query.strip():
+            return []
+
+        fts_query = _build_fts_query(query)
+        if not fts_query:
+            return []
+
+        sql = """
+            SELECT
+                c.abs_path,
+                c.start_line,
+                c.end_line,
+                c.section,
+                c.chunk_index,
+                rank AS score,
+                c.token_count,
+                f.modified_at,
+                c.content
+            FROM chunks_fts
+            JOIN chunks c ON chunks_fts.chunk_id = c.chunk_id
+            JOIN files f ON c.abs_path = f.abs_path
+            WHERE chunks_fts MATCH ?
+        """
+        params: list[Any] = [fts_query]
+
+        if path_prefix:
+            sql += " AND c.abs_path LIKE ?"
+            params.append(path_prefix + "%")
+
+        if file_glob:
+            sql += " AND c.abs_path GLOB ?"
+            params.append("*" + file_glob if not file_glob.startswith("*") else file_glob)
+
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(limit)
+
+        rows = self.conn.execute(sql, params).fetchall()
+        return [
+            SearchResult(
+                path=row[0],
+                line_start=row[1],
+                line_end=row[2],
+                section=row[3],
+                chunk_index=row[4],
+                score=row[5],
+                tokens=row[6],
+                modified=row[7],
+                content=row[8],
+            )
+            for row in rows
+        ]
+
+    def all_indexed_paths(self) -> set[str]:
+        rows = self.conn.execute("SELECT abs_path FROM files").fetchall()
+        return {row[0] for row in rows}
+
+    def status(self) -> dict[str, Any]:
+        file_count = self.conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+        chunk_count = self.conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        db_size = self._db_path.stat().st_size if self._db_path.exists() else 0
+        return {
+            "file_count": file_count,
+            "chunk_count": chunk_count,
+            "db_size_bytes": db_size,
+            "db_path": str(self._db_path),
+        }
+
+    def commit(self) -> None:
+        self.conn.commit()
+
+
+def _build_fts_query(raw_query: str) -> str:
+    """Build an FTS5 query from raw user input.
+
+    Extracts alphanumeric tokens of length >= 2 and joins them with OR
+    for broad matching.  Porter stemmer handles morphological variants.
+    """
+    tokens = []
+    for word in raw_query.split():
+        cleaned = "".join(c for c in word if c.isalnum())
+        if len(cleaned) >= 2:
+            tokens.append(cleaned)
+    if not tokens:
+        return ""
+    return " OR ".join(tokens)
