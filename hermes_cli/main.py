@@ -6370,29 +6370,50 @@ Examples:
         help="Workspace indexing and search",
         description="Manage workspace roots, index files, and search with FTS5",
     )
+    workspace_flag_parent = argparse.ArgumentParser(add_help=False)
+    workspace_flag_parent.add_argument(
+        "--human",
+        action="store_true",
+        help="Human-readable Rich output instead of JSON",
+    )
     workspace_subparsers = workspace_parser.add_subparsers(dest="workspace_action")
 
     # workspace roots
-    roots_parser = workspace_subparsers.add_parser("roots", help="Manage workspace roots")
+    roots_parser = workspace_subparsers.add_parser(
+        "roots",
+        help="Manage workspace roots",
+        parents=[workspace_flag_parent],
+    )
     roots_sub = roots_parser.add_subparsers(dest="roots_action")
-    roots_sub.add_parser("list", help="List configured workspace roots")
-    roots_add = roots_sub.add_parser("add", help="Add a workspace root")
+    roots_sub.add_parser("list", help="List configured workspace roots", parents=[workspace_flag_parent])
+    roots_add = roots_sub.add_parser("add", help="Add a workspace root", parents=[workspace_flag_parent])
     roots_add.add_argument("path", help="Directory path to add as workspace root")
     roots_add.add_argument("--recursive", action="store_true", help="Recursively index subdirectories")
-    roots_rm = roots_sub.add_parser("remove", help="Remove a workspace root")
+    roots_rm = roots_sub.add_parser("remove", help="Remove a workspace root", parents=[workspace_flag_parent])
     roots_rm.add_argument("path", help="Directory path to remove")
 
     # workspace index
-    workspace_subparsers.add_parser("index", help="Index all workspace roots into FTS5")
+    workspace_subparsers.add_parser(
+        "index",
+        help="Index all workspace roots into FTS5",
+        parents=[workspace_flag_parent],
+    )
 
     # workspace search
-    ws_search = workspace_subparsers.add_parser("search", help="Search indexed workspace files")
+    ws_search = workspace_subparsers.add_parser(
+        "search",
+        help="Search indexed workspace files",
+        parents=[workspace_flag_parent],
+    )
     ws_search.add_argument("query", help="Search query")
     ws_search.add_argument("--limit", type=int, help="Max results")
     ws_search.add_argument("--path", help="Filter by absolute path prefix")
     ws_search.add_argument("--glob", help="Filter by filename glob pattern")
-
-    workspace_parser.add_argument("--human", action="store_true", help="Human-readable Rich output instead of JSON")
+    workspace_parser.add_argument(
+        "--human",
+        action="store_true",
+        help="Human-readable Rich output instead of JSON",
+    )
 
     def cmd_workspace(args):
         from workspace.commands import workspace_command

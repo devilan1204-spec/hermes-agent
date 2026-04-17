@@ -14,7 +14,7 @@ from typing import Any
 from workspace.constants import get_index_db_path, get_index_dir
 from workspace.types import ChunkRecord, FileRecord, SearchResult
 
-_SCHEMA_VERSION = "1"
+_SCHEMA_VERSION = "2"
 
 _SCHEMA_SQL = """\
 PRAGMA journal_mode = WAL;
@@ -37,31 +37,38 @@ CREATE TABLE IF NOT EXISTS files (
 );
 
 CREATE TABLE IF NOT EXISTS chunks (
-    chunk_id    TEXT PRIMARY KEY,
-    abs_path    TEXT NOT NULL REFERENCES files(abs_path) ON DELETE CASCADE,
-    chunk_index INTEGER NOT NULL,
-    content     TEXT NOT NULL,
-    token_count INTEGER NOT NULL,
-    start_line  INTEGER NOT NULL,
-    end_line    INTEGER NOT NULL,
-    start_char  INTEGER NOT NULL,
-    end_char    INTEGER NOT NULL,
-    section     TEXT,
-    kind        TEXT NOT NULL,
+    chunk_id       TEXT PRIMARY KEY,
+    abs_path       TEXT NOT NULL REFERENCES files(abs_path) ON DELETE CASCADE,
+    chunk_index    INTEGER NOT NULL,
+    content        TEXT NOT NULL,
+    context        TEXT,
+    token_count    INTEGER NOT NULL,
+    start_line     INTEGER NOT NULL,
+    end_line       INTEGER NOT NULL,
+    start_char     INTEGER NOT NULL,
+    end_char       INTEGER NOT NULL,
+    section        TEXT,
+    kind           TEXT NOT NULL,
+    chunk_metadata TEXT,
     UNIQUE(abs_path, chunk_index)
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     chunk_id UNINDEXED,
     abs_path UNINDEXED,
-    content,
+    retrieval_text,
     section,
     tokenize = 'porter unicode61'
 );
 
 CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
-    INSERT INTO chunks_fts(chunk_id, abs_path, content, section)
-    VALUES (new.chunk_id, new.abs_path, new.content, new.section);
+    INSERT INTO chunks_fts(chunk_id, abs_path, retrieval_text, section)
+    VALUES (
+        new.chunk_id,
+        new.abs_path,
+        new.content || ' ' || COALESCE(new.context, ''),
+        new.section
+    );
 END;
 
 CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
@@ -104,15 +111,29 @@ class SQLiteFTS5Store:
 
     def _init_schema(self) -> None:
         cur = self.conn.cursor()
-        cur.executescript(_SCHEMA_SQL)
-        existing = cur.execute(
-            "SELECT value FROM meta WHERE key = 'schema_version'"
-        ).fetchone()
-        if existing is None:
-            cur.execute(
-                "INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
-                (_SCHEMA_VERSION,),
+        try:
+            existing = cur.execute(
+                "SELECT value FROM meta WHERE key = 'schema_version'"
+            ).fetchone()
+        except sqlite3.OperationalError:
+            existing = None
+
+        if existing is not None and existing[0] != _SCHEMA_VERSION:
+            cur.executescript(
+                "DROP TABLE IF EXISTS chunks_fts;"
+                "DROP TABLE IF EXISTS chunks;"
+                "DROP TABLE IF EXISTS files;"
+                "DROP TABLE IF EXISTS meta;"
+                "DROP TRIGGER IF EXISTS chunks_ai;"
+                "DROP TRIGGER IF EXISTS chunks_ad;"
             )
+
+        cur.executescript(_SCHEMA_SQL)
+
+        cur.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
+            (_SCHEMA_VERSION,),
+        )
         self.conn.commit()
 
     def get_file_record(self, abs_path: str) -> FileRecord | None:
@@ -163,14 +184,15 @@ class SQLiteFTS5Store:
     def insert_chunks(self, chunks: list[ChunkRecord]) -> None:
         self.conn.executemany(
             """INSERT INTO chunks (chunk_id, abs_path, chunk_index, content,
-                    token_count, start_line, end_line, start_char, end_char,
-                    section, kind)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    context, token_count, start_line, end_line, start_char,
+                    end_char, section, kind, chunk_metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 (
                     c.chunk_id, c.abs_path, c.chunk_index, c.content,
-                    c.token_count, c.start_line, c.end_line,
+                    c.context, c.token_count, c.start_line, c.end_line,
                     c.start_char, c.end_char, c.section, c.kind,
+                    c.chunk_metadata,
                 )
                 for c in chunks
             ],

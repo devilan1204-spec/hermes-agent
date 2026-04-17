@@ -40,12 +40,21 @@ WORKSPACE_CONFIG_DEFAULTS = {
     "path": "",
 }
 
+VALID_STRATEGIES = frozenset({"standard", "semantic", "neural"})
+
+STRATEGY_DEFAULTS: dict[str, dict[str, int]] = {
+    "standard": {"threshold": 16_000, "overlap": 32},
+    "semantic": {"threshold": 12_000, "overlap": 48},
+    "neural": {"threshold": 8_000, "overlap": 64},
+}
+
 KNOWLEDGEBASE_CONFIG_DEFAULTS = {
     "roots": [],
     "chunking": {
+        "strategy": "standard",
         "chunk_size": 512,
-        "overlap": 80,
-        "threshold": 16_000,
+        "overlap": None,
+        "threshold": None,
     },
     "indexing": {
         "max_file_mb": 10,
@@ -54,6 +63,11 @@ KNOWLEDGEBASE_CONFIG_DEFAULTS = {
         "default_limit": 20,
     },
 }
+
+CHUNKING_PLAN_VERSION = "v1"
+
+PINNED_SEMANTIC_MODEL = "minishlab/potion-base-32M"
+PINNED_NEURAL_MODEL = "mirth/chonky_modernbert_base_1"
 
 INDEX_DIR_NAME = ".index"
 INDEX_DB_NAME = "workspace.sqlite"

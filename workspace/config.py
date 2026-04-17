@@ -14,6 +14,8 @@ from typing import Any
 
 from workspace.constants import (
     KNOWLEDGEBASE_CONFIG_DEFAULTS,
+    STRATEGY_DEFAULTS,
+    VALID_STRATEGIES,
     WORKSPACE_CONFIG_DEFAULTS,
     get_workspace_root,
 )
@@ -22,8 +24,9 @@ from workspace.types import WorkspaceRoot
 
 @dataclass(frozen=True)
 class ChunkingConfig:
+    strategy: str = "standard"
     chunk_size: int = 512
-    overlap: int = 80
+    overlap: int = 32
     threshold: int = 16_000
 
 
@@ -56,9 +59,24 @@ class KnowledgebaseConfig:
         ix = merged.get("indexing", {})
         sr = merged.get("search", {})
 
+        strategy = ch.get("strategy", "standard")
+        if strategy not in VALID_STRATEGIES:
+            raise ValueError(
+                f"Unknown chunking strategy '{strategy}'. "
+                f"Valid: {', '.join(sorted(VALID_STRATEGIES))}"
+            )
+
+        strat_defaults = STRATEGY_DEFAULTS[strategy]
         chunk_size = ch.get("chunk_size", 512)
-        overlap = ch.get("overlap", 80)
-        threshold = ch.get("threshold", 16_000)
+        raw_overlap = ch.get("overlap")
+        raw_threshold = ch.get("threshold")
+        if raw_overlap is None:
+            # Strategy defaults should remain valid even when users lower chunk_size.
+            # Clamp the default overlap to stay strictly below chunk_size.
+            overlap = min(strat_defaults["overlap"], max(0, chunk_size - 1))
+        else:
+            overlap = raw_overlap
+        threshold = raw_threshold if raw_threshold is not None else strat_defaults["threshold"]
         max_file_mb = ix.get("max_file_mb", 10)
         default_limit = sr.get("default_limit", 20)
 
@@ -78,6 +96,7 @@ class KnowledgebaseConfig:
         return cls(
             roots=roots,
             chunking=ChunkingConfig(
+                strategy=strategy,
                 chunk_size=chunk_size,
                 overlap=overlap,
                 threshold=threshold,

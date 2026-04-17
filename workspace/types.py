@@ -41,6 +41,8 @@ class ChunkRecord:
     end_char: int
     section: str | None = None
     kind: str = "text"
+    context: str | None = None
+    chunk_metadata: str | None = None
 
 
 @dataclass(frozen=True)

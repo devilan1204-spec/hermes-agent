@@ -24,15 +24,20 @@ def workspace_command(args: Namespace) -> None:
 
     human = getattr(args, "human", False)
 
-    if action == "roots":
-        _handle_roots(args, human)
-    elif action == "index":
-        _handle_index(args, human)
-    elif action == "search":
-        _handle_search(args, human)
-    else:
-        print(json.dumps({"error": f"Unknown workspace action: {action}"}))
-        sys.exit(1)
+    try:
+        if action == "roots":
+            _handle_roots(args, human)
+        elif action == "index":
+            _handle_index(args, human)
+        elif action == "search":
+            _handle_search(args, human)
+        else:
+            print(json.dumps({"error": f"Unknown workspace action: {action}"}))
+            sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        _fatal(exc, human)
 
 
 def _handle_roots(args: Namespace, human: bool) -> None:
@@ -140,6 +145,10 @@ def _handle_search(args: Namespace, human: bool) -> None:
     from workspace.search import search_workspace
 
     config = load_workspace_config()
+    if not config.enabled:
+        _error("Workspace is disabled (workspace.enabled = false)")
+        return
+
     query = args.query
     limit = getattr(args, "limit", None)
     raw_path = getattr(args, "path", None)
@@ -207,4 +216,15 @@ def _print_human_results(results: list) -> None:
 
 def _error(msg: str) -> None:
     print(json.dumps({"error": msg}), file=sys.stderr)
+    sys.exit(1)
+
+
+def _fatal(exc: Exception, human: bool) -> None:
+    if human:
+        print(f"Error: {exc}", file=sys.stderr)
+    else:
+        print(
+            json.dumps({"error": str(exc), "error_type": type(exc).__name__}),
+            file=sys.stderr,
+        )
     sys.exit(1)

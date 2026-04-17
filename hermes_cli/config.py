@@ -786,9 +786,8 @@ DEFAULT_CONFIG = {
     "knowledgebase": {
         "roots": [],      # [{path: "/abs/path", recursive: false}]
         "chunking": {
-            "chunk_size": 512,      # words per chunk
-            "overlap": 80,          # word overlap between chunks
-            "threshold": 16_000,    # words — files under this stored as single row
+            "strategy": "standard",  # "standard" | "semantic" | "neural"
+            "chunk_size": 512,       # words per chunk
         },
         "indexing": {
             "max_file_mb": 10,      # skip files over this size

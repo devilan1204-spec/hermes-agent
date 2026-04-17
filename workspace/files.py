@@ -12,6 +12,7 @@ Ignore file precedence per root (first match wins):
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
@@ -27,10 +28,14 @@ from workspace.types import WorkspaceRoot
 log = logging.getLogger(__name__)
 
 
-def iter_workspace_files(
-    config: WorkspaceConfig,
-) -> Iterator[tuple[str, Path]]:
-    """Yield (root_path, file_path) for every indexable file across all roots."""
+@dataclass(frozen=True)
+class DiscoveryResult:
+    files: list[tuple[str, Path]]
+    complete: bool
+
+
+def discover_workspace_files(config: WorkspaceConfig) -> DiscoveryResult:
+    """Collect workspace files plus whether discovery completed across all roots."""
     max_bytes = config.knowledgebase.indexing.max_file_mb * 1024 * 1024
 
     all_roots = [
@@ -38,20 +43,27 @@ def iter_workspace_files(
         *config.knowledgebase.roots,
     ]
 
+    files: list[tuple[str, Path]] = []
+    complete = True
+
     for root_spec in all_roots:
         root = Path(root_spec.path).expanduser().resolve()
         if not root.is_dir():
             log.warning("Workspace root does not exist: %s", root)
+            complete = False
             continue
 
         ignore_spec = _load_ignore_spec(root)
+        iterator = root.rglob("*") if root_spec.recursive else root.iterdir()
 
-        if root_spec.recursive:
-            it = root.rglob("*")
-        else:
-            it = root.iterdir()
+        try:
+            paths = sorted(iterator)
+        except OSError:
+            log.warning("Failed to enumerate workspace root: %s", root, exc_info=True)
+            complete = False
+            continue
 
-        for p in sorted(it):
+        for p in paths:
             if not p.is_file():
                 continue
             if p.suffix.lower() in BINARY_SUFFIXES:
@@ -68,7 +80,16 @@ def iter_workspace_files(
                 continue
             if ignore_spec is not None and _is_ignored(p, root, ignore_spec):
                 continue
-            yield str(root), p
+            files.append((str(root), p))
+
+    return DiscoveryResult(files=files, complete=complete)
+
+
+def iter_workspace_files(
+    config: WorkspaceConfig,
+) -> Iterator[tuple[str, Path]]:
+    """Yield (root_path, file_path) for every indexable file across all roots."""
+    yield from discover_workspace_files(config).files
 
 
 def seed_hermesignore(workspace_root: Path) -> None:
