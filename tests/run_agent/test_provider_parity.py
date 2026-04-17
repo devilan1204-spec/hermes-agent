@@ -60,6 +60,7 @@ def _make_agent(monkeypatch, provider, api_mode="chat_completions", base_url="ht
     )
     if model:
         kwargs["model"] = model
+    base_url="https://openrouter.ai/api/v1",
     return AIAgent(**kwargs)
 
 
