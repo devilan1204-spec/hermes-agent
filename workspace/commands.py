@@ -19,7 +19,8 @@ from typing import Any
 def workspace_command(args: Namespace) -> None:
     action = getattr(args, "workspace_action", None)
     if action is None:
-        print(json.dumps({"error": "No workspace subcommand. Use: roots, index, search"}))
+        msg = "No workspace subcommand. Use: roots, index, search"
+        print(json.dumps({"error": msg}))
         sys.exit(1)
 
     human = getattr(args, "human", False)
@@ -89,7 +90,14 @@ def _handle_index(args: Namespace, human: bool) -> None:
     progress_fn = None
     if human:
         try:
-            from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
+            from rich.progress import (
+                BarColumn,
+                MofNCompleteColumn,
+                Progress,
+                SpinnerColumn,
+                TextColumn,
+            )
+
             progress_ctx = Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -101,17 +109,26 @@ def _handle_index(args: Namespace, human: bool) -> None:
             task_id = progress_ctx.add_task("Indexing...", total=None)
 
             def _rich_progress(current: int, total: int, path: str) -> None:
-                progress_ctx.update(task_id, total=total, completed=current,
-                                    description=f"[{current}/{total}] {Path(path).name}")
+                desc = f"[{current}/{total}] {Path(path).name}"
+                progress_ctx.update(
+                    task_id,
+                    total=total,
+                    completed=current,
+                    description=desc,
+                )
 
             progress_fn = _rich_progress
         except ImportError:
+
             def _simple_progress(current: int, total: int, path: str) -> None:
                 print(f"  [{current}/{total}] {Path(path).name}", file=sys.stderr)
+
             progress_fn = _simple_progress
     else:
+
         def _stderr_progress(current: int, total: int, path: str) -> None:
             print(f"Indexing [{current}/{total}] {Path(path).name}", file=sys.stderr)
+
         progress_fn = _stderr_progress
 
     try:
@@ -124,12 +141,14 @@ def _handle_index(args: Namespace, human: bool) -> None:
                 pass
 
     if human:
-        print(f"\nIndexed {summary.files_indexed} files "
-              f"({summary.chunks_created} chunks), "
-              f"skipped {summary.files_skipped}, "
-              f"errored {summary.files_errored}, "
-              f"pruned {summary.files_pruned} stale. "
-              f"Took {summary.duration_seconds:.1f}s.")
+        print(
+            f"\nIndexed {summary.files_indexed} files "
+            f"({summary.chunks_created} chunks), "
+            f"skipped {summary.files_skipped}, "
+            f"errored {summary.files_errored}, "
+            f"pruned {summary.files_pruned} stale. "
+            f"Took {summary.duration_seconds:.1f}s."
+        )
         if summary.errors:
             print("\nErrors:")
             for err in summary.errors:
@@ -156,7 +175,11 @@ def _handle_search(args: Namespace, human: bool) -> None:
     file_glob = getattr(args, "glob", None)
 
     results = search_workspace(
-        query, config, limit=limit, path_prefix=path_prefix, file_glob=file_glob,
+        query,
+        config,
+        limit=limit,
+        path_prefix=path_prefix,
+        file_glob=file_glob,
     )
 
     if human:

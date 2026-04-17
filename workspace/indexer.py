@@ -14,6 +14,7 @@ All markdown files go through MarkdownChef first regardless of strategy.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import importlib
 import json
@@ -37,9 +38,11 @@ from workspace.constants import (
 )
 from workspace.files import discover_workspace_files, seed_hermesignore
 from workspace.store import SQLiteFTS5Store
-from workspace.types import ChunkRecord, FileRecord, IndexError, IndexSummary
+from workspace.types import ChunkRecord, FileRecord, IndexingError, IndexSummary
 
 log = logging.getLogger(__name__)
+
+_replace = dataclasses.replace
 
 ProgressCallback = Callable[[int, int, str], None]
 
@@ -92,7 +95,7 @@ def index_workspace(
     files_skipped = 0
     files_errored = 0
     chunks_created = 0
-    errors: list[IndexError] = []
+    errors: list[IndexingError] = []
 
     discovery = discover_workspace_files(config)
     all_files = discovery.files
@@ -124,11 +127,15 @@ def index_workspace(
                 text = _read_file_text(file_path)
                 if text is None:
                     files_errored += 1
-                    _append_error(errors, IndexError(
-                        path=abs_path, stage="read",
-                        error_type="EncodingError",
-                        message="Could not decode file with sufficient confidence",
-                    ))
+                    _append_error(
+                        errors,
+                        IndexingError(
+                            path=abs_path,
+                            stage="read",
+                            error_type="EncodingError",
+                            message="Could not decode file with sufficient confidence",
+                        ),
+                    )
                     continue
 
                 if not text.strip():
@@ -145,7 +152,9 @@ def index_workspace(
                     content_hash=content_hash,
                     config_signature=config_sig,
                     size_bytes=stat.st_size,
-                    modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    modified_at=datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.utc
+                    ).isoformat(),
                     indexed_at=datetime.now(tz=timezone.utc).isoformat(),
                     chunk_count=len(chunk_records),
                 )
@@ -168,17 +177,27 @@ def index_workspace(
             except Exception as exc:
                 if write_started:
                     try:
-                        store.conn.execute("ROLLBACK TO SAVEPOINT workspace_file_update")
+                        store.conn.execute(
+                            "ROLLBACK TO SAVEPOINT workspace_file_update"
+                        )
                         store.conn.execute("RELEASE SAVEPOINT workspace_file_update")
                     except Exception:
-                        log.warning("Failed to roll back workspace update for %s", abs_path, exc_info=True)
+                        log.warning(
+                            "Failed to roll back workspace update for %s",
+                            abs_path,
+                            exc_info=True,
+                        )
                 files_errored += 1
                 stage = "discover" if isinstance(exc, FileNotFoundError) else "store"
-                _append_error(errors, IndexError(
-                    path=abs_path, stage=stage,
-                    error_type=type(exc).__name__,
-                    message=str(exc),
-                ))
+                _append_error(
+                    errors,
+                    IndexingError(
+                        path=abs_path,
+                        stage=stage,
+                        error_type=type(exc).__name__,
+                        message=str(exc),
+                    ),
+                )
                 log.warning("Failed to index %s: %s", abs_path, exc, exc_info=True)
                 continue
 
@@ -186,7 +205,9 @@ def index_workspace(
             pruned = _prune_stale(store, disk_paths)
         else:
             pruned = 0
-            log.warning("Workspace discovery was incomplete; skipping stale prune for this run")
+            log.warning(
+                "Workspace discovery was incomplete; skipping stale prune for this run"
+            )
         store.commit()
 
     elapsed = time.monotonic() - start
@@ -202,7 +223,7 @@ def index_workspace(
     )
 
 
-def _append_error(errors: list[IndexError], error: IndexError) -> None:
+def _append_error(errors: list[IndexingError], error: IndexingError) -> None:
     if len(errors) < _MAX_ERRORS:
         errors.append(error)
 
@@ -215,6 +236,7 @@ def _read_file_text(path: Path) -> str | None:
         pass
     try:
         from charset_normalizer import from_bytes
+
         result = from_bytes(raw).best()
         if result is None or result.encoding is None:
             return None
@@ -239,6 +261,7 @@ def ensure_workspace_dirs(config: WorkspaceConfig) -> None:
 # Chunker cache — lazy-init, one per index run
 # ---------------------------------------------------------------------------
 
+
 class _ChunkerCache:
     def __init__(self, config: WorkspaceConfig) -> None:
         self._config = config
@@ -254,9 +277,14 @@ class _ChunkerCache:
         return self._config.knowledgebase.chunking.strategy
 
     @property
+    def overlap(self) -> int:
+        return self._config.knowledgebase.chunking.overlap
+
+    @property
     def chef(self):
         if self._chef is None:
             from chonkie import MarkdownChef
+
             self._chef = MarkdownChef(tokenizer="word")
         return self._chef
 
@@ -266,6 +294,7 @@ class _ChunkerCache:
             ch = self._config.knowledgebase.chunking
             if ch.strategy == "semantic":
                 from chonkie import SemanticChunker
+
                 self._prose = SemanticChunker(
                     embedding_model=PINNED_SEMANTIC_MODEL,
                     threshold=0.8,
@@ -278,12 +307,14 @@ class _ChunkerCache:
                 )
             elif ch.strategy == "neural":
                 from chonkie import NeuralChunker
+
                 self._prose = NeuralChunker(
                     model=PINNED_NEURAL_MODEL,
                     min_characters_per_chunk=10,
                 )
             else:
                 from chonkie import RecursiveChunker
+
                 self._prose = RecursiveChunker(
                     tokenizer="word",
                     chunk_size=ch.chunk_size,
@@ -294,6 +325,7 @@ class _ChunkerCache:
     def markdown_recipe(self):
         if self._markdown_recipe is None:
             from chonkie import RecursiveChunker
+
             ch = self._config.knowledgebase.chunking
             self._markdown_recipe = RecursiveChunker.from_recipe(
                 "markdown",
@@ -306,6 +338,7 @@ class _ChunkerCache:
     def code(self):
         if self._code is None:
             from chonkie import CodeChunker
+
             ch = self._config.knowledgebase.chunking
             self._code = CodeChunker(
                 tokenizer="word",
@@ -318,6 +351,7 @@ class _ChunkerCache:
     def default(self):
         if self._default is None:
             from chonkie import RecursiveChunker
+
             ch = self._config.knowledgebase.chunking
             self._default = RecursiveChunker(
                 tokenizer="word",
@@ -329,6 +363,7 @@ class _ChunkerCache:
     def overlap_refinery(self):
         if self._overlap_refinery is None:
             from chonkie import OverlapRefinery
+
             ch = self._config.knowledgebase.chunking
             self._overlap_refinery = OverlapRefinery(
                 tokenizer="word",
@@ -344,27 +379,32 @@ class _ChunkerCache:
 # File processing pipeline
 # ---------------------------------------------------------------------------
 
+
 def _process_file(
-    abs_path: str, text: str, suffix: str,
-    config: WorkspaceConfig, chunkers: _ChunkerCache,
+    abs_path: str,
+    text: str,
+    suffix: str,
+    config: WorkspaceConfig,
+    chunkers: _ChunkerCache,
 ) -> list[ChunkRecord]:
     ch = config.knowledgebase.chunking
     word_count = len(text.split())
 
     if word_count <= ch.threshold:
-        return _single_chunk(abs_path, text, suffix)
+        return _single_chunk(abs_path, text, suffix, word_count)
 
     if suffix in MARKDOWN_SUFFIXES:
         return _process_markdown(abs_path, text, config, chunkers)
     elif suffix in CODE_SUFFIXES:
-        return _process_code(abs_path, text, suffix, config, chunkers)
+        return _process_code(abs_path, text, config, chunkers)
     else:
-        return _process_plain(abs_path, text, suffix, config, chunkers)
+        return _process_plain(abs_path, text, config, chunkers)
 
 
-def _single_chunk(abs_path: str, text: str, suffix: str) -> list[ChunkRecord]:
+def _single_chunk(
+    abs_path: str, text: str, suffix: str, word_count: int
+) -> list[ChunkRecord]:
     total_lines = len(text.splitlines())
-    word_count = len(text.split())
     section = _extract_first_heading(text) if suffix in MARKDOWN_SUFFIXES else None
     kind = _kind_from_suffix(suffix)
     return [
@@ -388,15 +428,18 @@ def _single_chunk(abs_path: str, text: str, suffix: str) -> list[ChunkRecord]:
 # Markdown pipeline via MarkdownChef
 # ---------------------------------------------------------------------------
 
+
 def _process_markdown(
-    abs_path: str, text: str,
-    config: WorkspaceConfig, chunkers: _ChunkerCache,
+    abs_path: str,
+    text: str,
+    config: WorkspaceConfig,
+    chunkers: _ChunkerCache,
 ) -> list[ChunkRecord]:
     try:
         doc = chunkers.chef.parse(text)
     except Exception:
         log.debug("MarkdownChef failed for %s, falling back to prose chunker", abs_path)
-        return _process_plain(abs_path, text, ".md", config, chunkers)
+        return _process_plain(abs_path, text, config, chunkers)
 
     headings = _scan_headings(text)
     line_offsets = _build_line_offsets(text)
@@ -414,7 +457,9 @@ def _process_markdown(
             else:
                 raw_chunks = chunkers.prose(seg_text)
                 if ch.strategy == "neural":
-                    raw_chunks = _neural_enforce_size(raw_chunks, ch.chunk_size, chunkers)
+                    raw_chunks = _neural_enforce_size(
+                        raw_chunks, ch.chunk_size, chunkers
+                    )
         except Exception:
             log.debug("Prose chunker failed for segment in %s, using default", abs_path)
             raw_chunks = chunkers.default(seg_text)
@@ -423,14 +468,21 @@ def _process_markdown(
             sc = segment.start_index + rc.start_index
             ec = segment.start_index + rc.end_index
             section = _nearest_heading(headings, sc)
-            candidates.append(ChunkRecord(
-                chunk_id=_make_id(), abs_path=abs_path, chunk_index=idx,
-                content=rc.text, token_count=rc.token_count,
-                start_line=_offset_to_line(line_offsets, sc),
-                end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
-                start_char=sc, end_char=ec,
-                section=section, kind="markdown_text",
-            ))
+            candidates.append(
+                ChunkRecord(
+                    chunk_id=_make_id(),
+                    abs_path=abs_path,
+                    chunk_index=idx,
+                    content=rc.text,
+                    token_count=rc.token_count,
+                    start_line=_offset_to_line(line_offsets, sc),
+                    end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
+                    start_char=sc,
+                    end_char=ec,
+                    section=section,
+                    kind="markdown_text",
+                )
+            )
             idx += 1
 
     for block_idx, block in enumerate(getattr(doc, "code", [])):
@@ -442,12 +494,7 @@ def _process_markdown(
         # Derive a deterministic per-modality index during iteration.
         metadata = json.dumps({"block_index": block_idx, "language": lang})
         try:
-            from chonkie import CodeChunker
-            code_chunker = CodeChunker(
-                tokenizer="word", chunk_size=ch.chunk_size,
-                language=lang if lang != "auto" else "auto",
-            )
-            raw_chunks = code_chunker(block_text)
+            raw_chunks = chunkers.code(block_text)
         except Exception:
             raw_chunks = chunkers.default(block_text)
 
@@ -455,15 +502,22 @@ def _process_markdown(
             sc = block.start_index + rc.start_index
             ec = block.start_index + rc.end_index
             section = _nearest_heading(headings, sc)
-            candidates.append(ChunkRecord(
-                chunk_id=_make_id(), abs_path=abs_path, chunk_index=idx,
-                content=rc.text, token_count=rc.token_count,
-                start_line=_offset_to_line(line_offsets, sc),
-                end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
-                start_char=sc, end_char=ec,
-                section=section, kind="markdown_code",
-                chunk_metadata=metadata,
-            ))
+            candidates.append(
+                ChunkRecord(
+                    chunk_id=_make_id(),
+                    abs_path=abs_path,
+                    chunk_index=idx,
+                    content=rc.text,
+                    token_count=rc.token_count,
+                    start_line=_offset_to_line(line_offsets, sc),
+                    end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
+                    start_char=sc,
+                    end_char=ec,
+                    section=section,
+                    kind="markdown_code",
+                    chunk_metadata=metadata,
+                )
+            )
             idx += 1
 
     for block_idx, table in enumerate(getattr(doc, "tables", [])):
@@ -473,19 +527,28 @@ def _process_markdown(
         rows = table_text.strip().count("\n") + 1
         cols = len(table_text.split("\n")[0].split("|")) - 2 if "|" in table_text else 0
         cols = max(cols, 0)
-        metadata = json.dumps({"block_index": block_idx, "row_count": rows, "column_count": cols})
+        metadata = json.dumps(
+            {"block_index": block_idx, "row_count": rows, "column_count": cols}
+        )
         sc = table.start_index
         ec = table.end_index
         section = _nearest_heading(headings, sc)
-        candidates.append(ChunkRecord(
-            chunk_id=_make_id(), abs_path=abs_path, chunk_index=idx,
-            content=table_text, token_count=len(table_text.split()),
-            start_line=_offset_to_line(line_offsets, sc),
-            end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
-            start_char=sc, end_char=ec,
-            section=section, kind="markdown_table",
-            chunk_metadata=metadata,
-        ))
+        candidates.append(
+            ChunkRecord(
+                chunk_id=_make_id(),
+                abs_path=abs_path,
+                chunk_index=idx,
+                content=table_text,
+                token_count=len(table_text.split()),
+                start_line=_offset_to_line(line_offsets, sc),
+                end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
+                start_char=sc,
+                end_char=ec,
+                section=section,
+                kind="markdown_table",
+                chunk_metadata=metadata,
+            )
+        )
         idx += 1
 
     for block_idx, image in enumerate(getattr(doc, "images", [])):
@@ -499,32 +562,34 @@ def _process_markdown(
             or ""
         )
         link = getattr(image, "link", None)
-        metadata = json.dumps({"block_index": block_idx, "alias": alias, "src": src, "link": link})
+        metadata = json.dumps(
+            {"block_index": block_idx, "alias": alias, "src": src, "link": link}
+        )
         sc = image.start_index
         ec = image.end_index
         section = _nearest_heading(headings, sc)
-        candidates.append(ChunkRecord(
-            chunk_id=_make_id(), abs_path=abs_path, chunk_index=idx,
-            content=alias, token_count=len(alias.split()),
-            start_line=_offset_to_line(line_offsets, sc),
-            end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
-            start_char=sc, end_char=ec,
-            section=section, kind="markdown_image",
-            chunk_metadata=metadata,
-        ))
+        candidates.append(
+            ChunkRecord(
+                chunk_id=_make_id(),
+                abs_path=abs_path,
+                chunk_index=idx,
+                content=alias,
+                token_count=len(alias.split()),
+                start_line=_offset_to_line(line_offsets, sc),
+                end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
+                start_char=sc,
+                end_char=ec,
+                section=section,
+                kind="markdown_image",
+                chunk_metadata=metadata,
+            )
+        )
         idx += 1
 
     candidates.sort(key=lambda c: c.start_char)
     for i, c in enumerate(candidates):
         if c.chunk_index != i:
-            candidates[i] = ChunkRecord(
-                chunk_id=c.chunk_id, abs_path=c.abs_path, chunk_index=i,
-                content=c.content, token_count=c.token_count,
-                start_line=c.start_line, end_line=c.end_line,
-                start_char=c.start_char, end_char=c.end_char,
-                section=c.section, kind=c.kind,
-                context=c.context, chunk_metadata=c.chunk_metadata,
-            )
+            candidates[i] = _replace(c, chunk_index=i)
 
     return _apply_overlap(candidates, chunkers)
 
@@ -533,9 +598,12 @@ def _process_markdown(
 # Code file pipeline
 # ---------------------------------------------------------------------------
 
+
 def _process_code(
-    abs_path: str, text: str, suffix: str,
-    config: WorkspaceConfig, chunkers: _ChunkerCache,
+    abs_path: str,
+    text: str,
+    config: WorkspaceConfig,
+    chunkers: _ChunkerCache,
 ) -> list[ChunkRecord]:
     try:
         raw_chunks = chunkers.code(text)
@@ -550,15 +618,22 @@ def _process_code(
         ec = chunk.end_index
         lang = getattr(chunk, "language", None)
         metadata = json.dumps({"language": lang}) if lang else None
-        records.append(ChunkRecord(
-            chunk_id=_make_id(), abs_path=abs_path, chunk_index=i,
-            content=chunk.text, token_count=chunk.token_count,
-            start_line=_offset_to_line(line_offsets, sc),
-            end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
-            start_char=sc, end_char=ec,
-            section=None, kind="code",
-            chunk_metadata=metadata,
-        ))
+        records.append(
+            ChunkRecord(
+                chunk_id=_make_id(),
+                abs_path=abs_path,
+                chunk_index=i,
+                content=chunk.text,
+                token_count=chunk.token_count,
+                start_line=_offset_to_line(line_offsets, sc),
+                end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
+                start_char=sc,
+                end_char=ec,
+                section=None,
+                kind="code",
+                chunk_metadata=metadata,
+            )
+        )
 
     return _apply_overlap(records, chunkers)
 
@@ -567,18 +642,17 @@ def _process_code(
 # Plain text pipeline
 # ---------------------------------------------------------------------------
 
+
 def _process_plain(
-    abs_path: str, text: str, suffix: str,
-    config: WorkspaceConfig, chunkers: _ChunkerCache,
+    abs_path: str,
+    text: str,
+    config: WorkspaceConfig,
+    chunkers: _ChunkerCache,
 ) -> list[ChunkRecord]:
     ch = config.knowledgebase.chunking
     try:
-        if ch.strategy == "standard":
-            raw_chunks = chunkers.prose(text)
-        elif ch.strategy == "semantic":
-            raw_chunks = chunkers.prose(text)
-        else:
-            raw_chunks = chunkers.prose(text)
+        raw_chunks = chunkers.prose(text)
+        if ch.strategy == "neural":
             raw_chunks = _neural_enforce_size(raw_chunks, ch.chunk_size, chunkers)
     except Exception:
         log.debug("Prose chunker failed for %s, falling back to default", abs_path)
@@ -589,14 +663,21 @@ def _process_plain(
     for i, chunk in enumerate(raw_chunks):
         sc = chunk.start_index
         ec = chunk.end_index
-        records.append(ChunkRecord(
-            chunk_id=_make_id(), abs_path=abs_path, chunk_index=i,
-            content=chunk.text, token_count=chunk.token_count,
-            start_line=_offset_to_line(line_offsets, sc),
-            end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
-            start_char=sc, end_char=ec,
-            section=None, kind="text",
-        ))
+        records.append(
+            ChunkRecord(
+                chunk_id=_make_id(),
+                abs_path=abs_path,
+                chunk_index=i,
+                content=chunk.text,
+                token_count=chunk.token_count,
+                start_line=_offset_to_line(line_offsets, sc),
+                end_line=_offset_to_line(line_offsets, max(0, ec - 1)),
+                start_char=sc,
+                end_char=ec,
+                section=None,
+                kind="text",
+            )
+        )
 
     return _apply_overlap(records, chunkers)
 
@@ -605,8 +686,11 @@ def _process_plain(
 # Neural size enforcement
 # ---------------------------------------------------------------------------
 
+
 def _neural_enforce_size(
-    chunks: list[Any], chunk_size: int, chunkers: _ChunkerCache,
+    chunks: list[Any],
+    chunk_size: int,
+    chunkers: _ChunkerCache,
 ) -> list[Any]:
     result = []
     for chunk in chunks:
@@ -631,8 +715,10 @@ def _neural_enforce_size(
 _OVERLAP_COMPATIBLE = {"markdown_text", "markdown_code", "code", "text"}
 
 
-def _apply_overlap(records: list[ChunkRecord], chunkers: _ChunkerCache) -> list[ChunkRecord]:
-    if not records or chunkers._config.knowledgebase.chunking.overlap <= 0:
+def _apply_overlap(
+    records: list[ChunkRecord], chunkers: _ChunkerCache
+) -> list[ChunkRecord]:
+    if not records or chunkers.overlap <= 0:
         return records
 
     runs = _group_overlap_runs(records)
@@ -645,29 +731,25 @@ def _apply_overlap(records: list[ChunkRecord], chunkers: _ChunkerCache) -> list[
 
         try:
             from chonkie import Chunk
+
             mock_chunks = [
-                Chunk(text=r.content, start_index=r.start_char, end_index=r.end_char,
-                      token_count=r.token_count)
+                Chunk(
+                    text=r.content,
+                    start_index=r.start_char,
+                    end_index=r.end_char,
+                    token_count=r.token_count,
+                )
                 for r in run
             ]
             refined = chunkers.overlap_refinery(mock_chunks)
 
             for orig, ref in zip(run, refined):
                 ctx = getattr(ref, "context", None)
-                if ctx:
-                    result.append(ChunkRecord(
-                        chunk_id=orig.chunk_id, abs_path=orig.abs_path,
-                        chunk_index=orig.chunk_index,
-                        content=orig.content, token_count=orig.token_count,
-                        start_line=orig.start_line, end_line=orig.end_line,
-                        start_char=orig.start_char, end_char=orig.end_char,
-                        section=orig.section, kind=orig.kind,
-                        context=ctx, chunk_metadata=orig.chunk_metadata,
-                    ))
-                else:
-                    result.append(orig)
+                result.append(_replace(orig, context=ctx) if ctx else orig)
         except Exception:
-            log.debug("OverlapRefinery failed, returning chunks without overlap context")
+            log.debug(
+                "OverlapRefinery failed, returning chunks without overlap context"
+            )
             result.extend(run)
 
     return result
@@ -679,11 +761,15 @@ def _group_overlap_runs(records: list[ChunkRecord]) -> list[list[ChunkRecord]]:
     runs: list[list[ChunkRecord]] = [[records[0]]]
     for r in records[1:]:
         prev = runs[-1][-1]
-        if (r.kind == prev.kind
-                and r.kind in _OVERLAP_COMPATIBLE
-                and r.abs_path == prev.abs_path):
+        if (
+            r.kind == prev.kind
+            and r.kind in _OVERLAP_COMPATIBLE
+            and r.abs_path == prev.abs_path
+        ):
             if r.kind == "markdown_code":
-                prev_meta = json.loads(prev.chunk_metadata) if prev.chunk_metadata else {}
+                prev_meta = (
+                    json.loads(prev.chunk_metadata) if prev.chunk_metadata else {}
+                )
                 curr_meta = json.loads(r.chunk_metadata) if r.chunk_metadata else {}
                 if prev_meta.get("block_index") != curr_meta.get("block_index"):
                     runs.append([r])
@@ -697,6 +783,7 @@ def _group_overlap_runs(records: list[ChunkRecord]) -> list[list[ChunkRecord]]:
 # ---------------------------------------------------------------------------
 # Heading scanning and section assignment
 # ---------------------------------------------------------------------------
+
 
 def _scan_headings(text: str) -> list[tuple[int, str]]:
     return [(m.start(), m.group(0).strip()) for m in _HEADING_RE.finditer(text)]
@@ -716,6 +803,7 @@ def _nearest_heading(headings: list[tuple[int, str]], char_offset: int) -> str |
 # Utility functions
 # ---------------------------------------------------------------------------
 
+
 def _extract_first_heading(text: str) -> str | None:
     m = _HEADING_RE.search(text)
     return m.group(0).strip() if m else None
@@ -729,12 +817,11 @@ def _kind_from_suffix(suffix: str) -> str:
     return "text"
 
 
+_NEWLINE_RE = re.compile(r"\n")
+
+
 def _build_line_offsets(text: str) -> list[int]:
-    offsets = [0]
-    for i, ch in enumerate(text):
-        if ch == "\n":
-            offsets.append(i + 1)
-    return offsets
+    return [0] + [m.end() for m in _NEWLINE_RE.finditer(text)]
 
 
 def _offset_to_line(offsets: list[int], char_offset: int) -> int:
@@ -758,18 +845,21 @@ def _file_hash(path: Path) -> str:
 
 def _config_signature(config: WorkspaceConfig) -> str:
     ch = config.knowledgebase.chunking
-    blob = json.dumps({
-        "strategy": ch.strategy,
-        "chunk_size": ch.chunk_size,
-        "overlap": ch.overlap,
-        "threshold": ch.threshold,
-        "overlap_mode": "token",
-        "overlap_method": "suffix",
-        "code_chunker": "production_v1",
-        "semantic_model": PINNED_SEMANTIC_MODEL,
-        "neural_model": PINNED_NEURAL_MODEL,
-        "chunking_plan_version": CHUNKING_PLAN_VERSION,
-    }, sort_keys=True)
+    blob = json.dumps(
+        {
+            "strategy": ch.strategy,
+            "chunk_size": ch.chunk_size,
+            "overlap": ch.overlap,
+            "threshold": ch.threshold,
+            "overlap_mode": "token",
+            "overlap_method": "suffix",
+            "code_chunker": "production_v1",
+            "semantic_model": PINNED_SEMANTIC_MODEL,
+            "neural_model": PINNED_NEURAL_MODEL,
+            "chunking_plan_version": CHUNKING_PLAN_VERSION,
+        },
+        sort_keys=True,
+    )
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 

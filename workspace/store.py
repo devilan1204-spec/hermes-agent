@@ -189,9 +189,18 @@ class SQLiteFTS5Store:
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 (
-                    c.chunk_id, c.abs_path, c.chunk_index, c.content,
-                    c.context, c.token_count, c.start_line, c.end_line,
-                    c.start_char, c.end_char, c.section, c.kind,
+                    c.chunk_id,
+                    c.abs_path,
+                    c.chunk_index,
+                    c.content,
+                    c.context,
+                    c.token_count,
+                    c.start_line,
+                    c.end_line,
+                    c.start_char,
+                    c.end_char,
+                    c.section,
+                    c.kind,
                     c.chunk_metadata,
                 )
                 for c in chunks
@@ -237,12 +246,14 @@ class SQLiteFTS5Store:
         params: list[Any] = [fts_query]
 
         if path_prefix:
-            sql += " AND c.abs_path LIKE ?"
-            params.append(path_prefix + "%")
+            sql += " AND substr(c.abs_path, 1, ?) = ?"
+            params.extend([len(path_prefix), path_prefix])
 
         if file_glob:
             sql += " AND c.abs_path GLOB ?"
-            params.append("*" + file_glob if not file_glob.startswith("*") else file_glob)
+            params.append(
+                "*" + file_glob if not file_glob.startswith("*") else file_glob
+            )
 
         sql += " ORDER BY rank LIMIT ?"
         params.append(limit)
@@ -283,6 +294,7 @@ class SQLiteFTS5Store:
 
 
 _FTS5_COMPOUND_SEPARATORS = re.compile(r"[-_]")
+_FTS5_TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 def _build_fts_query(raw_query: str) -> str:
@@ -291,7 +303,7 @@ def _build_fts_query(raw_query: str) -> str:
     All tokens are double-quoted to prevent FTS5 operator injection.
     Compound terms (hyphenated/underscored) get phrase + AND boost.
     """
-    tokens = re.findall(r"[^\W_]+", raw_query, re.UNICODE)
+    tokens = _FTS5_TOKEN_RE.findall(raw_query)
     tokens = [t.lower() for t in tokens if len(t) >= 2]
     if not tokens:
         return ""
@@ -299,7 +311,7 @@ def _build_fts_query(raw_query: str) -> str:
     words = raw_query.split()
     parts: list[str] = []
     for word in words:
-        sub_tokens = re.findall(r"[^\W_]+", word, re.UNICODE)
+        sub_tokens = _FTS5_TOKEN_RE.findall(word)
         sub_tokens = [t.lower() for t in sub_tokens if len(t) >= 2]
         if not sub_tokens:
             continue

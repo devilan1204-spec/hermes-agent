@@ -76,22 +76,28 @@ class KnowledgebaseConfig:
             overlap = min(strat_defaults["overlap"], max(0, chunk_size - 1))
         else:
             overlap = raw_overlap
-        threshold = raw_threshold if raw_threshold is not None else strat_defaults["threshold"]
+        if raw_threshold is not None:
+            threshold = raw_threshold
+        else:
+            threshold = strat_defaults["threshold"]
         max_file_mb = ix.get("max_file_mb", 10)
         default_limit = sr.get("default_limit", 20)
 
         if chunk_size <= 0:
-            raise ValueError(f"knowledgebase.chunking.chunk_size must be > 0, got {chunk_size}")
+            msg = f"chunk_size must be > 0, got {chunk_size}"
+            raise ValueError(msg)
         if overlap < 0 or overlap >= chunk_size:
-            raise ValueError(
-                f"knowledgebase.chunking.overlap must be >= 0 and < chunk_size ({chunk_size}), got {overlap}"
-            )
+            msg = f"overlap must be >= 0 and < chunk_size ({chunk_size}), got {overlap}"
+            raise ValueError(msg)
         if threshold < 0:
-            raise ValueError(f"knowledgebase.chunking.threshold must be >= 0, got {threshold}")
+            msg = f"threshold must be >= 0, got {threshold}"
+            raise ValueError(msg)
         if max_file_mb <= 0:
-            raise ValueError(f"knowledgebase.indexing.max_file_mb must be > 0, got {max_file_mb}")
+            msg = f"max_file_mb must be > 0, got {max_file_mb}"
+            raise ValueError(msg)
         if default_limit < 1:
-            raise ValueError(f"knowledgebase.search.default_limit must be >= 1, got {default_limit}")
+            msg = f"default_limit must be >= 1, got {default_limit}"
+            raise ValueError(msg)
 
         return cls(
             roots=roots,
@@ -109,12 +115,15 @@ class KnowledgebaseConfig:
 @dataclass(frozen=True)
 class WorkspaceConfig:
     enabled: bool = True
-    workspace_root: Path = field(default_factory=lambda: Path.home() / ".hermes" / "workspace")
+    workspace_root: Path = field(
+        default_factory=lambda: Path.home() / ".hermes" / "workspace",
+    )
     knowledgebase: KnowledgebaseConfig = field(default_factory=KnowledgebaseConfig)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any], hermes_home: Path) -> WorkspaceConfig:
-        ws = _deep_merge(copy.deepcopy(WORKSPACE_CONFIG_DEFAULTS), raw.get("workspace", {}))
+        ws_raw = raw.get("workspace", {})
+        ws = _deep_merge(copy.deepcopy(WORKSPACE_CONFIG_DEFAULTS), ws_raw)
         kb = raw.get("knowledgebase", {})
         return cls(
             enabled=ws.get("enabled", True),
@@ -131,6 +140,7 @@ def load_workspace_config() -> WorkspaceConfig:
         return WorkspaceConfig(workspace_root=get_workspace_root(get_hermes_home()))
 
     import yaml
+
     with open(config_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     return WorkspaceConfig.from_dict(raw, get_hermes_home())

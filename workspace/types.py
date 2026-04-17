@@ -72,7 +72,7 @@ class SearchResult:
 
 
 @dataclass(frozen=True)
-class IndexError:
+class IndexingError:
     path: str
     stage: str
     error_type: str
@@ -95,7 +95,7 @@ class IndexSummary:
     files_errored: int
     chunks_created: int
     duration_seconds: float
-    errors: list[IndexError]
+    errors: list[IndexingError]
     errors_truncated: bool
 
     def to_dict(self) -> dict[str, Any]:

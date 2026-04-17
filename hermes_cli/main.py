@@ -6409,11 +6409,6 @@ Examples:
     ws_search.add_argument("--limit", type=int, help="Max results")
     ws_search.add_argument("--path", help="Filter by absolute path prefix")
     ws_search.add_argument("--glob", help="Filter by filename glob pattern")
-    workspace_parser.add_argument(
-        "--human",
-        action="store_true",
-        help="Human-readable Rich output instead of JSON",
-    )
 
     def cmd_workspace(args):
         from workspace.commands import workspace_command

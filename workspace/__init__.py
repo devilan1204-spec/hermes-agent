@@ -10,7 +10,7 @@ Public API:
 from workspace.config import WorkspaceConfig, load_workspace_config
 from workspace.indexer import ensure_workspace_dirs, index_workspace
 from workspace.search import search_workspace
-from workspace.types import IndexError, IndexSummary, SearchResult
+from workspace.types import IndexingError, IndexSummary, SearchResult
 
 __all__ = [
     "WorkspaceConfig",
@@ -18,7 +18,7 @@ __all__ = [
     "index_workspace",
     "search_workspace",
     "ensure_workspace_dirs",
-    "IndexError",
+    "IndexingError",
     "IndexSummary",
     "SearchResult",
 ]

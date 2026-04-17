@@ -14,15 +14,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
+from workspace.config import WorkspaceConfig
 from workspace.constants import (
     BINARY_SUFFIXES,
     DEFAULT_IGNORE_PATTERNS,
     GITIGNORE_NAME,
     HERMESIGNORE_NAME,
 )
-from workspace.config import WorkspaceConfig
 from workspace.types import WorkspaceRoot
 
 log = logging.getLogger(__name__)
@@ -85,13 +84,6 @@ def discover_workspace_files(config: WorkspaceConfig) -> DiscoveryResult:
     return DiscoveryResult(files=files, complete=complete)
 
 
-def iter_workspace_files(
-    config: WorkspaceConfig,
-) -> Iterator[tuple[str, Path]]:
-    """Yield (root_path, file_path) for every indexable file across all roots."""
-    yield from discover_workspace_files(config).files
-
-
 def seed_hermesignore(workspace_root: Path) -> None:
     """Create .hermesignore in the workspace root if it doesn't exist."""
     ignore_file = workspace_root / HERMESIGNORE_NAME
@@ -123,7 +115,9 @@ def _load_ignore_spec(root: Path):
         except Exception:
             log.warning("Failed to parse %s", gitignore, exc_info=True)
 
-    return pathspec.PathSpec.from_lines("gitwildmatch", DEFAULT_IGNORE_PATTERNS.splitlines())
+    return pathspec.PathSpec.from_lines(
+        "gitwildmatch", DEFAULT_IGNORE_PATTERNS.splitlines()
+    )
 
 
 def _is_ignored(path: Path, root: Path, spec) -> bool:
