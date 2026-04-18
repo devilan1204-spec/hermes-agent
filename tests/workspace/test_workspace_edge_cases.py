@@ -37,21 +37,17 @@ def _write(path: Path, text: str) -> Path:
 def test_default_overlap_is_clamped_for_small_chunk_sizes(tmp_path: Path):
     cfg = _make_config(
         tmp_path,
-        {"knowledgebase": {"chunking": {"strategy": "neural", "chunk_size": 50}}},
+        {"knowledgebase": {"chunking": {"chunk_size": 12}}},
     )
-    assert cfg.knowledgebase.chunking.overlap == 49
-
-    cfg = _make_config(
-        tmp_path,
-        {"knowledgebase": {"chunking": {"strategy": "semantic", "chunk_size": 12}}},
-    )
+    # Default overlap is 32, clamped to chunk_size - 1 when chunk_size is smaller.
     assert cfg.knowledgebase.chunking.overlap == 11
 
 
-def test_markdown_metadata_populates_block_indexes_and_image_src(tmp_path: Path):
+def test_markdown_metadata_has_clean_shape(tmp_path: Path):
+    """Code rows carry only `language`; tables and images carry no metadata."""
     cfg = _make_config(
         tmp_path,
-        {"knowledgebase": {"chunking": {"threshold": 0, "chunk_size": 64}}},
+        {"knowledgebase": {"chunking": {"chunk_size": 64}}},
     )
 
     md = _write(
@@ -95,37 +91,36 @@ def second_block():
 
     with SQLiteFTS5Store(cfg.workspace_root) as store:
         rows = store.conn.execute(
-            "SELECT kind, chunk_metadata FROM chunks WHERE abs_path = ? ORDER BY start_char",
+            "SELECT kind, chunk_metadata, content FROM chunks WHERE abs_path = ? "
+            "ORDER BY start_char",
             (str(md.resolve()),),
         ).fetchall()
 
-    code_meta = [
-        json.loads(row["chunk_metadata"])
-        for row in rows
-        if row["kind"] == "markdown_code"
-    ]
-    table_meta = [
-        json.loads(row["chunk_metadata"])
-        for row in rows
-        if row["kind"] == "markdown_table"
-    ]
-    image_meta = [
-        json.loads(row["chunk_metadata"])
-        for row in rows
-        if row["kind"] == "markdown_image"
-    ]
+    code_rows = [r for r in rows if r["kind"] == "markdown_code"]
+    table_rows = [r for r in rows if r["kind"] == "markdown_table"]
+    image_rows = [r for r in rows if r["kind"] == "markdown_image"]
 
-    assert [m["block_index"] for m in code_meta] == [0, 1]
-    assert [m["block_index"] for m in table_meta] == [0, 1]
-    assert [m["block_index"] for m in image_meta] == [0, 1]
-    assert [m["src"] for m in image_meta] == ["img/one.png", "img/two.png"]
+    assert len(code_rows) == 2
+    assert len(table_rows) == 2
+    assert len(image_rows) == 2
+
+    # Code: exactly {"language": "python"}, nothing else.
+    for r in code_rows:
+        meta = json.loads(r["chunk_metadata"])
+        assert meta == {"language": "python"}
+
+    # Tables and images have no chunk_metadata.
+    for r in table_rows:
+        assert r["chunk_metadata"] is None
+    for r in image_rows:
+        assert r["chunk_metadata"] is None
+
+    # Image `content` is the alias (the searchable text).
+    assert [r["content"] for r in image_rows] == ["first image", "second image"]
 
 
 def test_failed_reindex_keeps_previous_committed_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    cfg = _make_config(
-        tmp_path,
-        {"knowledgebase": {"chunking": {"threshold": 0}}},
-    )
+    cfg = _make_config(tmp_path)
 
     file_a = _write(cfg.workspace_root / "docs" / "a.txt", "stable old content\n")
     file_b = _write(cfg.workspace_root / "docs" / "b.txt", "other old content\n")
@@ -179,7 +174,6 @@ def test_missing_root_skips_stale_prune(tmp_path: Path):
         {
             "knowledgebase": {
                 "roots": [{"path": str(external_root), "recursive": True}],
-                "chunking": {"threshold": 0},
             }
         },
     )

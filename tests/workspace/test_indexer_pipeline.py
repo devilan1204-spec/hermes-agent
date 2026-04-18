@@ -44,7 +44,6 @@ def _write(path: Path, text: str) -> Path:
     return path
 
 
-@pytest.mark.xfail(strict=True, reason="Pipeline migration — metadata shape changes in Task 2")
 def test_markdown_pipeline_emits_clean_metadata_per_modality(tmp_path: Path):
     cfg = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 64}}})
     md = _write(
@@ -113,7 +112,6 @@ def test_markdown_pipeline_emits_clean_metadata_per_modality(tmp_path: Path):
     assert all(r["end_line"] >= r["start_line"] for r in rows)
 
 
-@pytest.mark.xfail(strict=True, reason="Pipeline migration — small-file short-circuit removed in Task 2")
 def test_small_markdown_file_is_split_into_modalities(tmp_path: Path):
     """A 20-word markdown file with a code block must still produce two records.
 
@@ -143,17 +141,16 @@ def test_small_markdown_file_is_split_into_modalities(tmp_path: Path):
     assert len(rows) >= 2, f"small markdown must still be multimodal, got {kinds}"
 
 
-@pytest.mark.xfail(strict=True, reason="Pipeline migration — overlap context wiring changes in Task 2")
 def test_overlap_context_propagates_and_is_prefix_of_next_chunk(tmp_path: Path):
     """Multi-chunk prose file: every non-last chunk has non-NULL context,
-    and that context is a suffix of the chunk that appears before the next one
-    (OverlapRefinery with method='suffix' prepends the tail of chunk N to chunk N+1
-    as context). FTS indexes this column so a term that only appears in chunk N+1's
-    overlap region is still findable via context.
+    and that context is a prefix of the NEXT chunk's content. Chonkie's
+    OverlapRefinery with method='suffix' in mode='token' attaches the first
+    context_size tokens of chunk N+1 onto chunk N as `context`. FTS indexes
+    this column so a term that only appears at the start of chunk N+1's content
+    is still findable via chunk N's context field.
     """
-    # A sentence-heavy prose file that definitely chunks into many pieces at chunk_size=32 words.
     sentences = [f"Sentence number {i} carries unique marker token WORD{i:03d}." for i in range(60)]
-    cfg = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 32}}})
+    cfg = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 64, "overlap": 8}}})
     f = _write(cfg.workspace_root / "notes" / "long.txt", "\n".join(sentences) + "\n")
 
     summary = index_workspace(cfg)
@@ -170,21 +167,20 @@ def test_overlap_context_propagates_and_is_prefix_of_next_chunk(tmp_path: Path):
     non_null_contexts = [r for r in rows if r["context"] is not None]
     assert len(non_null_contexts) >= 1, "at least one chunk must carry overlap context"
 
-    # For every chunk whose `context` is set, that context must appear at the end
-    # of the PREVIOUS chunk's content (method="suffix" means the refinery takes
-    # the last N tokens of chunk N-1 and attaches them to chunk N as `context`).
-    for i in range(1, len(rows)):
+    # For every chunk whose `context` is set, that context must appear at the
+    # START of the NEXT chunk's content (method="suffix" in mode="token" takes
+    # the first N tokens of chunk N+1 and attaches them to chunk N as `context`).
+    for i in range(len(rows) - 1):
         ctx = rows[i]["context"]
         if ctx is None:
             continue
-        prev_content = rows[i - 1]["content"]
-        assert ctx.strip() in prev_content, (
-            f"chunk {i} context is not a substring of chunk {i-1} content\n"
-            f"  context: {ctx!r}\n  prev: {prev_content!r}"
+        next_content = rows[i + 1]["content"]
+        assert ctx.strip() in next_content, (
+            f"chunk {i} context is not a substring of chunk {i+1} content\n"
+            f"  context: {ctx!r}\n  next: {next_content!r}"
         )
 
 
-@pytest.mark.xfail(strict=True, reason="Pipeline migration — deprecated config keys become no-ops in Task 2")
 def test_deprecated_strategy_and_threshold_keys_are_silently_ignored(tmp_path: Path):
     """Old configs that still set `strategy: semantic` or `threshold: 0` must load
     cleanly after the migration (fields are gone from ChunkingConfig, unknown keys

@@ -14,8 +14,6 @@ from typing import Any
 
 from workspace.constants import (
     KNOWLEDGEBASE_CONFIG_DEFAULTS,
-    STRATEGY_DEFAULTS,
-    VALID_STRATEGIES,
     WORKSPACE_CONFIG_DEFAULTS,
     get_workspace_root,
 )
@@ -24,10 +22,8 @@ from workspace.types import WorkspaceRoot
 
 @dataclass(frozen=True)
 class ChunkingConfig:
-    strategy: str = "standard"
     chunk_size: int = 512
     overlap: int = 32
-    threshold: int = 16_000
 
 
 @dataclass(frozen=True)
@@ -59,27 +55,12 @@ class KnowledgebaseConfig:
         ix = merged.get("indexing", {})
         sr = merged.get("search", {})
 
-        strategy = ch.get("strategy", "standard")
-        if strategy not in VALID_STRATEGIES:
-            raise ValueError(
-                f"Unknown chunking strategy '{strategy}'. "
-                f"Valid: {', '.join(sorted(VALID_STRATEGIES))}"
-            )
-
-        strat_defaults = STRATEGY_DEFAULTS[strategy]
         chunk_size = ch.get("chunk_size", 512)
         raw_overlap = ch.get("overlap")
-        raw_threshold = ch.get("threshold")
         if raw_overlap is None:
-            # Strategy defaults should remain valid even when users lower chunk_size.
-            # Clamp the default overlap to stay strictly below chunk_size.
-            overlap = min(strat_defaults["overlap"], max(0, chunk_size - 1))
+            overlap = min(32, max(0, chunk_size - 1))
         else:
             overlap = raw_overlap
-        if raw_threshold is not None:
-            threshold = raw_threshold
-        else:
-            threshold = strat_defaults["threshold"]
         max_file_mb = ix.get("max_file_mb", 10)
         default_limit = sr.get("default_limit", 20)
 
@@ -88,9 +69,6 @@ class KnowledgebaseConfig:
             raise ValueError(msg)
         if overlap < 0 or overlap >= chunk_size:
             msg = f"overlap must be >= 0 and < chunk_size ({chunk_size}), got {overlap}"
-            raise ValueError(msg)
-        if threshold < 0:
-            msg = f"threshold must be >= 0, got {threshold}"
             raise ValueError(msg)
         if max_file_mb <= 0:
             msg = f"max_file_mb must be > 0, got {max_file_mb}"
@@ -102,10 +80,8 @@ class KnowledgebaseConfig:
         return cls(
             roots=roots,
             chunking=ChunkingConfig(
-                strategy=strategy,
                 chunk_size=chunk_size,
                 overlap=overlap,
-                threshold=threshold,
             ),
             indexing=IndexingConfig(max_file_mb=max_file_mb),
             search=SearchConfig(default_limit=default_limit),
