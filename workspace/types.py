@@ -7,9 +7,11 @@ no dense scores, no reranking, no plugin context.
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
 
-@dataclass(frozen=True)
-class WorkspaceRoot:
+
+class WorkspaceRoot(BaseModel):
+    model_config = ConfigDict(frozen=True)
     path: str
     recursive: bool = False
 

@@ -1,129 +1,97 @@
-"""Workspace configuration loading.
+"""Workspace configuration — Pydantic models.
 
-Builds WorkspaceConfig and KnowledgebaseConfig from the main hermes
-config.yaml.  Defaults come from workspace.constants so that
-hermes_cli/config.py can also import them without circular deps.
+Builds WorkspaceConfig from the main hermes config.yaml dict.
+Defaults come from the model field definitions.
 """
 
-import copy
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+from __future__ import annotations
 
-from workspace.constants import (
-    KNOWLEDGEBASE_CONFIG_DEFAULTS,
-    WORKSPACE_CONFIG_DEFAULTS,
-    get_workspace_root,
-)
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+from workspace.constants import get_workspace_root
 from workspace.types import WorkspaceRoot
 
 
-@dataclass(frozen=True)
-class ChunkingConfig:
+class ChunkingConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
     chunk_size: int = 512
-    overlap: int = 32
+    overlap: int | None = None
+
+    @field_validator("chunk_size")
+    @classmethod
+    def _chunk_size_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"chunk_size must be > 0, got {v}")
+        return v
+
+    @model_validator(mode="after")
+    def _clamp_overlap(self) -> ChunkingConfig:
+        if self.overlap is None:
+            object.__setattr__(self, "overlap", min(32, max(0, self.chunk_size - 1)))
+        elif self.overlap < 0 or self.overlap >= self.chunk_size:
+            raise ValueError(
+                f"overlap must be >= 0 and < chunk_size ({self.chunk_size}), got {self.overlap}"
+            )
+        return self
 
 
-@dataclass(frozen=True)
-class IndexingConfig:
+class IndexingConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
     max_file_mb: int = 10
 
+    @field_validator("max_file_mb")
+    @classmethod
+    def _positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"max_file_mb must be > 0, got {v}")
+        return v
 
-@dataclass(frozen=True)
-class SearchConfig:
+
+class SearchConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
     default_limit: int = 20
 
-
-@dataclass(frozen=True)
-class KnowledgebaseConfig:
-    roots: list[WorkspaceRoot] = field(default_factory=list)
-    chunking: ChunkingConfig = field(default_factory=ChunkingConfig)
-    indexing: IndexingConfig = field(default_factory=IndexingConfig)
-    search: SearchConfig = field(default_factory=SearchConfig)
-
+    @field_validator("default_limit")
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "KnowledgebaseConfig":
-        merged = _deep_merge(copy.deepcopy(KNOWLEDGEBASE_CONFIG_DEFAULTS), d)
-        roots = [
-            WorkspaceRoot(path=r["path"], recursive=r.get("recursive", False))
-            for r in merged.get("roots", [])
-            if isinstance(r, dict) and "path" in r
-        ]
-        ch = merged.get("chunking", {})
-        ix = merged.get("indexing", {})
-        sr = merged.get("search", {})
-
-        chunk_size = ch.get("chunk_size", 512)
-        raw_overlap = ch.get("overlap")
-        if raw_overlap is None:
-            overlap = min(32, max(0, chunk_size - 1))
-        else:
-            overlap = raw_overlap
-        max_file_mb = ix.get("max_file_mb", 10)
-        default_limit = sr.get("default_limit", 20)
-
-        if chunk_size <= 0:
-            msg = f"chunk_size must be > 0, got {chunk_size}"
-            raise ValueError(msg)
-        if overlap < 0 or overlap >= chunk_size:
-            msg = f"overlap must be >= 0 and < chunk_size ({chunk_size}), got {overlap}"
-            raise ValueError(msg)
-        if max_file_mb <= 0:
-            msg = f"max_file_mb must be > 0, got {max_file_mb}"
-            raise ValueError(msg)
-        if default_limit < 1:
-            msg = f"default_limit must be >= 1, got {default_limit}"
-            raise ValueError(msg)
-
-        return cls(
-            roots=roots,
-            chunking=ChunkingConfig(
-                chunk_size=chunk_size,
-                overlap=overlap,
-            ),
-            indexing=IndexingConfig(max_file_mb=max_file_mb),
-            search=SearchConfig(default_limit=default_limit),
-        )
+    def _at_least_one(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"default_limit must be >= 1, got {v}")
+        return v
 
 
-@dataclass(frozen=True)
-class WorkspaceConfig:
+class KnowledgebaseConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    roots: list[WorkspaceRoot] = []
+    chunking: ChunkingConfig = ChunkingConfig()
+    indexing: IndexingConfig = IndexingConfig()
+    search: SearchConfig = SearchConfig()
+
+
+class WorkspaceConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
     enabled: bool = True
-    workspace_root: Path = field(
-        default_factory=lambda: Path.home() / ".hermes" / "workspace",
+    workspace_root: Path = Path.home() / ".hermes" / "workspace"
+    indexer: str = "default"
+    plugin_config: dict = {}
+    knowledgebase: KnowledgebaseConfig = KnowledgebaseConfig()
+
+
+def load_workspace_config(raw: dict | None = None) -> WorkspaceConfig:
+    if raw is None:
+        from hermes_cli.config import load_config
+
+        raw = load_config()
+    ws = raw.get("workspace", {})
+    kb = raw.get("knowledgebase", {})
+    from hermes_constants import get_hermes_home
+
+    hermes_home = get_hermes_home()
+    return WorkspaceConfig(
+        enabled=ws.get("enabled", True),
+        workspace_root=get_workspace_root(hermes_home, ws.get("path", "")),
+        indexer=ws.get("indexer", "default"),
+        plugin_config=ws.get("plugin_config", {}),
+        knowledgebase=KnowledgebaseConfig.model_validate(kb),
     )
-    knowledgebase: KnowledgebaseConfig = field(default_factory=KnowledgebaseConfig)
-
-    @classmethod
-    def from_dict(cls, raw: dict[str, Any], hermes_home: Path) -> "WorkspaceConfig":
-        ws_raw = raw.get("workspace", {})
-        ws = _deep_merge(copy.deepcopy(WORKSPACE_CONFIG_DEFAULTS), ws_raw)
-        kb = raw.get("knowledgebase", {})
-        return cls(
-            enabled=ws.get("enabled", True),
-            workspace_root=get_workspace_root(hermes_home, ws.get("path", "")),
-            knowledgebase=KnowledgebaseConfig.from_dict(kb),
-        )
-
-
-def load_workspace_config() -> WorkspaceConfig:
-    from hermes_constants import get_config_path, get_hermes_home
-
-    config_path = get_config_path()
-    if not config_path.exists():
-        return WorkspaceConfig(workspace_root=get_workspace_root(get_hermes_home()))
-
-    import yaml
-
-    with open(config_path, encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
-    return WorkspaceConfig.from_dict(raw, get_hermes_home())
-
-
-def _deep_merge(base: dict, override: dict) -> dict:
-    for k, v in override.items():
-        if isinstance(v, dict) and isinstance(base.get(k), dict):
-            base[k] = _deep_merge(base[k], v)
-        else:
-            base[k] = v
-    return base

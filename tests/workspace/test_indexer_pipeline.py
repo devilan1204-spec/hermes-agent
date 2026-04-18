@@ -11,6 +11,7 @@ after migrating from manual Chonkie wiring to `chonkie.Pipeline`:
 - Deprecated config keys (strategy, threshold) are silently ignored.
 - Config signature changes cause re-indexing.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,9 @@ from workspace.search import search_workspace
 from workspace.store import SQLiteFTS5Store
 
 
-def test_markdown_pipeline_emits_clean_metadata_per_modality(make_workspace_config, write_file):
+def test_markdown_pipeline_emits_clean_metadata_per_modality(
+    make_workspace_config, write_file
+):
     cfg = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 64}}})
     md = write_file(
         cfg.workspace_root / "docs" / "mixed.md",
@@ -92,7 +95,9 @@ def test_markdown_pipeline_emits_clean_metadata_per_modality(make_workspace_conf
     assert all(r["end_line"] >= r["start_line"] for r in rows)
 
 
-def test_small_markdown_file_is_split_into_modalities(make_workspace_config, write_file):
+def test_small_markdown_file_is_split_into_modalities(
+    make_workspace_config, write_file
+):
     """Small markdown files with a code block must produce separate records for
     prose and code. Every file flows through the Pipeline regardless of size;
     there is no single-chunk short-circuit."""
@@ -123,7 +128,9 @@ def test_small_markdown_file_is_split_into_modalities(make_workspace_config, wri
     assert "print('hi')" not in text_row["content"]
 
 
-def test_overlap_context_propagates_and_is_prefix_of_next_chunk(make_workspace_config, write_file):
+def test_overlap_context_propagates_and_is_prefix_of_next_chunk(
+    make_workspace_config, write_file
+):
     """Multi-chunk prose file: every non-last chunk has non-NULL context,
     and that context is a prefix of the NEXT chunk's content. Chonkie's
     OverlapRefinery with method='suffix' in mode='token' attaches the first
@@ -131,9 +138,16 @@ def test_overlap_context_propagates_and_is_prefix_of_next_chunk(make_workspace_c
     this column so a term that only appears at the start of chunk N+1's content
     is still findable via chunk N's context field.
     """
-    sentences = [f"Sentence number {i} carries unique marker token WORD{i:03d}." for i in range(60)]
-    cfg = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 64, "overlap": 8}}})
-    f = write_file(cfg.workspace_root / "notes" / "long.txt", "\n".join(sentences) + "\n")
+    sentences = [
+        f"Sentence number {i} carries unique marker token WORD{i:03d}."
+        for i in range(60)
+    ]
+    cfg = make_workspace_config(
+        {"knowledgebase": {"chunking": {"chunk_size": 64, "overlap": 8}}}
+    )
+    f = write_file(
+        cfg.workspace_root / "notes" / "long.txt", "\n".join(sentences) + "\n"
+    )
 
     summary = index_workspace(cfg)
     assert summary.files_indexed == 1
@@ -158,12 +172,14 @@ def test_overlap_context_propagates_and_is_prefix_of_next_chunk(make_workspace_c
             continue
         next_content = rows[i + 1]["content"]
         assert ctx.strip() in next_content, (
-            f"chunk {i} context is not a substring of chunk {i+1} content\n"
+            f"chunk {i} context is not a substring of chunk {i + 1} content\n"
             f"  context: {ctx!r}\n  next: {next_content!r}"
         )
 
 
-def test_deprecated_strategy_and_threshold_keys_are_silently_ignored(make_workspace_config, write_file):
+def test_deprecated_strategy_and_threshold_keys_are_silently_ignored(
+    make_workspace_config, write_file
+):
     """Old configs that still set `strategy: semantic` or `threshold: 0` must load
     cleanly after the migration (fields are gone from ChunkingConfig, unknown keys
     pass through _deep_merge and are dropped by from_dict). No ValueError, no warning
@@ -190,7 +206,9 @@ def test_deprecated_strategy_and_threshold_keys_are_silently_ignored(make_worksp
     assert summary.files_errored == 0
 
 
-def test_config_signature_change_invalidates_existing_index(make_workspace_config, write_file):
+def test_config_signature_change_invalidates_existing_index(
+    make_workspace_config, write_file
+):
     """Changing a field that belongs in the signature (chunk_size) must cause
     already-indexed files to be re-indexed on the next run rather than skipped.
     This guards against accidentally dropping a field from _config_signature."""
@@ -213,7 +231,9 @@ def test_config_signature_change_invalidates_existing_index(make_workspace_confi
     assert third.files_skipped == 0
 
 
-def test_concurrent_index_does_not_crash(tmp_path: Path, make_workspace_config, write_file):
+def test_concurrent_index_does_not_crash(
+    tmp_path: Path, make_workspace_config, write_file
+):
     """Two simultaneous index_workspace() calls against the same workspace must
     both succeed, and the SQLite DB must pass PRAGMA integrity_check.
 
@@ -259,7 +279,7 @@ def test_concurrent_index_does_not_crash(tmp_path: Path, make_workspace_config, 
             from workspace.indexer import index_workspace
 
             hermes_home = Path({str(hermes_home)!r})
-            cfg = WorkspaceConfig.from_dict({{}}, hermes_home)
+            cfg = WorkspaceConfig(workspace_root=hermes_home / "workspace")
             summary = index_workspace(cfg)
             sys.exit(0)
             """
@@ -281,7 +301,9 @@ def test_concurrent_index_does_not_crash(tmp_path: Path, make_workspace_config, 
     assert result[0] == "ok", f"PRAGMA integrity_check returned: {result[0]!r}"
 
 
-def test_search_path_prefix_resolves_symlinks(tmp_path: Path, make_workspace_config, write_file):
+def test_search_path_prefix_resolves_symlinks(
+    tmp_path: Path, make_workspace_config, write_file
+):
     """search_workspace must resolve `path_prefix` before handing it to the
     store. The indexer stores resolved absolute paths (`file_path.resolve()`);
     the store does a literal byte-prefix match. Callers using the Python API
@@ -291,8 +313,12 @@ def test_search_path_prefix_resolves_symlinks(tmp_path: Path, make_workspace_con
     """
     real_docs = tmp_path / "real-docs"
     real_docs.mkdir()
-    write_file(real_docs / "alpha.md", "# Alpha\n\nThe alpha document describes things.\n")
-    write_file(real_docs / "beta.md", "# Beta\n\nThe beta document explains more things.\n")
+    write_file(
+        real_docs / "alpha.md", "# Alpha\n\nThe alpha document describes things.\n"
+    )
+    write_file(
+        real_docs / "beta.md", "# Beta\n\nThe beta document explains more things.\n"
+    )
 
     # Symlink `tmp_path/linked` -> `real-docs`. (Making "workspace/linked" a
     # sub-path would require first creating a workspace dir — plain `linked`
@@ -350,10 +376,14 @@ def test_hermesignore_never_indexed(make_workspace_config, write_file):
             ("%.hermesignore",),
         ).fetchall()
 
-    assert rows == [], f"expected no .hermesignore rows, got: {[r['abs_path'] for r in rows]}"
+    assert rows == [], (
+        f"expected no .hermesignore rows, got: {[r['abs_path'] for r in rows]}"
+    )
 
 
-def test_summary_reports_filtered_empty_and_oversized(make_workspace_config, write_file):
+def test_summary_reports_filtered_empty_and_oversized(
+    make_workspace_config, write_file
+):
     """Files dropped at discovery (zero-size or over `max_file_mb`) must count
     toward `files_skipped` in the IndexSummary — otherwise dropped files just
     vanish from the report and the user has no signal that their config is
