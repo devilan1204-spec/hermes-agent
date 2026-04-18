@@ -5,8 +5,6 @@ config.yaml.  Defaults come from workspace.constants so that
 hermes_cli/config.py can also import them without circular deps.
 """
 
-from __future__ import annotations
-
 import copy
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,7 +42,7 @@ class KnowledgebaseConfig:
     search: SearchConfig = field(default_factory=SearchConfig)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> KnowledgebaseConfig:
+    def from_dict(cls, d: dict[str, Any]) -> "KnowledgebaseConfig":
         merged = _deep_merge(copy.deepcopy(KNOWLEDGEBASE_CONFIG_DEFAULTS), d)
         roots = [
             WorkspaceRoot(path=r["path"], recursive=r.get("recursive", False))
@@ -97,7 +95,7 @@ class WorkspaceConfig:
     knowledgebase: KnowledgebaseConfig = field(default_factory=KnowledgebaseConfig)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any], hermes_home: Path) -> WorkspaceConfig:
+    def from_dict(cls, raw: dict[str, Any], hermes_home: Path) -> "WorkspaceConfig":
         ws_raw = raw.get("workspace", {})
         ws = _deep_merge(copy.deepcopy(WORKSPACE_CONFIG_DEFAULTS), ws_raw)
         kb = raw.get("knowledgebase", {})

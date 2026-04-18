@@ -4,8 +4,6 @@ Manages the workspace.sqlite database: schema creation, file/chunk CRUD,
 and BM25 full-text search.
 """
 
-from __future__ import annotations
-
 import re
 import sqlite3
 import time
@@ -102,7 +100,7 @@ class SQLiteFTS5Store:
             self._conn.close()
             self._conn = None
 
-    def __enter__(self) -> SQLiteFTS5Store:
+    def __enter__(self) -> "SQLiteFTS5Store":
         self.open()
         return self
 
