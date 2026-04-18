@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Callable, Literal
 
 from chonkie import Pipeline
-from chonkie.types import MarkdownDocument
+from chonkie.types import Document, MarkdownDocument
 
 PipelineKind = Literal["markdown", "code", "plain"]
 
@@ -410,7 +410,9 @@ def _process_code(
     text: str,
     pipelines: dict[PipelineKind, Pipeline],
 ) -> list[ChunkRecord]:
-    doc = pipelines["code"].run(texts=text)
+    result = pipelines["code"].run(texts=text)
+    assert isinstance(result, Document), f"code pipeline returned {type(result).__name__}"
+    doc = result
     line_offsets = _build_line_offsets(text)
     records: list[ChunkRecord] = []
     for i, chunk in enumerate(doc.chunks):
@@ -440,7 +442,9 @@ def _process_plain(
     text: str,
     pipelines: dict[PipelineKind, Pipeline],
 ) -> list[ChunkRecord]:
-    doc = pipelines["plain"].run(texts=text)
+    result = pipelines["plain"].run(texts=text)
+    assert isinstance(result, Document), f"plain pipeline returned {type(result).__name__}"
+    doc = result
     line_offsets = _build_line_offsets(text)
     records: list[ChunkRecord] = []
     for i, chunk in enumerate(doc.chunks):
