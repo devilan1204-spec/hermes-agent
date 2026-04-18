@@ -1,7 +1,5 @@
 """Tests for DefaultIndexer — verifies it satisfies BaseIndexer contract."""
 
-from __future__ import annotations
-
 from workspace.base import BaseIndexer
 from workspace.default import DefaultIndexer
 from workspace.types import IndexSummary, SearchResult

@@ -1,7 +1,5 @@
 """Tests for workspace plugin discovery."""
 
-from __future__ import annotations
-
 import textwrap
 
 

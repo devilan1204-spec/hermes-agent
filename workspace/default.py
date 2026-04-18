@@ -1,7 +1,5 @@
 """DefaultIndexer — built-in Chonkie + SQLite FTS5 workspace backend."""
 
-from __future__ import annotations
-
 import dataclasses
 import hashlib
 import json

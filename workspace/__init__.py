@@ -5,8 +5,6 @@ Public API:
     load_workspace_config() -> WorkspaceConfig
 """
 
-from __future__ import annotations
-
 import logging
 
 from workspace.base import BaseIndexer

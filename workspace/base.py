@@ -4,14 +4,12 @@
 Implementations must define __init__(config), index(), and search().
 status() is optional (default returns empty dict).
 """
-from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable
+from typing import Callable
 
-if TYPE_CHECKING:
-    from workspace.config import WorkspaceConfig
-    from workspace.types import IndexSummary, SearchResult
+from workspace.config import WorkspaceConfig
+from workspace.types import IndexSummary, SearchResult
 
 ProgressCallback = Callable[[int, int, str], None]
 

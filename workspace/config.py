@@ -4,8 +4,6 @@ Builds WorkspaceConfig from the main hermes config.yaml dict.
 Defaults come from the model field definitions.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -27,7 +25,7 @@ class ChunkingConfig(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _clamp_overlap(self) -> ChunkingConfig:
+    def _clamp_overlap(self) -> "ChunkingConfig":
         if self.overlap is None:
             object.__setattr__(self, "overlap", min(32, max(0, self.chunk_size - 1)))
         elif self.overlap < 0 or self.overlap >= self.chunk_size:

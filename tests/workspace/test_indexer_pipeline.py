@@ -12,8 +12,6 @@ after migrating from manual Chonkie wiring to `chonkie.Pipeline`:
 - Config signature changes cause re-indexing.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys

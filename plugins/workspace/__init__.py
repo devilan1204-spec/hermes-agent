@@ -11,8 +11,6 @@ Usage:
     indexer_cls = load_workspace_indexer("witchcraft")
 """
 
-from __future__ import annotations
-
 import importlib
 import importlib.util
 import logging
@@ -125,7 +123,7 @@ def _load_indexer_from_dir(indexer_dir: Path) -> Optional[type]:
                         str(parent_init),
                         submodule_search_locations=[str(parent_path)],
                     )
-                    if spec:
+                    if spec and spec.loader:
                         parent_mod = importlib.util.module_from_spec(spec)
                         sys.modules[parent] = parent_mod
                         try:
@@ -139,7 +137,7 @@ def _load_indexer_from_dir(indexer_dir: Path) -> Optional[type]:
             str(init_file),
             submodule_search_locations=[str(indexer_dir)],
         )
-        if not spec:
+        if not spec or not spec.loader:
             return None
 
         mod = importlib.util.module_from_spec(spec)
@@ -155,7 +153,7 @@ def _load_indexer_from_dir(indexer_dir: Path) -> Optional[type]:
                 sub_spec = importlib.util.spec_from_file_location(
                     full_sub_name, str(sub_file)
                 )
-                if sub_spec:
+                if sub_spec and sub_spec.loader:
                     sub_mod = importlib.util.module_from_spec(sub_spec)
                     sys.modules[full_sub_name] = sub_mod
                     try:

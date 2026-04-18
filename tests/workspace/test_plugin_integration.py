@@ -1,7 +1,5 @@
 """End-to-end integration tests for workspace plugin architecture."""
 
-from __future__ import annotations
-
 from workspace import get_indexer
 from workspace.base import BaseIndexer
 from workspace.config import WorkspaceConfig
