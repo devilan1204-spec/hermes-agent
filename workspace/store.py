@@ -15,7 +15,7 @@ from typing import Any
 from workspace.constants import get_index_db_path, get_index_dir
 from workspace.types import ChunkRecord, FileRecord, SearchResult
 
-_SCHEMA_VERSION = "2"
+_SCHEMA_VERSION = "1"
 
 _SCHEMA_SQL = """\
 PRAGMA journal_mode = WAL;

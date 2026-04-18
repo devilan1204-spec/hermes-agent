@@ -25,8 +25,6 @@ from typing import Callable, Literal
 from chonkie import Pipeline
 from chonkie.types import Document, MarkdownDocument
 
-PipelineKind = Literal["markdown", "code", "plain"]
-
 from workspace.config import ChunkingConfig, WorkspaceConfig
 from workspace.constants import (
     CHUNKING_PLAN_VERSION,
@@ -38,6 +36,8 @@ from workspace.constants import (
 from workspace.files import discover_workspace_files, seed_hermesignore
 from workspace.store import SQLiteFTS5Store
 from workspace.types import ChunkRecord, FileRecord, IndexingError, IndexSummary
+
+PipelineKind = Literal["markdown", "code", "plain"]
 
 log = logging.getLogger(__name__)
 
