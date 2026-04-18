@@ -161,6 +161,7 @@ def _handle_index(args: Namespace, human: bool) -> None:
 
 def _handle_search(args: Namespace, human: bool) -> None:
     from workspace.config import load_workspace_config
+    from workspace.constants import resolve_path_prefix
     from workspace.search import search_workspace
 
     config = load_workspace_config()
@@ -171,7 +172,7 @@ def _handle_search(args: Namespace, human: bool) -> None:
     query = args.query
     limit = getattr(args, "limit", None)
     raw_path = getattr(args, "path", None)
-    path_prefix = str(Path(raw_path).resolve()) if raw_path else None
+    path_prefix = resolve_path_prefix(raw_path)
     file_glob = getattr(args, "glob", None)
 
     results = search_workspace(

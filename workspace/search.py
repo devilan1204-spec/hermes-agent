@@ -6,9 +6,8 @@ and store lifecycle.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from workspace.config import WorkspaceConfig
+from workspace.constants import resolve_path_prefix
 from workspace.store import SQLiteFTS5Store
 from workspace.types import SearchResult
 
@@ -29,7 +28,7 @@ def search_workspace(
     # (`str(file_path.resolve())` in `indexer.py`). Mirrors what `commands.py`
     # already does for CLI search — without this, callers who hand in a
     # symlinked path via the Python API silently get zero hits.
-    resolved_prefix = str(Path(path_prefix).resolve()) if path_prefix else None
+    resolved_prefix = resolve_path_prefix(path_prefix)
 
     with SQLiteFTS5Store(config.workspace_root) as store:
         return store.search(

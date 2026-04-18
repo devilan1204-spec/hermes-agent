@@ -19,34 +19,14 @@ import sys
 import textwrap
 from pathlib import Path
 
-from workspace.config import WorkspaceConfig
-from workspace.constants import DEFAULT_IGNORE_PATTERNS
 from workspace.indexer import index_workspace
 from workspace.search import search_workspace
 from workspace.store import SQLiteFTS5Store
 
 
-def _make_config(tmp_path: Path, raw: dict | None = None) -> WorkspaceConfig:
-    hermes_home = tmp_path / "cfg_home"
-    hermes_home.mkdir(exist_ok=True)
-    cfg = WorkspaceConfig.from_dict(raw or {}, hermes_home)
-    cfg.workspace_root.mkdir(parents=True, exist_ok=True)
-    (cfg.workspace_root / ".hermesignore").write_text(
-        DEFAULT_IGNORE_PATTERNS + "\n.hermesignore\n",
-        encoding="utf-8",
-    )
-    return cfg
-
-
-def _write(path: Path, text: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-def test_markdown_pipeline_emits_clean_metadata_per_modality(tmp_path: Path):
-    cfg = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 64}}})
-    md = _write(
+def test_markdown_pipeline_emits_clean_metadata_per_modality(make_workspace_config, write_file):
+    cfg = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 64}}})
+    md = write_file(
         cfg.workspace_root / "docs" / "mixed.md",
         "# Title\n\n"
         "Intro prose for the markdown pipeline.\n\n"
@@ -112,12 +92,12 @@ def test_markdown_pipeline_emits_clean_metadata_per_modality(tmp_path: Path):
     assert all(r["end_line"] >= r["start_line"] for r in rows)
 
 
-def test_small_markdown_file_is_split_into_modalities(tmp_path: Path):
+def test_small_markdown_file_is_split_into_modalities(make_workspace_config, write_file):
     """Small markdown files with a code block must produce separate records for
     prose and code. Every file flows through the Pipeline regardless of size;
     there is no single-chunk short-circuit."""
-    cfg = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 512}}})
-    md = _write(
+    cfg = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 512}}})
+    md = write_file(
         cfg.workspace_root / "docs" / "tiny.md",
         "# Tiny\n\nShort intro.\n\n```python\nprint('hi')\n```\n",
     )
@@ -143,7 +123,7 @@ def test_small_markdown_file_is_split_into_modalities(tmp_path: Path):
     assert "print('hi')" not in text_row["content"]
 
 
-def test_overlap_context_propagates_and_is_prefix_of_next_chunk(tmp_path: Path):
+def test_overlap_context_propagates_and_is_prefix_of_next_chunk(make_workspace_config, write_file):
     """Multi-chunk prose file: every non-last chunk has non-NULL context,
     and that context is a prefix of the NEXT chunk's content. Chonkie's
     OverlapRefinery with method='suffix' in mode='token' attaches the first
@@ -152,8 +132,8 @@ def test_overlap_context_propagates_and_is_prefix_of_next_chunk(tmp_path: Path):
     is still findable via chunk N's context field.
     """
     sentences = [f"Sentence number {i} carries unique marker token WORD{i:03d}." for i in range(60)]
-    cfg = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 64, "overlap": 8}}})
-    f = _write(cfg.workspace_root / "notes" / "long.txt", "\n".join(sentences) + "\n")
+    cfg = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 64, "overlap": 8}}})
+    f = write_file(cfg.workspace_root / "notes" / "long.txt", "\n".join(sentences) + "\n")
 
     summary = index_workspace(cfg)
     assert summary.files_indexed == 1
@@ -183,13 +163,12 @@ def test_overlap_context_propagates_and_is_prefix_of_next_chunk(tmp_path: Path):
         )
 
 
-def test_deprecated_strategy_and_threshold_keys_are_silently_ignored(tmp_path: Path):
+def test_deprecated_strategy_and_threshold_keys_are_silently_ignored(make_workspace_config, write_file):
     """Old configs that still set `strategy: semantic` or `threshold: 0` must load
     cleanly after the migration (fields are gone from ChunkingConfig, unknown keys
     pass through _deep_merge and are dropped by from_dict). No ValueError, no warning
     suppression hack — just a clean no-op."""
-    cfg = _make_config(
-        tmp_path,
+    cfg = make_workspace_config(
         {
             "knowledgebase": {
                 "chunking": {
@@ -205,18 +184,18 @@ def test_deprecated_strategy_and_threshold_keys_are_silently_ignored(tmp_path: P
     assert not hasattr(cfg.knowledgebase.chunking, "threshold")
 
     # And indexing works end-to-end with the legacy-keyed config.
-    _write(cfg.workspace_root / "docs" / "readme.md", "# Hi\n\nSome prose.\n")
+    write_file(cfg.workspace_root / "docs" / "readme.md", "# Hi\n\nSome prose.\n")
     summary = index_workspace(cfg)
     assert summary.files_indexed == 1
     assert summary.files_errored == 0
 
 
-def test_config_signature_change_invalidates_existing_index(tmp_path: Path):
+def test_config_signature_change_invalidates_existing_index(make_workspace_config, write_file):
     """Changing a field that belongs in the signature (chunk_size) must cause
     already-indexed files to be re-indexed on the next run rather than skipped.
     This guards against accidentally dropping a field from _config_signature."""
-    cfg = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 512}}})
-    _write(cfg.workspace_root / "docs" / "a.md", "# A\n\nContent A.\n")
+    cfg = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 512}}})
+    write_file(cfg.workspace_root / "docs" / "a.md", "# A\n\nContent A.\n")
 
     first = index_workspace(cfg)
     assert first.files_indexed == 1
@@ -228,13 +207,13 @@ def test_config_signature_change_invalidates_existing_index(tmp_path: Path):
     assert second.files_skipped == 1
 
     # Changed chunk_size → third run re-indexes.
-    cfg2 = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 256}}})
+    cfg2 = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 256}}})
     third = index_workspace(cfg2)
     assert third.files_indexed == 1
     assert third.files_skipped == 0
 
 
-def test_concurrent_index_does_not_crash(tmp_path: Path):
+def test_concurrent_index_does_not_crash(tmp_path: Path, make_workspace_config, write_file):
     """Two simultaneous index_workspace() calls against the same workspace must
     both succeed, and the SQLite DB must pass PRAGMA integrity_check.
 
@@ -248,10 +227,10 @@ def test_concurrent_index_does_not_crash(tmp_path: Path):
     added enough startup skew that the race never landed. Eager
     `_build_pipelines()` removed that skew; this test is the regression guard.
     """
-    cfg = _make_config(tmp_path)
+    cfg = make_workspace_config()
     # Seed a few small markdown files so both runs have something to do.
     for i in range(5):
-        _write(
+        write_file(
             cfg.workspace_root / "docs" / f"note_{i}.md",
             f"# Note {i}\n\nSome content for note {i}.\n",
         )
@@ -302,7 +281,7 @@ def test_concurrent_index_does_not_crash(tmp_path: Path):
     assert result[0] == "ok", f"PRAGMA integrity_check returned: {result[0]!r}"
 
 
-def test_search_path_prefix_resolves_symlinks(tmp_path: Path):
+def test_search_path_prefix_resolves_symlinks(tmp_path: Path, make_workspace_config, write_file):
     """search_workspace must resolve `path_prefix` before handing it to the
     store. The indexer stores resolved absolute paths (`file_path.resolve()`);
     the store does a literal byte-prefix match. Callers using the Python API
@@ -312,8 +291,8 @@ def test_search_path_prefix_resolves_symlinks(tmp_path: Path):
     """
     real_docs = tmp_path / "real-docs"
     real_docs.mkdir()
-    _write(real_docs / "alpha.md", "# Alpha\n\nThe alpha document describes things.\n")
-    _write(real_docs / "beta.md", "# Beta\n\nThe beta document explains more things.\n")
+    write_file(real_docs / "alpha.md", "# Alpha\n\nThe alpha document describes things.\n")
+    write_file(real_docs / "beta.md", "# Beta\n\nThe beta document explains more things.\n")
 
     # Symlink `tmp_path/linked` -> `real-docs`. (Making "workspace/linked" a
     # sub-path would require first creating a workspace dir — plain `linked`
@@ -321,8 +300,7 @@ def test_search_path_prefix_resolves_symlinks(tmp_path: Path):
     linked = tmp_path / "linked"
     linked.symlink_to(real_docs, target_is_directory=True)
 
-    cfg = _make_config(
-        tmp_path,
+    cfg = make_workspace_config(
         {"knowledgebase": {"roots": [{"path": str(linked), "recursive": True}]}},
     )
 
@@ -347,21 +325,21 @@ def test_search_path_prefix_resolves_symlinks(tmp_path: Path):
     assert len(via_symlink) == len(via_resolved)
 
 
-def test_hermesignore_never_indexed(tmp_path: Path):
+def test_hermesignore_never_indexed(make_workspace_config, write_file):
     """.hermesignore files are discovery-level infrastructure, not indexable
-    content. _make_config seeds one at the workspace root; writing another one
-    in a subdirectory must also be excluded. Post-fix the filter is hardcoded
-    in `discover_workspace_files`, so this holds regardless of user-edited
-    ignore patterns.
+    content. make_workspace_config seeds one at the workspace root; writing
+    another one in a subdirectory must also be excluded. Post-fix the filter
+    is hardcoded in `discover_workspace_files`, so this holds regardless of
+    user-edited ignore patterns.
     """
-    cfg = _make_config(tmp_path)
+    cfg = make_workspace_config()
     # Additional .hermesignore in a nested directory.
-    _write(
+    write_file(
         cfg.workspace_root / "docs" / ".hermesignore",
         "# nested ignore rules\n*.bak\n",
     )
     # Plus a legitimate markdown file so the index has something in it.
-    _write(cfg.workspace_root / "docs" / "ok.md", "# Ok\n\nSome prose.\n")
+    write_file(cfg.workspace_root / "docs" / "ok.md", "# Ok\n\nSome prose.\n")
 
     summary = index_workspace(cfg)
     assert summary.files_errored == 0
@@ -375,14 +353,13 @@ def test_hermesignore_never_indexed(tmp_path: Path):
     assert rows == [], f"expected no .hermesignore rows, got: {[r['abs_path'] for r in rows]}"
 
 
-def test_summary_reports_filtered_empty_and_oversized(tmp_path: Path):
+def test_summary_reports_filtered_empty_and_oversized(make_workspace_config, write_file):
     """Files dropped at discovery (zero-size or over `max_file_mb`) must count
     toward `files_skipped` in the IndexSummary — otherwise dropped files just
     vanish from the report and the user has no signal that their config is
     filtering things out.
     """
-    cfg = _make_config(
-        tmp_path,
+    cfg = make_workspace_config(
         {"knowledgebase": {"indexing": {"max_file_mb": 1}}},
     )
 
@@ -398,7 +375,7 @@ def test_summary_reports_filtered_empty_and_oversized(tmp_path: Path):
     oversized.write_bytes(b"a" * (2 * 1024 * 1024))
 
     # One real file that should be indexed.
-    _write(cfg.workspace_root / "docs" / "real.md", "# Real\n\nActual content.\n")
+    write_file(cfg.workspace_root / "docs" / "real.md", "# Real\n\nActual content.\n")
 
     summary = index_workspace(cfg)
 

@@ -20,9 +20,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 from chonkie import Pipeline
+from chonkie.types import MarkdownDocument
+
+PipelineKind = Literal["markdown", "code", "plain"]
 
 from workspace.config import ChunkingConfig, WorkspaceConfig
 from workspace.constants import (
@@ -166,7 +169,7 @@ def index_workspace(
                             exc_info=True,
                         )
                 files_errored += 1
-                stage = "discover" if isinstance(exc, FileNotFoundError) else "store"
+                stage = "read" if isinstance(exc, FileNotFoundError) else "store"
                 _append_error(
                     errors,
                     IndexingError(
@@ -240,7 +243,7 @@ def ensure_workspace_dirs(config: WorkspaceConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _build_pipelines(ch: ChunkingConfig) -> dict[str, Pipeline]:
+def _build_pipelines(ch: ChunkingConfig) -> dict[PipelineKind, Pipeline]:
     """Build one Pipeline per file kind, sharing overlap-refinery config.
 
     Chonkie's Pipeline caches component instances internally keyed by init
@@ -288,7 +291,7 @@ def _process_file(
     abs_path: str,
     text: str,
     suffix: str,
-    pipelines: dict[str, Pipeline],
+    pipelines: dict[PipelineKind, Pipeline],
 ) -> list[ChunkRecord]:
     if suffix in MARKDOWN_SUFFIXES:
         return _process_markdown(abs_path, text, pipelines)
@@ -301,9 +304,13 @@ def _process_file(
 def _process_markdown(
     abs_path: str,
     text: str,
-    pipelines: dict[str, Pipeline],
+    pipelines: dict[PipelineKind, Pipeline],
 ) -> list[ChunkRecord]:
-    doc = pipelines["markdown"].run(texts=text)
+    result = pipelines["markdown"].run(texts=text)
+    assert isinstance(result, MarkdownDocument), (
+        f"markdown pipeline returned {type(result).__name__}"
+    )
+    doc = result
 
     headings = _scan_headings(text)
     line_offsets = _build_line_offsets(text)
@@ -401,7 +408,7 @@ def _process_markdown(
 def _process_code(
     abs_path: str,
     text: str,
-    pipelines: dict[str, Pipeline],
+    pipelines: dict[PipelineKind, Pipeline],
 ) -> list[ChunkRecord]:
     doc = pipelines["code"].run(texts=text)
     line_offsets = _build_line_offsets(text)
@@ -431,7 +438,7 @@ def _process_code(
 def _process_plain(
     abs_path: str,
     text: str,
-    pipelines: dict[str, Pipeline],
+    pipelines: dict[PipelineKind, Pipeline],
 ) -> list[ChunkRecord]:
     doc = pipelines["plain"].run(texts=text)
     line_offsets = _build_line_offsets(text)

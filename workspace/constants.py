@@ -211,3 +211,14 @@ def get_index_dir(workspace_root: Path) -> Path:
 
 def get_index_db_path(workspace_root: Path) -> Path:
     return get_index_dir(workspace_root) / INDEX_DB_NAME
+
+
+def resolve_path_prefix(raw: str | None) -> str | None:
+    """Resolve a user-supplied path prefix to its canonical absolute form.
+
+    Mirrors the indexer's ``Path(...).resolve()`` on stored paths so that
+    search byte-prefix comparisons line up regardless of symlinks.
+    """
+    if not raw:
+        return None
+    return str(Path(raw).resolve())

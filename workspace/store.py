@@ -6,7 +6,6 @@ and BM25 full-text search.
 
 from __future__ import annotations
 
-import random
 import re
 import sqlite3
 import time
@@ -304,8 +303,7 @@ def _execute_with_lock_retry(
     cur: sqlite3.Cursor,
     sql: str,
     *,
-    attempts: int = 25,
-    base_delay: float = 0.05,
+    attempts: int = 5,
 ) -> None:
     """Run a schema-bootstrap executescript() with retry on transient locks.
 
@@ -317,15 +315,14 @@ def _execute_with_lock_retry(
     winner's bootstrap runs in microseconds; the loser retries a few times
     until WAL mode is already set and its pragma becomes a no-op.
     """
-    for attempt in range(attempts):
+    for attempt in range(1, attempts + 1):
         try:
             cur.executescript(sql)
             return
         except sqlite3.OperationalError as exc:
-            if "database is locked" not in str(exc) or attempt == attempts - 1:
+            if "database is locked" not in str(exc) or attempt == attempts:
                 raise
-            # Jittered backoff: up to base_delay * (1 + random) per attempt.
-            time.sleep(base_delay * (1 + random.random()))
+            time.sleep(0.1 * attempt)
 
 
 _FTS5_COMPOUND_SEPARATORS = re.compile(r"[-_]")

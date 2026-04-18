@@ -9,48 +9,26 @@ from pathlib import Path
 
 import pytest
 
-from workspace.constants import DEFAULT_IGNORE_PATTERNS
 from workspace.commands import workspace_command
-from workspace.config import WorkspaceConfig
 from workspace.indexer import index_workspace
 from workspace.store import SQLiteFTS5Store
 
 
-def _make_config(tmp_path: Path, raw: dict | None = None) -> WorkspaceConfig:
-    hermes_home = tmp_path / "cfg_home"
-    hermes_home.mkdir(exist_ok=True)
-    cfg = WorkspaceConfig.from_dict(raw or {}, hermes_home)
-    cfg.workspace_root.mkdir(parents=True, exist_ok=True)
-    (cfg.workspace_root / ".hermesignore").write_text(
-        DEFAULT_IGNORE_PATTERNS + "\n.hermesignore\n",
-        encoding="utf-8",
-    )
-    return cfg
-
-
-def _write(path: Path, text: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-def test_default_overlap_is_clamped_for_small_chunk_sizes(tmp_path: Path):
-    cfg = _make_config(
-        tmp_path,
+def test_default_overlap_is_clamped_for_small_chunk_sizes(make_workspace_config):
+    cfg = make_workspace_config(
         {"knowledgebase": {"chunking": {"chunk_size": 12}}},
     )
     # Default overlap is 32, clamped to chunk_size - 1 when chunk_size is smaller.
     assert cfg.knowledgebase.chunking.overlap == 11
 
 
-def test_markdown_metadata_has_clean_shape(tmp_path: Path):
+def test_markdown_metadata_has_clean_shape(make_workspace_config, write_file):
     """Code rows carry only `language`; tables and images carry no metadata."""
-    cfg = _make_config(
-        tmp_path,
+    cfg = make_workspace_config(
         {"knowledgebase": {"chunking": {"chunk_size": 64}}},
     )
 
-    md = _write(
+    md = write_file(
         cfg.workspace_root / "docs" / "mixed.md",
         """# Title
 
@@ -119,11 +97,15 @@ def second_block():
     assert [r["content"] for r in image_rows] == ["first image", "second image"]
 
 
-def test_failed_reindex_keeps_previous_committed_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    cfg = _make_config(tmp_path)
+def test_failed_reindex_keeps_previous_committed_rows(
+    make_workspace_config,
+    write_file,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    cfg = make_workspace_config()
 
-    file_a = _write(cfg.workspace_root / "docs" / "a.txt", "stable old content\n")
-    file_b = _write(cfg.workspace_root / "docs" / "b.txt", "other old content\n")
+    file_a = write_file(cfg.workspace_root / "docs" / "a.txt", "stable old content\n")
+    file_b = write_file(cfg.workspace_root / "docs" / "b.txt", "other old content\n")
 
     initial = index_workspace(cfg)
     assert initial.files_indexed == 2
@@ -165,12 +147,11 @@ def test_failed_reindex_keeps_previous_committed_rows(tmp_path: Path, monkeypatc
     assert "stable new content" not in combined
 
 
-def test_missing_root_skips_stale_prune(tmp_path: Path):
+def test_missing_root_skips_stale_prune(tmp_path: Path, make_workspace_config, write_file):
     external_root = tmp_path / "external"
     external_root.mkdir()
 
-    cfg = _make_config(
-        tmp_path,
+    cfg = make_workspace_config(
         {
             "knowledgebase": {
                 "roots": [{"path": str(external_root), "recursive": True}],
@@ -178,8 +159,8 @@ def test_missing_root_skips_stale_prune(tmp_path: Path):
         },
     )
 
-    local_file = _write(cfg.workspace_root / "docs" / "local.txt", "local content\n")
-    external_file = _write(external_root / "external.txt", "external content\n")
+    local_file = write_file(cfg.workspace_root / "docs" / "local.txt", "local content\n")
+    external_file = write_file(external_root / "external.txt", "external content\n")
 
     first = index_workspace(cfg)
     assert first.files_indexed == 2
@@ -197,11 +178,11 @@ def test_missing_root_skips_stale_prune(tmp_path: Path):
 
 
 def test_workspace_command_search_disabled_returns_structured_error(
-    tmp_path: Path,
+    make_workspace_config,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    cfg = _make_config(tmp_path, {"workspace": {"enabled": False}})
+    cfg = make_workspace_config({"workspace": {"enabled": False}})
     monkeypatch.setattr("workspace.config.load_workspace_config", lambda: cfg)
 
     args = Namespace(
