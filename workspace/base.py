@@ -1,0 +1,37 @@
+# workspace/base.py
+"""BaseIndexer ABC — the plugin contract for workspace backends.
+
+Implementations must define __init__(config), index(), and search().
+status() is optional (default returns empty dict).
+"""
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from workspace.config import WorkspaceConfig
+    from workspace.types import IndexSummary, SearchResult
+
+ProgressCallback = Callable[[int, int, str], None]
+
+
+class BaseIndexer(ABC):
+    @abstractmethod
+    def __init__(self, config: WorkspaceConfig) -> None: ...
+
+    @abstractmethod
+    def index(self, *, progress: ProgressCallback | None = None) -> IndexSummary: ...
+
+    @abstractmethod
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        path_prefix: str | None = None,
+        file_glob: str | None = None,
+    ) -> list[SearchResult]: ...
+
+    def status(self) -> dict:
+        return {}
