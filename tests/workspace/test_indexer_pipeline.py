@@ -10,15 +10,11 @@ after migrating from manual Chonkie wiring to `chonkie.Pipeline`:
 - Overlap context is populated and is a suffix of the previous chunk's content.
 - Deprecated config keys (strategy, threshold) are silently ignored.
 - Config signature changes cause re-indexing.
-
-Marked xfail(strict=True) until the Pipeline migration lands.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
-
-import pytest
 
 from workspace.config import WorkspaceConfig
 from workspace.constants import DEFAULT_IGNORE_PATTERNS
@@ -113,13 +109,9 @@ def test_markdown_pipeline_emits_clean_metadata_per_modality(tmp_path: Path):
 
 
 def test_small_markdown_file_is_split_into_modalities(tmp_path: Path):
-    """A 20-word markdown file with a code block must still produce two records.
-
-    Current impl short-circuits through _single_chunk when word_count <= threshold,
-    producing one giant record with kind=markdown_text that includes the raw code fence.
-    Post-migration, every file flows through the Pipeline, so the chef splits
-    prose and code into separate rows.
-    """
+    """Small markdown files with a code block must produce separate records for
+    prose and code. Every file flows through the Pipeline regardless of size;
+    there is no single-chunk short-circuit."""
     cfg = _make_config(tmp_path, {"knowledgebase": {"chunking": {"chunk_size": 512}}})
     md = _write(
         cfg.workspace_root / "docs" / "tiny.md",

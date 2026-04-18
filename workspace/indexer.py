@@ -316,7 +316,7 @@ def _process_markdown(
             ChunkRecord(
                 chunk_id=_make_id(),
                 abs_path=abs_path,
-                chunk_index=0,  # rewritten after sort
+                chunk_index=0,
                 content=chunk.text,
                 token_count=chunk.token_count,
                 start_line=_offset_to_line(line_offsets, sc),
@@ -480,19 +480,6 @@ def _nearest_heading(headings: list[tuple[int, str]], char_offset: int) -> str |
 # ---------------------------------------------------------------------------
 # Utility functions
 # ---------------------------------------------------------------------------
-
-
-def _extract_first_heading(text: str) -> str | None:
-    m = _HEADING_RE.search(text)
-    return m.group(0).strip() if m else None
-
-
-def _kind_from_suffix(suffix: str) -> str:
-    if suffix in MARKDOWN_SUFFIXES:
-        return "markdown_text"
-    if suffix in CODE_SUFFIXES:
-        return "code"
-    return "text"
 
 
 _NEWLINE_RE = re.compile(r"\n")
