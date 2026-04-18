@@ -20,8 +20,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from workspace.indexer import index_workspace
-from workspace.search import search_workspace
+from workspace.default import DefaultIndexer
 from workspace.store import SQLiteFTS5Store
 
 
@@ -45,7 +44,7 @@ def test_markdown_pipeline_emits_clean_metadata_per_modality(
         "More prose.\n",
     )
 
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
     assert summary.files_indexed == 1
     assert summary.files_errored == 0
 
@@ -107,7 +106,7 @@ def test_small_markdown_file_is_split_into_modalities(
         "# Tiny\n\nShort intro.\n\n```python\nprint('hi')\n```\n",
     )
 
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
     assert summary.files_indexed == 1
 
     with SQLiteFTS5Store(cfg.workspace_root) as store:
@@ -149,7 +148,7 @@ def test_overlap_context_propagates_and_is_prefix_of_next_chunk(
         cfg.workspace_root / "notes" / "long.txt", "\n".join(sentences) + "\n"
     )
 
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
     assert summary.files_indexed == 1
 
     with SQLiteFTS5Store(cfg.workspace_root) as store:
@@ -201,7 +200,7 @@ def test_deprecated_strategy_and_threshold_keys_are_silently_ignored(
 
     # And indexing works end-to-end with the legacy-keyed config.
     write_file(cfg.workspace_root / "docs" / "readme.md", "# Hi\n\nSome prose.\n")
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
     assert summary.files_indexed == 1
     assert summary.files_errored == 0
 
@@ -215,18 +214,18 @@ def test_config_signature_change_invalidates_existing_index(
     cfg = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 512}}})
     write_file(cfg.workspace_root / "docs" / "a.md", "# A\n\nContent A.\n")
 
-    first = index_workspace(cfg)
+    first = DefaultIndexer(cfg).index()
     assert first.files_indexed == 1
     assert first.files_skipped == 0
 
     # Same config → second run skips.
-    second = index_workspace(cfg)
+    second = DefaultIndexer(cfg).index()
     assert second.files_indexed == 0
     assert second.files_skipped == 1
 
     # Changed chunk_size → third run re-indexes.
     cfg2 = make_workspace_config({"knowledgebase": {"chunking": {"chunk_size": 256}}})
-    third = index_workspace(cfg2)
+    third = DefaultIndexer(cfg2).index()
     assert third.files_indexed == 1
     assert third.files_skipped == 0
 
@@ -276,11 +275,11 @@ def test_concurrent_index_does_not_crash(
             sys.path.insert(0, {str(project_root)!r})
 
             from workspace.config import WorkspaceConfig
-            from workspace.indexer import index_workspace
+            from workspace.default import DefaultIndexer
 
             hermes_home = Path({str(hermes_home)!r})
             cfg = WorkspaceConfig(workspace_root=hermes_home / "workspace")
-            summary = index_workspace(cfg)
+            summary = DefaultIndexer(cfg).index()
             sys.exit(0)
             """
         ),
@@ -330,22 +329,20 @@ def test_search_path_prefix_resolves_symlinks(
         {"knowledgebase": {"roots": [{"path": str(linked), "recursive": True}]}},
     )
 
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
     assert summary.files_indexed == 2
 
-    # Via the symlink path — must still return hits, because search_workspace
+    # Via the symlink path — must still return hits, because search
     # resolves path_prefix before the byte-prefix compare.
-    via_symlink = search_workspace(
+    via_symlink = DefaultIndexer(cfg).search(
         "document",
-        cfg,
         path_prefix=str(linked),
     )
-    assert len(via_symlink) > 0, "search_workspace must resolve symlinked path_prefix"
+    assert len(via_symlink) > 0, "search must resolve symlinked path_prefix"
 
     # Via the resolved real path — the counts must match.
-    via_resolved = search_workspace(
+    via_resolved = DefaultIndexer(cfg).search(
         "document",
-        cfg,
         path_prefix=str(real_docs.resolve()),
     )
     assert len(via_symlink) == len(via_resolved)
@@ -367,7 +364,7 @@ def test_hermesignore_never_indexed(make_workspace_config, write_file):
     # Plus a legitimate markdown file so the index has something in it.
     write_file(cfg.workspace_root / "docs" / "ok.md", "# Ok\n\nSome prose.\n")
 
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
     assert summary.files_errored == 0
 
     with SQLiteFTS5Store(cfg.workspace_root) as store:
@@ -407,7 +404,7 @@ def test_summary_reports_filtered_empty_and_oversized(
     # One real file that should be indexed.
     write_file(cfg.workspace_root / "docs" / "real.md", "# Real\n\nActual content.\n")
 
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
 
     assert summary.files_indexed == 1
     assert summary.files_skipped == 3

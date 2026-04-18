@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from workspace.commands import workspace_command
-from workspace.indexer import index_workspace
+from workspace.default import DefaultIndexer
 from workspace.store import SQLiteFTS5Store
 
 
@@ -63,7 +63,7 @@ def second_block():
 """,
     )
 
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
     assert summary.files_indexed == 1
     assert summary.files_errored == 0
 
@@ -107,7 +107,7 @@ def test_failed_reindex_keeps_previous_committed_rows(
     file_a = write_file(cfg.workspace_root / "docs" / "a.txt", "stable old content\n")
     file_b = write_file(cfg.workspace_root / "docs" / "b.txt", "other old content\n")
 
-    initial = index_workspace(cfg)
+    initial = DefaultIndexer(cfg).index()
     assert initial.files_indexed == 2
 
     with SQLiteFTS5Store(cfg.workspace_root) as store:
@@ -127,7 +127,7 @@ def test_failed_reindex_keeps_previous_committed_rows(
     file_a.write_text("stable new content that should roll back\n", encoding="utf-8")
     file_b.write_text("other new content that should succeed\n", encoding="utf-8")
 
-    summary = index_workspace(cfg)
+    summary = DefaultIndexer(cfg).index()
     assert summary.files_indexed == 1
     assert summary.files_errored == 1
 
@@ -147,7 +147,9 @@ def test_failed_reindex_keeps_previous_committed_rows(
     assert "stable new content" not in combined
 
 
-def test_missing_root_skips_stale_prune(tmp_path: Path, make_workspace_config, write_file):
+def test_missing_root_skips_stale_prune(
+    tmp_path: Path, make_workspace_config, write_file
+):
     external_root = tmp_path / "external"
     external_root.mkdir()
 
@@ -159,15 +161,17 @@ def test_missing_root_skips_stale_prune(tmp_path: Path, make_workspace_config, w
         },
     )
 
-    local_file = write_file(cfg.workspace_root / "docs" / "local.txt", "local content\n")
+    local_file = write_file(
+        cfg.workspace_root / "docs" / "local.txt", "local content\n"
+    )
     external_file = write_file(external_root / "external.txt", "external content\n")
 
-    first = index_workspace(cfg)
+    first = DefaultIndexer(cfg).index()
     assert first.files_indexed == 2
 
     shutil.rmtree(external_root)
 
-    second = index_workspace(cfg)
+    second = DefaultIndexer(cfg).index()
     assert second.files_pruned == 0
 
     with SQLiteFTS5Store(cfg.workspace_root) as store:
@@ -231,7 +235,10 @@ def test_workspace_command_wraps_unexpected_errors_as_json(
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [
-        (["hermes", "workspace", "search", "needle", "--human"], ("search", None, True)),
+        (
+            ["hermes", "workspace", "search", "needle", "--human"],
+            ("search", None, True),
+        ),
         (["hermes", "workspace", "roots", "list", "--human"], ("roots", "list", True)),
     ],
 )

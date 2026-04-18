@@ -36,19 +36,12 @@ def get_indexer(config: WorkspaceConfig | None = None) -> BaseIndexer:
     return cls(config)
 
 
-# Backwards-compat re-exports (indexer.py and search.py still exist for now)
-from workspace.indexer import ensure_workspace_dirs, index_workspace  # noqa: E402, F401
-from workspace.search import search_workspace  # noqa: E402, F401
-
 __all__ = [
     "BaseIndexer",
     "DefaultIndexer",
     "WorkspaceConfig",
     "load_workspace_config",
     "get_indexer",
-    "index_workspace",
-    "search_workspace",
-    "ensure_workspace_dirs",
     "IndexingError",
     "IndexSummary",
     "SearchResult",
