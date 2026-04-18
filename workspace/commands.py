@@ -7,8 +7,6 @@ hermes workspace search <query> [--path] [--glob] [--limit]
 All commands output JSON by default (agent-first). Use --human for Rich output.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from argparse import Namespace

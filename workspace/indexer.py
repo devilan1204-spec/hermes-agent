@@ -9,8 +9,6 @@ component instances keyed by init kwargs, so components are fully reused across
 files of the same kind within a run.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import hashlib
 import json
@@ -22,8 +20,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
 
-from chonkie import Pipeline
-from chonkie.types import Document, MarkdownDocument
+try:
+    from chonkie import Pipeline
+    from chonkie.types import Document, MarkdownDocument
+except ImportError as e:
+    raise ImportError(
+        "Chonkie is required for workspace indexing. "
+        "Install it with: pip install hermes-agent[workspace]"
+    ) from e
 
 from workspace.config import ChunkingConfig, WorkspaceConfig
 from workspace.constants import (
@@ -50,23 +54,11 @@ _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 _MAX_ERRORS = 50
 
 
-def _require_chonkie() -> None:
-    try:
-        import chonkie  # noqa: F401
-    except ImportError:
-        raise RuntimeError(
-            "Chonkie is required for workspace indexing. "
-            "Install it with: pip install hermes-agent[workspace]"
-        )
-
-
 def index_workspace(
     config: WorkspaceConfig,
     *,
     progress: ProgressCallback | None = None,
 ) -> IndexSummary:
-    _require_chonkie()
-
     start = time.monotonic()
     ensure_workspace_dirs(config)
     config_sig = _config_signature(config)
@@ -341,9 +333,7 @@ def _process_markdown(
         if not code.content.strip():
             continue
         sc, ec = code.start_index, code.end_index
-        metadata = (
-            json.dumps({"language": code.language}) if code.language else None
-        )
+        metadata = json.dumps({"language": code.language}) if code.language else None
         candidates.append(
             ChunkRecord(
                 chunk_id=_make_id(),
@@ -411,7 +401,9 @@ def _process_code(
     pipelines: dict[PipelineKind, Pipeline],
 ) -> list[ChunkRecord]:
     result = pipelines["code"].run(texts=text)
-    assert isinstance(result, Document), f"code pipeline returned {type(result).__name__}"
+    assert isinstance(result, Document), (
+        f"code pipeline returned {type(result).__name__}"
+    )
     doc = result
     line_offsets = _build_line_offsets(text)
     records: list[ChunkRecord] = []
@@ -443,7 +435,9 @@ def _process_plain(
     pipelines: dict[PipelineKind, Pipeline],
 ) -> list[ChunkRecord]:
     result = pipelines["plain"].run(texts=text)
-    assert isinstance(result, Document), f"plain pipeline returned {type(result).__name__}"
+    assert isinstance(result, Document), (
+        f"plain pipeline returned {type(result).__name__}"
+    )
     doc = result
     line_offsets = _build_line_offsets(text)
     records: list[ChunkRecord] = []

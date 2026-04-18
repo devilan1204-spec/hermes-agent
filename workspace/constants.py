@@ -4,8 +4,6 @@ Zero internal dependencies — safe to import from anywhere.
 Both workspace/ modules and hermes_cli/config.py import from here.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 BINARY_SUFFIXES: frozenset[str] = frozenset(

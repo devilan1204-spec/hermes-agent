@@ -4,8 +4,6 @@ Salvaged from PR #5840's agent/workspace_types.py, trimmed for FTS5-only:
 no dense scores, no reranking, no plugin context.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

@@ -4,8 +4,6 @@ Thin wrapper around SQLiteFTS5Store.search() that handles config loading
 and store lifecycle.
 """
 
-from __future__ import annotations
-
 from workspace.config import WorkspaceConfig
 from workspace.constants import resolve_path_prefix
 from workspace.store import SQLiteFTS5Store
