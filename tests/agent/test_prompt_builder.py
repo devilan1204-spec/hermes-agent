@@ -1122,3 +1122,35 @@ class TestWorkspaceGuidance:
         out = build_workspace_guidance({"workspace_search"})
         assert isinstance(out, str)
         assert len(out.strip()) > 0
+
+    def test_wiring_into_system_prompt(self):
+        """End-to-end: the assembler output reaches the system prompt when
+        workspace_search is in valid_tool_names.
+
+        Uses the same tool_guidance collection pattern as _build_system_prompt
+        in run_agent.py so we verify the contract without booting AIAgent.
+        """
+        from agent.prompt_builder import (
+            MEMORY_GUIDANCE,
+            build_workspace_guidance,
+        )
+        valid_tool_names = {"memory", "workspace_search", "workspace_retrieve"}
+        tool_guidance = []
+        if "memory" in valid_tool_names:
+            tool_guidance.append(MEMORY_GUIDANCE)
+        ws = build_workspace_guidance(valid_tool_names)
+        if ws:
+            tool_guidance.append(ws)
+        combined = " ".join(tool_guidance)
+        assert WORKSPACE_SEARCH_GUIDANCE_CORE in combined
+        assert WORKSPACE_RETRIEVE_GUIDANCE in combined
+        assert MEMORY_GUIDANCE in combined
+
+    def test_wiring_skips_when_workspace_unavailable(self):
+        valid_tool_names = {"memory"}
+        tool_guidance = []
+        ws = build_workspace_guidance(valid_tool_names)
+        if ws:
+            tool_guidance.append(ws)
+        combined = " ".join(tool_guidance)
+        assert WORKSPACE_SEARCH_GUIDANCE_CORE not in combined
