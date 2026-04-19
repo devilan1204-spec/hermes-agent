@@ -212,6 +212,32 @@ class DefaultIndexer(BaseIndexer):
         with SQLiteFTS5Store(self._config.workspace_root) as store:
             return store.status()
 
+    def list_files(self) -> list[dict[str, Any]]:
+        with SQLiteFTS5Store(self._config.workspace_root) as store:
+            return [
+                {
+                    "path": r.abs_path,
+                    "root": r.root_path,
+                    "size_bytes": r.size_bytes,
+                    "chunks": r.chunk_count,
+                    "modified": r.modified_at,
+                    "indexed": r.indexed_at,
+                }
+                for r in store.list_files()
+            ]
+
+    def retrieve(self, path: str) -> list[SearchResult]:
+        with SQLiteFTS5Store(self._config.workspace_root) as store:
+            return store.get_chunks_for_file(path)
+
+    def delete(self, path: str) -> bool:
+        with SQLiteFTS5Store(self._config.workspace_root) as store:
+            if store.get_file_record(path) is None:
+                return False
+            store.delete_file(path)
+            store.commit()
+            return True
+
     def _build_pipelines(self, ch: ChunkingConfig) -> dict[PipelineKind, Any]:
         from chonkie import Pipeline
 

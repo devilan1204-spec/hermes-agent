@@ -278,6 +278,49 @@ class SQLiteFTS5Store:
             for row in rows
         ]
 
+    def list_files(self) -> list[FileRecord]:
+        rows = self.conn.execute(
+            "SELECT * FROM files ORDER BY abs_path"
+        ).fetchall()
+        return [
+            FileRecord(
+                abs_path=row["abs_path"],
+                root_path=row["root_path"],
+                content_hash=row["content_hash"],
+                config_signature=row["config_signature"],
+                size_bytes=row["size_bytes"],
+                modified_at=row["modified_at"],
+                indexed_at=row["indexed_at"],
+                chunk_count=row["chunk_count"],
+            )
+            for row in rows
+        ]
+
+    def get_chunks_for_file(self, abs_path: str) -> list[SearchResult]:
+        rows = self.conn.execute(
+            """SELECT c.abs_path, c.start_line, c.end_line, c.section,
+                      c.chunk_index, c.token_count, f.modified_at, c.content
+               FROM chunks c
+               JOIN files f ON c.abs_path = f.abs_path
+               WHERE c.abs_path = ?
+               ORDER BY c.chunk_index""",
+            (abs_path,),
+        ).fetchall()
+        return [
+            SearchResult(
+                path=row[0],
+                line_start=row[1],
+                line_end=row[2],
+                section=row[3],
+                chunk_index=row[4],
+                score=1.0,
+                tokens=row[5],
+                modified=row[6],
+                content=row[7],
+            )
+            for row in rows
+        ]
+
     def all_indexed_paths(self) -> set[str]:
         rows = self.conn.execute("SELECT abs_path FROM files").fetchall()
         return {row[0] for row in rows}

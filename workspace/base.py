@@ -33,3 +33,12 @@ class BaseIndexer(ABC):
 
     def status(self) -> dict:
         return {}
+
+    def list_files(self) -> list[dict]:
+        return []
+
+    def retrieve(self, path: str) -> list[SearchResult]:
+        return []
+
+    def delete(self, path: str) -> bool:
+        return False

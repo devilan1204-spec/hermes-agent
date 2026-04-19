@@ -3,6 +3,10 @@
 hermes workspace roots list/add/remove
 hermes workspace index
 hermes workspace search <query> [--path] [--glob] [--limit]
+hermes workspace status
+hermes workspace list
+hermes workspace retrieve <path>
+hermes workspace delete <path>
 
 All commands output JSON by default (agent-first). Use --human for Rich output.
 """
@@ -17,7 +21,7 @@ from typing import Any
 def workspace_command(args: Namespace) -> None:
     action = getattr(args, "workspace_action", None)
     if action is None:
-        msg = "No workspace subcommand. Use: roots, index, search"
+        msg = "No workspace subcommand. Use: roots, index, search, status, list, retrieve, delete"
         print(json.dumps({"error": msg}))
         sys.exit(1)
 
@@ -30,6 +34,14 @@ def workspace_command(args: Namespace) -> None:
             _handle_index(args, human)
         elif action == "search":
             _handle_search(args, human)
+        elif action == "status":
+            _handle_status(args, human)
+        elif action == "list":
+            _handle_list(args, human)
+        elif action == "retrieve":
+            _handle_retrieve(args, human)
+        elif action == "delete":
+            _handle_delete(args, human)
         else:
             print(json.dumps({"error": f"Unknown workspace action: {action}"}))
             sys.exit(1)
@@ -186,6 +198,112 @@ def _handle_search(args: Namespace, human: bool) -> None:
         _print_human_results(results)
     else:
         print(json.dumps([r.to_dict() for r in results], indent=2))
+
+
+def _handle_status(args: Namespace, human: bool) -> None:
+    from workspace import get_indexer
+    from workspace.config import load_workspace_config
+
+    config = load_workspace_config()
+    if not config.enabled:
+        _error("Workspace is disabled (workspace.enabled = false)")
+        return
+
+    indexer = get_indexer(config)
+    info = indexer.status()
+
+    if human:
+        if not info:
+            print("No status available (indexer does not report status).")
+            return
+        for k, v in info.items():
+            if k == "db_size_bytes":
+                mb = v / (1024 * 1024)
+                print(f"  {k}: {mb:.1f} MB")
+            else:
+                print(f"  {k}: {v}")
+    else:
+        print(json.dumps(info, indent=2))
+
+
+def _handle_list(args: Namespace, human: bool) -> None:
+    from workspace import get_indexer
+    from workspace.config import load_workspace_config
+
+    config = load_workspace_config()
+    if not config.enabled:
+        _error("Workspace is disabled (workspace.enabled = false)")
+        return
+
+    indexer = get_indexer(config)
+    files = indexer.list_files()
+
+    if human:
+        if not files:
+            print("No files indexed.")
+            return
+        print(f"{len(files)} indexed files:\n")
+        for f in files:
+            size_kb = f.get("size_bytes", 0) / 1024
+            chunks = f.get("chunks", 0)
+            print(f"  {f['path']}  ({size_kb:.0f} KB, {chunks} chunks)")
+    else:
+        print(json.dumps(files, indent=2))
+
+
+def _handle_retrieve(args: Namespace, human: bool) -> None:
+    from workspace import get_indexer
+    from workspace.config import load_workspace_config
+
+    config = load_workspace_config()
+    if not config.enabled:
+        _error("Workspace is disabled (workspace.enabled = false)")
+        return
+
+    path = str(Path(args.path).expanduser().resolve())
+    indexer = get_indexer(config)
+    results = indexer.retrieve(path)
+
+    if not results:
+        if human:
+            print(f"No indexed chunks for: {path}")
+        else:
+            print(json.dumps({"path": path, "chunks": []}))
+        return
+
+    if human:
+        print(f"{len(results)} chunks for {path}:\n")
+        for r in results:
+            section = f"  [{r.section}]" if r.section else ""
+            print(f"  chunk {r.chunk_index}: lines {r.line_start}-{r.line_end}{section}")
+            snippet = r.content[:200].replace("\n", " ")
+            if len(r.content) > 200:
+                snippet += "..."
+            print(f"    {snippet}\n")
+    else:
+        print(json.dumps([r.to_dict() for r in results], indent=2))
+
+
+def _handle_delete(args: Namespace, human: bool) -> None:
+    from workspace import get_indexer
+    from workspace.config import load_workspace_config
+
+    config = load_workspace_config()
+    if not config.enabled:
+        _error("Workspace is disabled (workspace.enabled = false)")
+        return
+
+    path = str(Path(args.path).expanduser().resolve())
+    indexer = get_indexer(config)
+    deleted = indexer.delete(path)
+
+    if human:
+        if deleted:
+            print(f"Deleted from index: {path}")
+        else:
+            print(f"Not found in index: {path}")
+    else:
+        print(json.dumps({"path": path, "deleted": deleted}))
 
 
 def _add_root(path: str, recursive: bool) -> None:

@@ -6368,7 +6368,7 @@ Examples:
     workspace_parser = subparsers.add_parser(
         "workspace",
         help="Workspace indexing and search",
-        description="Manage workspace roots, index files, and search with FTS5",
+        description="Manage workspace roots, index files, search, and inspect the FTS5 index",
     )
     workspace_flag_parent = argparse.ArgumentParser(add_help=False)
     workspace_flag_parent.add_argument(
@@ -6409,6 +6409,36 @@ Examples:
     ws_search.add_argument("--limit", type=int, help="Max results")
     ws_search.add_argument("--path", help="Filter by absolute path prefix")
     ws_search.add_argument("--glob", help="Filter by filename glob pattern")
+
+    # workspace status
+    workspace_subparsers.add_parser(
+        "status",
+        help="Show workspace index status",
+        parents=[workspace_flag_parent],
+    )
+
+    # workspace list
+    workspace_subparsers.add_parser(
+        "list",
+        help="List all indexed files",
+        parents=[workspace_flag_parent],
+    )
+
+    # workspace retrieve
+    ws_retrieve = workspace_subparsers.add_parser(
+        "retrieve",
+        help="Retrieve all indexed chunks for a file",
+        parents=[workspace_flag_parent],
+    )
+    ws_retrieve.add_argument("path", help="Absolute path to the file")
+
+    # workspace delete
+    ws_delete = workspace_subparsers.add_parser(
+        "delete",
+        help="Delete a file from the workspace index",
+        parents=[workspace_flag_parent],
+    )
+    ws_delete.add_argument("path", help="Absolute path to the file to remove")
 
     def cmd_workspace(args):
         from workspace.commands import workspace_command
