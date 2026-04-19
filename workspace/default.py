@@ -22,6 +22,7 @@ from workspace.constants import (
     resolve_path_prefix,
 )
 from workspace.files import discover_workspace_files, seed_hermesignore
+from workspace.parsers import build_parser
 from workspace.store import SQLiteFTS5Store
 from workspace.types import (
     ChunkRecord,
@@ -45,6 +46,7 @@ _MAX_ERRORS = 50
 class DefaultIndexer(BaseIndexer):
     def __init__(self, config: WorkspaceConfig) -> None:
         self._config = config
+        self._parser = build_parser(config.knowledgebase.parsing)
 
     def index(self, *, progress: ProgressCallback | None = None) -> IndexSummary:
         self._require_chonkie()
@@ -87,25 +89,41 @@ class DefaultIndexer(BaseIndexer):
                         files_skipped += 1
                         continue
 
-                    text = _read_file_text(file_path)
-                    if text is None:
-                        files_errored += 1
-                        _append_error(
-                            errors,
-                            IndexingError(
-                                path=abs_path,
-                                stage="read",
-                                error_type="EncodingError",
-                                message="Could not decode file with sufficient confidence",
-                            ),
-                        )
-                        continue
+                    suffix = file_path.suffix.lower()
+                    if self._parser.can_parse(suffix):
+                        text = self._parser.parse(file_path)
+                        if text is None:
+                            files_errored += 1
+                            _append_error(
+                                errors,
+                                IndexingError(
+                                    path=abs_path,
+                                    stage="parse",
+                                    error_type="ParseError",
+                                    message=f"Parser failed to convert {suffix} file",
+                                ),
+                            )
+                            continue
+                        suffix = ".md"
+                    else:
+                        text = _read_file_text(file_path)
+                        if text is None:
+                            files_errored += 1
+                            _append_error(
+                                errors,
+                                IndexingError(
+                                    path=abs_path,
+                                    stage="read",
+                                    error_type="EncodingError",
+                                    message="Could not decode file with sufficient confidence",
+                                ),
+                            )
+                            continue
 
                     if not text.strip():
                         files_skipped += 1
                         continue
 
-                    suffix = file_path.suffix.lower()
                     chunk_records = self._process_file(
                         abs_path, text, suffix, pipelines
                     )
@@ -482,6 +500,7 @@ class DefaultIndexer(BaseIndexer):
 
     def _config_signature(self) -> str:
         ch = self._config.knowledgebase.chunking
+        pa = self._config.knowledgebase.parsing
         blob = json.dumps(
             {
                 "chunk_size": ch.chunk_size,
@@ -490,6 +509,8 @@ class DefaultIndexer(BaseIndexer):
                 "overlap_method": "suffix",
                 "code_chunker": "production_v1",
                 "chunking_plan_version": CHUNKING_PLAN_VERSION,
+                "parsing_default": pa.default,
+                "parsing_overrides": dict(sorted(pa.overrides.items())),
             },
             sort_keys=True,
         )

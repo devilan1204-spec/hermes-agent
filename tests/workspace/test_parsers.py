@@ -333,3 +333,121 @@ class TestBuildParser:
         assert composite._routing[".pdf"].name == "pandoc"
         assert composite._routing[".docx"].name == "pandoc"
         assert composite._routing[".pptx"].name == "pandoc"
+
+
+from workspace.files import discover_workspace_files
+
+
+class TestDiscoveryWithParseableFiles:
+    def test_pdf_files_are_discovered(self, make_workspace_config):
+        cfg = make_workspace_config()
+        pdf = cfg.workspace_root / "docs" / "report.pdf"
+        pdf.parent.mkdir(parents=True, exist_ok=True)
+        pdf.write_bytes(b"%PDF-1.4 fake content")
+
+        result = discover_workspace_files(cfg)
+        discovered_names = [p.name for _, p in result.files]
+        assert "report.pdf" in discovered_names
+
+    def test_docx_files_are_discovered(self, make_workspace_config):
+        cfg = make_workspace_config()
+        docx = cfg.workspace_root / "docs" / "report.docx"
+        docx.parent.mkdir(parents=True, exist_ok=True)
+        docx.write_bytes(b"PK fake docx")
+
+        result = discover_workspace_files(cfg)
+        discovered_names = [p.name for _, p in result.files]
+        assert "report.docx" in discovered_names
+
+    def test_pptx_files_are_discovered(self, make_workspace_config):
+        cfg = make_workspace_config()
+        pptx = cfg.workspace_root / "docs" / "slides.pptx"
+        pptx.parent.mkdir(parents=True, exist_ok=True)
+        pptx.write_bytes(b"PK fake pptx")
+
+        result = discover_workspace_files(cfg)
+        discovered_names = [p.name for _, p in result.files]
+        assert "slides.pptx" in discovered_names
+
+    def test_true_binaries_still_excluded(self, make_workspace_config):
+        cfg = make_workspace_config()
+        exe = cfg.workspace_root / "docs" / "app.exe"
+        exe.parent.mkdir(parents=True, exist_ok=True)
+        exe.write_bytes(b"MZ fake exe")
+
+        result = discover_workspace_files(cfg)
+        discovered_names = [p.name for _, p in result.files]
+        assert "app.exe" not in discovered_names
+
+
+class TestDefaultIndexerParsing:
+    def test_indexes_pdf_via_parser(self, make_workspace_config, mock_markitdown):
+        cfg = make_workspace_config()
+        pdf = cfg.workspace_root / "docs" / "report.pdf"
+        pdf.parent.mkdir(parents=True, exist_ok=True)
+        pdf.write_bytes(b"%PDF-1.4 fake content")
+
+        from workspace.default import DefaultIndexer
+
+        indexer = DefaultIndexer(cfg)
+        summary = indexer.index()
+
+        assert summary.files_indexed == 1
+        assert summary.files_errored == 0
+        assert summary.chunks_created >= 1
+
+    def test_parsed_content_is_searchable(self, make_workspace_config, mock_markitdown):
+        cfg = make_workspace_config()
+        pdf = cfg.workspace_root / "docs" / "report.pdf"
+        pdf.parent.mkdir(parents=True, exist_ok=True)
+        pdf.write_bytes(b"%PDF-1.4 fake content")
+
+        from workspace.default import DefaultIndexer
+
+        indexer = DefaultIndexer(cfg)
+        indexer.index()
+
+        results = indexer.search("Parsed content")
+        assert len(results) > 0
+        assert any("report.pdf" in r.path for r in results)
+
+    def test_parse_failure_counts_as_error(self, make_workspace_config):
+        cfg = make_workspace_config()
+        pdf = cfg.workspace_root / "docs" / "broken.pdf"
+        pdf.parent.mkdir(parents=True, exist_ok=True)
+        pdf.write_bytes(b"%PDF-1.4 fake")
+
+        import types
+        module = types.ModuleType("markitdown")
+        from unittest.mock import MagicMock
+        mock_class = MagicMock(
+            return_value=MagicMock(
+                convert=MagicMock(side_effect=RuntimeError("corrupt PDF"))
+            )
+        )
+        module.MarkItDown = mock_class
+
+        import sys
+        from unittest.mock import patch
+        with patch.dict(sys.modules, {"markitdown": module}):
+            from workspace.default import DefaultIndexer
+
+            indexer = DefaultIndexer(cfg)
+            summary = indexer.index()
+
+        assert summary.files_errored == 1
+        assert summary.files_indexed == 0
+        assert any(e.stage == "parse" for e in summary.errors)
+
+    def test_text_files_still_use_read_file_text(self, make_workspace_config, write_file):
+        """Ensure non-parseable text files still go through the normal path."""
+        cfg = make_workspace_config()
+        write_file(cfg.workspace_root / "docs" / "readme.md", "# Hello\n\nWorld.\n")
+
+        from workspace.default import DefaultIndexer
+
+        indexer = DefaultIndexer(cfg)
+        summary = indexer.index()
+
+        assert summary.files_indexed == 1
+        assert summary.files_errored == 0

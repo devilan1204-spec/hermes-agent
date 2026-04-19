@@ -19,6 +19,7 @@ from workspace.constants import (
     DEFAULT_IGNORE_PATTERNS,
     GITIGNORE_NAME,
     HERMESIGNORE_NAME,
+    PARSEABLE_SUFFIXES,
 )
 from workspace.types import WorkspaceRoot
 
@@ -70,7 +71,7 @@ def discover_workspace_files(config: WorkspaceConfig) -> DiscoveryResult:
                 # hardcoded so a user editing their .hermesignore to remove the
                 # self-reference can't accidentally re-enable indexing of it.
                 continue
-            if p.suffix.lower() in BINARY_SUFFIXES:
+            if p.suffix.lower() in BINARY_SUFFIXES and p.suffix.lower() not in PARSEABLE_SUFFIXES:
                 continue
             try:
                 size = p.stat().st_size
