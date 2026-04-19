@@ -171,3 +171,71 @@ class TestMarkitdownParser:
             result = parser.parse(pdf)
 
         assert result is None
+
+
+class TestPandocParser:
+    def test_name(self):
+        from workspace.parsers import PandocParser
+
+        assert PandocParser.name == "pandoc"
+
+    def test_supported_suffixes(self):
+        from workspace.parsers import PandocParser
+
+        suffixes = PandocParser().supported_suffixes()
+        assert ".pdf" in suffixes
+        assert ".docx" in suffixes
+        assert ".pptx" in suffixes
+
+    def test_parse_calls_pandoc_subprocess(self, tmp_path):
+        from workspace.parsers import PandocParser
+
+        docx = tmp_path / "report.docx"
+        docx.write_bytes(b"PK fake docx content")
+
+        mock_completed = MagicMock()
+        mock_completed.stdout = "# Converted\n\nFrom pandoc."
+        mock_completed.check_returncode = MagicMock()
+
+        with patch("workspace.parsers.subprocess.run", return_value=mock_completed) as mock_run:
+            parser = PandocParser()
+            result = parser.parse(docx)
+
+        assert result == "# Converted\n\nFrom pandoc."
+        mock_run.assert_called_once_with(
+            ["pandoc", str(docx), "-t", "markdown"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+    def test_parse_returns_none_when_pandoc_not_found(self, tmp_path):
+        from workspace.parsers import PandocParser
+
+        docx = tmp_path / "report.docx"
+        docx.write_bytes(b"PK fake")
+
+        with patch(
+            "workspace.parsers.subprocess.run",
+            side_effect=FileNotFoundError("pandoc not found"),
+        ):
+            parser = PandocParser()
+            result = parser.parse(docx)
+
+        assert result is None
+
+    def test_parse_returns_none_on_nonzero_exit(self, tmp_path):
+        import subprocess as sp
+        from workspace.parsers import PandocParser
+
+        docx = tmp_path / "report.docx"
+        docx.write_bytes(b"PK fake")
+
+        mock_completed = MagicMock()
+        mock_completed.check_returncode.side_effect = sp.CalledProcessError(1, "pandoc")
+
+        with patch("workspace.parsers.subprocess.run", return_value=mock_completed):
+            parser = PandocParser()
+            result = parser.parse(docx)
+
+        assert result is None

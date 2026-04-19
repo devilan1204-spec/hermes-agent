@@ -5,6 +5,7 @@ CompositeParser routes extensions to the configured backend.
 """
 
 import logging
+import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import ClassVar
@@ -42,3 +43,20 @@ class MarkitdownParser(FileParser):
         md = MarkItDown()
         result = md.convert(str(path))
         return result.markdown
+
+
+class PandocParser(FileParser):
+    name = "pandoc"
+
+    def supported_suffixes(self) -> frozenset[str]:
+        return frozenset({".pdf", ".docx", ".pptx"})
+
+    def _convert(self, path: Path) -> str:
+        result = subprocess.run(
+            ["pandoc", str(path), "-t", "markdown"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        result.check_returncode()
+        return result.stdout
