@@ -33,10 +33,14 @@ def _get_indexer():
 SEARCH_SCHEMA = {
     "name": "workspace_search",
     "description": (
-        "Full-text search across the workspace knowledgebase. "
-        "Returns ranked chunks matching the query (BM25). "
-        "Use this to find relevant code, documentation, or notes "
-        "without shelling out to grep/find."
+        "BM25 full-text search across files indexed in the workspace "
+        "knowledgebase. Returns ranked chunks with path, line range, "
+        "score, and content snippet. "
+        "PREFER THIS over terminal grep/find/cat when the user asks "
+        "about indexed code or documentation — it is faster, returns "
+        "ranked results, and avoids scanning the filesystem. Fall back "
+        "to reading files directly only if the search output is "
+        "insufficient for answering."
     ),
     "parameters": {
         "type": "object",
