@@ -1083,16 +1083,19 @@ class TestWorkspaceGuidance:
     def test_core_plus_retrieve(self):
         """Adds retrieve paragraph when workspace_retrieve is also present."""
         out = build_workspace_guidance({"workspace_search", "workspace_retrieve"})
+        assert out is not None
         assert WORKSPACE_SEARCH_GUIDANCE_CORE in out
         assert WORKSPACE_RETRIEVE_GUIDANCE in out
         assert WORKSPACE_LIST_GUIDANCE not in out
 
     def test_core_plus_list(self):
         out = build_workspace_guidance({"workspace_search", "workspace_list"})
+        assert out is not None
         assert WORKSPACE_LIST_GUIDANCE in out
 
     def test_core_plus_index(self):
         out = build_workspace_guidance({"workspace_search", "workspace_index"})
+        assert out is not None
         assert WORKSPACE_INDEX_GUIDANCE in out
 
     def test_all_tools_available(self):
@@ -1101,6 +1104,7 @@ class TestWorkspaceGuidance:
             "workspace_search", "workspace_retrieve",
             "workspace_list", "workspace_index", "workspace_delete",
         })
+        assert out is not None
         assert WORKSPACE_SEARCH_GUIDANCE_CORE in out
         assert WORKSPACE_RETRIEVE_GUIDANCE in out
         assert WORKSPACE_LIST_GUIDANCE in out
@@ -1116,6 +1120,7 @@ class TestWorkspaceGuidance:
         out = build_workspace_guidance({
             "workspace_search", "workspace_delete",
         })
+        assert out is not None
         assert "delete" not in out.lower()
 
     def test_output_is_single_string(self):
