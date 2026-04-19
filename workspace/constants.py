@@ -63,6 +63,14 @@ BINARY_SUFFIXES: frozenset[str] = frozenset(
     }
 )
 
+PARSEABLE_SUFFIXES: frozenset[str] = frozenset(
+    {
+        ".pdf",
+        ".docx",
+        ".pptx",
+    }
+)
+
 CODE_SUFFIXES: frozenset[str] = frozenset(
     {
         ".py",

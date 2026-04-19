@@ -59,12 +59,19 @@ class SearchConfig(BaseModel):
         return v
 
 
+class ParsingConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+    default: str = "markitdown"
+    overrides: dict[str, str] = {}
+
+
 class KnowledgebaseConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
     roots: list[WorkspaceRoot] = []
     chunking: ChunkingConfig = ChunkingConfig()
     indexing: IndexingConfig = IndexingConfig()
     search: SearchConfig = SearchConfig()
+    parsing: ParsingConfig = ParsingConfig()
 
 
 class WorkspaceConfig(BaseModel):
