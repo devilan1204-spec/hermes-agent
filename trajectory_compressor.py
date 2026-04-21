@@ -37,7 +37,7 @@ import yaml
 import logging
 import asyncio
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Callable
+from typing import List, Dict, Any, Optional, Tuple, Callable, cast
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -75,7 +75,7 @@ def _effective_temperature_for_model(
     if fixed_temperature is OMIT_TEMPERATURE:
         return None  # caller must omit temperature
     if fixed_temperature is not None:
-        return fixed_temperature
+        return cast(float, fixed_temperature)
     return requested_temperature
 
 
@@ -636,7 +636,8 @@ Write only the summary, starting with "[CONTEXT SUMMARY]:" prefix."""
                 else:
                     # Fallback: create a basic summary
                     return "[CONTEXT SUMMARY]: [Summary generation failed - previous turns contained tool calls and responses that have been compressed to save context space.]"
-    
+        raise AssertionError("unreachable: retry loop exhausted")
+
     async def _generate_summary_async(self, content: str, metrics: TrajectoryMetrics) -> str:
         """
         Generate a summary of the compressed turns using OpenRouter (async version).
@@ -705,7 +706,8 @@ Write only the summary, starting with "[CONTEXT SUMMARY]:" prefix."""
                 else:
                     # Fallback: create a basic summary
                     return "[CONTEXT SUMMARY]: [Summary generation failed - previous turns contained tool calls and responses that have been compressed to save context space.]"
-    
+        raise AssertionError("unreachable: retry loop exhausted")
+
     def compress_trajectory(
         self,
         trajectory: List[Dict[str, str]]

@@ -2859,10 +2859,12 @@ class GatewayRunner:
             return MatrixAdapter(config)
 
         elif platform == Platform.API_SERVER:
-            from gateway.platforms.api_server import APIServerAdapter, check_api_server_requirements
-            if not check_api_server_requirements():
+            try:
+                import aiohttp  # noqa: F401
+            except ImportError:
                 logger.warning("API Server: aiohttp not installed")
                 return None
+            from gateway.platforms.api_server import APIServerAdapter
             return APIServerAdapter(config)
 
         elif platform == Platform.WEBHOOK:
@@ -5874,7 +5876,7 @@ class GatewayRunner:
         available = "`none`, " + ", ".join(f"`{n}`" for n in personalities)
         return f"Unknown personality: `{args}`\n\nAvailable: {available}"
     
-    async def _handle_retry_command(self, event: MessageEvent) -> str:
+    async def _handle_retry_command(self, event: MessageEvent) -> Optional[str]:
         """Handle /retry command - re-send the last user message."""
         source = event.source
         session_entry = self.session_store.get_or_create_session(source)
@@ -10708,7 +10710,7 @@ class GatewayRunner:
                         history=updated_history,
                     )
                     if next_message is None:
-                        return result
+                        return result  # ty: ignore[invalid-return-type]
                     next_message_id = getattr(pending_event, "message_id", None)
                     next_channel_prompt = getattr(pending_event, "channel_prompt", None)
 
