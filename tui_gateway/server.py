@@ -12,6 +12,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Callable
 
 from hermes_constants import get_hermes_home
 from hermes_cli.env_loader import load_hermes_dotenv
@@ -33,7 +34,7 @@ except Exception:
 from tui_gateway.render import make_stream_renderer, render_diff, render_message
 
 _sessions: dict[str, dict] = {}
-_methods: dict[str, callable] = {}
+_methods: dict[str, Callable[..., Any]] = {}
 _pending: dict[str, tuple[str, threading.Event]] = {}
 _answers: dict[str, str] = {}
 _db = None
