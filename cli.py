@@ -19,6 +19,7 @@ import shutil
 import sys
 import json
 import re
+import concurrent.futures
 import base64
 import atexit
 import tempfile
@@ -65,6 +66,7 @@ from agent.usage_pricing import (
     format_duration_compact,
     format_token_count_compact,
 )
+from agent.account_usage import fetch_account_usage, render_account_usage_lines
 from hermes_cli.banner import _format_context_length, format_banner_version_label
 
 _COMMAND_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -5271,6 +5273,30 @@ class HermesCLI:
         except Exception:
             return False
 
+    def _should_handle_steer_command_inline(self, text: str, has_images: bool = False) -> bool:
+        """Return True when /steer should be dispatched immediately while the agent is running.
+
+        /steer MUST bypass the normal _pending_input → process_loop path when
+        the agent is active, because process_loop is blocked inside
+        self.chat() for the duration of the run.  By the time the queued
+        command is pulled from _pending_input, _agent_running has already
+        flipped back to False, and process_command() takes the idle
+        fallback — delivering the steer as a next-turn message instead of
+        injecting it mid-run.  Dispatching inline on the UI thread calls
+        agent.steer() directly, which is thread-safe (uses _pending_steer_lock).
+        """
+        if not text or has_images or not _looks_like_slash_command(text):
+            return False
+        if not getattr(self, "_agent_running", False):
+            return False
+        try:
+            from hermes_cli.commands import resolve_command
+            base = text.split(None, 1)[0].lower().lstrip('/')
+            cmd = resolve_command(base)
+            return bool(cmd and cmd.name == "steer")
+        except Exception:
+            return False
+
     def _show_model_and_providers(self):
         """Show current model + provider and list all authenticated providers.
 
@@ -7022,6 +7048,27 @@ class HermesCLI:
         if cost_result.status == "unknown":
             print(f"  Note:             Pricing unknown for {agent.model}")
 
+        # Account limits -- fetched off-thread with a hard timeout so slow
+        # provider APIs don't hang the prompt.
+        provider = getattr(agent, "provider", None) or getattr(self, "provider", None)
+        base_url = getattr(agent, "base_url", None) or getattr(self, "base_url", None)
+        api_key = getattr(agent, "api_key", None) or getattr(self, "api_key", None)
+        account_snapshot = None
+        if provider:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+                try:
+                    account_snapshot = _pool.submit(
+                        fetch_account_usage, provider,
+                        base_url=base_url, api_key=api_key,
+                    ).result(timeout=10.0)
+                except (concurrent.futures.TimeoutError, Exception):
+                    account_snapshot = None
+        account_lines = [f"  {line}" for line in render_account_usage_lines(account_snapshot)]
+        if account_lines:
+            print()
+            for line in account_lines:
+                print(line)
+
         if self.verbose:
             logging.getLogger().setLevel(logging.DEBUG)
             for noisy in ('openai', 'openai._base_client', 'httpx', 'httpcore', 'asyncio', 'hpack', 'grpc', 'modal'):
@@ -7398,11 +7445,12 @@ class HermesCLI:
             self._voice_stop_and_transcribe()
 
         # Audio cue: single beep BEFORE starting stream (avoid CoreAudio conflict)
-        try:
-            from tools.voice_mode import play_beep
-            play_beep(frequency=880, count=1)
-        except Exception:
-            pass
+        if self._voice_beeps_enabled():
+            try:
+                from tools.voice_mode import play_beep
+                play_beep(frequency=880, count=1)
+            except Exception:
+                pass
 
         try:
             self._voice_recorder.start(on_silence_stop=_on_silence)
@@ -7450,11 +7498,12 @@ class HermesCLI:
             wav_path = self._voice_recorder.stop()
 
             # Audio cue: double beep after stream stopped (no CoreAudio conflict)
-            try:
-                from tools.voice_mode import play_beep
-                play_beep(frequency=660, count=2)
-            except Exception:
-                pass
+            if self._voice_beeps_enabled():
+                try:
+                    from tools.voice_mode import play_beep
+                    play_beep(frequency=660, count=2)
+                except Exception:
+                    pass
 
             if wav_path is None:
                 _cprint(f"{_DIM}No speech detected.{_RST}")
@@ -7603,6 +7652,17 @@ class HermesCLI:
         else:
             _cprint(f"Unknown voice subcommand: {subcommand}")
             _cprint("Usage: /voice [on|off|tts|status]")
+
+    def _voice_beeps_enabled(self) -> bool:
+        """Return whether CLI voice mode should play record start/stop beeps."""
+        try:
+            from hermes_cli.config import load_config
+            voice_cfg = load_config().get("voice", {})
+            if isinstance(voice_cfg, dict):
+                return bool(voice_cfg.get("beep_enabled", True))
+        except Exception:
+            pass
+        return True
 
     def _enable_voice_mode(self):
         """Enable voice mode after checking requirements."""
@@ -8007,8 +8067,18 @@ class HermesCLI:
         choice_wrapped: list[tuple[int, str]] = []
         for i, choice in enumerate(choices):
             label = choice_labels.get(choice, choice)
-            prefix = '❯ ' if i == selected else '  '
-            for wrapped in _wrap_panel_text(f"{prefix}{label}", inner_text_width, subsequent_indent="  "):
+            # Show number prefix for quick selection (1-9 for items 1-9, 0 for 10th item)
+            if i < 9:
+                num_prefix = str(i + 1)
+            elif i == 9:
+                num_prefix = '0'
+            else:
+                num_prefix = ' '  # No number for items beyond 10th
+            if i == selected:
+                prefix = f'❯ {num_prefix}. '
+            else:
+                prefix = f'  {num_prefix}. '
+            for wrapped in _wrap_panel_text(f"{prefix}{label}", inner_text_width, subsequent_indent="    "):
                 choice_wrapped.append((i, wrapped))
 
         # Budget vertical space so HSplit never clips the command or choices.
@@ -9075,6 +9145,17 @@ class HermesCLI:
                     event.app.current_buffer.reset(append_to_history=True)
                     return
 
+                # Handle /steer while the agent is running immediately on the
+                # UI thread.  Queuing through _pending_input would deadlock the
+                # steer until after the agent loop finishes (process_loop is
+                # blocked inside self.chat()), which turns /steer into a
+                # post-run next-turn message — defeating mid-run injection.
+                # agent.steer() is thread-safe (holds _pending_steer_lock).
+                if self._should_handle_steer_command_inline(text, has_images=has_images):
+                    self.process_command(text)
+                    event.app.current_buffer.reset(append_to_history=True)
+                    return
+
                 # Snapshot and clear attached images
                 images = list(self._attached_images)
                 self._attached_images.clear()
@@ -9172,6 +9253,29 @@ class HermesCLI:
                 self._clarify_state["selected"] = min(max_idx, self._clarify_state["selected"] + 1)
                 event.app.invalidate()
 
+        # Number keys for quick clarify selection (1-9, 0 for 10th item)
+        def _make_clarify_number_handler(idx):
+            def handler(event):
+                if self._clarify_state and not self._clarify_freetext:
+                    choices = self._clarify_state.get("choices") or []
+                    # Map index to choice (treating "Other" as the last option)
+                    if idx < len(choices):
+                        # Select a numbered choice
+                        self._clarify_state["response_queue"].put(choices[idx])
+                        self._clarify_state = None
+                        self._clarify_freetext = False
+                        event.app.invalidate()
+                    elif idx == len(choices):
+                        # Select "Other" option
+                        self._clarify_freetext = True
+                        event.app.invalidate()
+            return handler
+
+        for _num in range(10):
+            # 1-9 select items 0-8, 0 selects item 9 (10thitem)
+            _idx = 9 if _num == 0 else _num - 1
+            kb.add(str(_num), filter=Condition(lambda: bool(self._clarify_state) and not self._clarify_freetext))(_make_clarify_number_handler(_idx))
+
         # --- Dangerous command approval: arrow-key navigation ---
 
         @kb.add('up', filter=Condition(lambda: bool(self._approval_state)))
@@ -9212,6 +9316,20 @@ class HermesCLI:
             self._close_model_picker()
             event.app.current_buffer.reset()
             event.app.invalidate()
+
+        # Number keys for quick approval selection (1-9, 0 for 10th item)
+        def _make_approval_number_handler(idx):
+            def handler(event):
+                if self._approval_state and idx < len(self._approval_state["choices"]):
+                    self._approval_state["selected"] = idx
+                    self._handle_approval_selection()
+                    event.app.invalidate()
+            return handler
+
+        for _num in range(10):
+            # 1-9 select items 0-8, 0 selects item 9 (10th item)
+            _idx = 9 if _num == 0 else _num - 1
+            kb.add(str(_num), filter=Condition(lambda: bool(self._approval_state)))(_make_approval_number_handler(_idx))
 
         # --- History navigation: up/down browse history in normal input mode ---
         # The TextArea is multiline, so by default up/down only move the cursor.
@@ -9781,14 +9899,32 @@ class HermesCLI:
             selected = state.get("selected", 0)
             preview_lines = _wrap_panel_text(question, 60)
             for i, choice in enumerate(choices):
-                prefix = "❯ " if i == selected and not cli_ref._clarify_freetext else "  "
-                preview_lines.extend(_wrap_panel_text(f"{prefix}{choice}", 60, subsequent_indent="  "))
+                # Show number prefix for quick selection (1-9 for items 1-9, 0 for 10th item)
+                if i < 9:
+                    num_prefix = str(i + 1)
+                elif i == 9:
+                    num_prefix = '0'
+                else:
+                    num_prefix = ' '
+                if i == selected and not cli_ref._clarify_freetext:
+                    prefix = f"❯ {num_prefix}. "
+                else:
+                    prefix = f"  {num_prefix}. "
+                preview_lines.extend(_wrap_panel_text(f"{prefix}{choice}", 60, subsequent_indent="    "))
+            # "Other" option in preview
+            other_num = len(choices) + 1
+            if other_num < 10:
+                other_num_prefix = str(other_num)
+            elif other_num == 10:
+                other_num_prefix = '0'
+            else:
+                other_num_prefix = ' '
             other_label = (
-                "❯ Other (type below)" if cli_ref._clarify_freetext
-                else "❯ Other (type your answer)" if selected == len(choices)
-                else "  Other (type your answer)"
+                f"❯ {other_num_prefix}. Other (type below)" if cli_ref._clarify_freetext
+                else f"❯ {other_num_prefix}. Other (type your answer)" if selected == len(choices)
+                else f"  {other_num_prefix}. Other (type your answer)"
             )
-            preview_lines.extend(_wrap_panel_text(other_label, 60, subsequent_indent="  "))
+            preview_lines.extend(_wrap_panel_text(other_label, 60, subsequent_indent="    "))
             box_width = _panel_box_width("Hermes needs your input", preview_lines)
             inner_text_width = max(8, box_width - 2)
 
@@ -9796,18 +9932,35 @@ class HermesCLI:
             choice_wrapped: list[tuple[int, str]] = []
             if choices:
                 for i, choice in enumerate(choices):
-                    prefix = '❯ ' if i == selected and not cli_ref._clarify_freetext else '  '
-                    for wrapped in _wrap_panel_text(f"{prefix}{choice}", inner_text_width, subsequent_indent="  "):
+                    # Show number prefix for quick selection (1-9 for items 1-9, 0 for 10th item)
+                    if i < 9:
+                        num_prefix = str(i + 1)
+                    elif i == 9:
+                        num_prefix = '0'
+                    else:
+                        num_prefix = ' '
+                    if i == selected and not cli_ref._clarify_freetext:
+                        prefix = f'❯ {num_prefix}. '
+                    else:
+                        prefix = f'  {num_prefix}. '
+                    for wrapped in _wrap_panel_text(f"{prefix}{choice}", inner_text_width, subsequent_indent="    "):
                         choice_wrapped.append((i, wrapped))
                 # Trailing Other row(s)
                 other_idx = len(choices)
-                if selected == other_idx and not cli_ref._clarify_freetext:
-                    other_label_mand = '❯ Other (type your answer)'
-                elif cli_ref._clarify_freetext:
-                    other_label_mand = '❯ Other (type below)'
+                other_num = other_idx + 1
+                if other_num < 10:
+                    other_num_prefix = str(other_num)
+                elif other_num == 10:
+                    other_num_prefix = '0'
                 else:
-                    other_label_mand = '  Other (type your answer)'
-                other_wrapped = _wrap_panel_text(other_label_mand, inner_text_width, subsequent_indent="  ")
+                    other_num_prefix = ' '
+                if selected == other_idx and not cli_ref._clarify_freetext:
+                    other_label_mand = f'❯ {other_num_prefix}. Other (type your answer)'
+                elif cli_ref._clarify_freetext:
+                    other_label_mand = f'❯ {other_num_prefix}. Other (type below)'
+                else:
+                    other_label_mand = f'  {other_num_prefix}. Other (type your answer)'
+                other_wrapped = _wrap_panel_text(other_label_mand, inner_text_width, subsequent_indent="    ")
             elif cli_ref._clarify_freetext:
                 # Freetext-only mode: the guidance line takes the place of choices.
                 other_wrapped = _wrap_panel_text(
@@ -9872,6 +10025,15 @@ class HermesCLI:
 
                 # "Other" option (trailing row(s), only shown when choices exist)
                 other_idx = len(choices)
+                # Calculate number prefix for "Other" option
+                other_num = other_idx + 1
+                if other_num < 10:
+                    other_num_prefix = str(other_num)
+                elif other_num == 10:
+                    other_num_prefix = '0'
+                else:
+                    other_num_prefix = ' '
+                
                 if selected == other_idx and not cli_ref._clarify_freetext:
                     other_style = 'class:clarify-selected'
                 elif cli_ref._clarify_freetext:

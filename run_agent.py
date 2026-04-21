@@ -127,7 +127,7 @@ from agent.trajectory import (
     convert_scratchpad_to_think, has_incomplete_scratchpad,
     save_trajectory as _save_trajectory_to_file,
 )
-from utils import atomic_json_write, base_url_host_matches, base_url_hostname, env_var_enabled
+from utils import atomic_json_write, base_url_host_matches, base_url_hostname, env_var_enabled, normalize_proxy_url
 
 
 
@@ -190,7 +190,7 @@ def _get_proxy_from_env() -> Optional[str]:
                 "https_proxy", "http_proxy", "all_proxy"):
         value = os.environ.get(key, "").strip()
         if value:
-            return value
+            return normalize_proxy_url(value)
     return None
 
 
@@ -2358,6 +2358,13 @@ class AIAgent:
         cost reduction as direct Anthropic callers, provided their
         gateway implements the Anthropic cache_control contract
         (MiniMax, Zhipu GLM, LiteLLM's Anthropic proxy mode all do).
+
+        Qwen / Alibaba-family models on OpenCode, OpenCode Go, and direct
+        Alibaba (DashScope) also honour Anthropic-style ``cache_control``
+        markers on OpenAI-wire chat completions. Upstream pi-mono #3392 /
+        pi #3393 documented this for opencode-go Qwen. Without markers
+        these providers serve zero cache hits, re-billing the full prompt
+        on every turn.
         """
         eff_provider = (provider if provider is not None else self.provider) or ""
         eff_base_url = base_url if base_url is not None else (self.base_url or "")
@@ -2365,7 +2372,9 @@ class AIAgent:
         eff_model = (model if model is not None else self.model) or ""
 
         base_lower = eff_base_url.lower()
-        is_claude = "claude" in eff_model.lower()
+        model_lower = eff_model.lower()
+        provider_lower = eff_provider.lower()
+        is_claude = "claude" in model_lower
         is_openrouter = base_url_host_matches(eff_base_url, "openrouter.ai")
         is_anthropic_wire = eff_api_mode == "anthropic_messages"
         is_native_anthropic = (
@@ -2380,6 +2389,22 @@ class AIAgent:
         if is_anthropic_wire and is_claude:
             # Third-party Anthropic-compatible gateway.
             return True, True
+
+        # Qwen/Alibaba on OpenCode (Zen/Go) and native DashScope: OpenAI-wire
+        # transport that accepts Anthropic-style cache_control markers and
+        # rewards them with real cache hits.  Without this branch
+        # qwen3.6-plus on opencode-go reports 0% cached tokens and burns
+        # through the subscription on every turn.
+        model_is_qwen = "qwen" in model_lower
+        provider_is_alibaba_family = provider_lower in {
+            "opencode", "opencode-zen", "opencode-go", "alibaba",
+        }
+        if provider_is_alibaba_family and model_is_qwen:
+            # Envelope layout (native_anthropic=False): markers on inner
+            # content parts, not top-level tool messages.  Matches
+            # pi-mono's "alibaba" cacheControlFormat.
+            return True, False
+
         return False, False
 
     @staticmethod
@@ -6126,8 +6151,9 @@ class AIAgent:
             fb_base_url_hint = (fb.get("base_url") or "").strip() or None
             fb_api_key_hint = (fb.get("api_key") or "").strip() or None
             # For Ollama Cloud endpoints, pull OLLAMA_API_KEY from env
-            # when no explicit key is in the fallback config.
-            if fb_base_url_hint and "ollama.com" in fb_base_url_hint.lower() and not fb_api_key_hint:
+            # when no explicit key is in the fallback config. Host match
+            # (not substring) — see GHSA-76xc-57q6-vm5m.
+            if fb_base_url_hint and base_url_host_matches(fb_base_url_hint, "ollama.com") and not fb_api_key_hint:
                 fb_api_key_hint = os.getenv("OLLAMA_API_KEY") or None
             fb_client, _resolved_fb_model = resolve_provider_client(
                 fb_provider, model=fb_model, raw_codex=True,
@@ -6548,6 +6574,15 @@ class AIAgent:
             return suffix
         return "[A multimodal message was converted to text for Anthropic compatibility.]"
 
+    def _get_anthropic_transport(self):
+        """Return the cached AnthropicTransport instance (lazy singleton)."""
+        t = getattr(self, "_anthropic_transport", None)
+        if t is None:
+            from agent.transports import get_transport
+            t = get_transport("anthropic_messages")
+            self._anthropic_transport = t
+        return t
+
     def _prepare_anthropic_messages_for_api(self, api_messages: list) -> list:
         if not any(
             isinstance(msg, dict) and self._content_has_image_parts(msg.get("content"))
@@ -6664,20 +6699,14 @@ class AIAgent:
     def _build_api_kwargs(self, api_messages: list) -> dict:
         """Build the keyword arguments dict for the active API mode."""
         if self.api_mode == "anthropic_messages":
-            from agent.anthropic_adapter import build_anthropic_kwargs
+            _transport = self._get_anthropic_transport()
             anthropic_messages = self._prepare_anthropic_messages_for_api(api_messages)
-            # Pass context_length (total input+output window) so the adapter can
-            # clamp max_tokens (output cap) when the user configured a smaller
-            # context window than the model's native output limit.
             ctx_len = getattr(self, "context_compressor", None)
             ctx_len = ctx_len.context_length if ctx_len else None
-            # _ephemeral_max_output_tokens is set for one call when the API
-            # returns "max_tokens too large given prompt" — it caps output to
-            # the available window space without touching context_length.
             ephemeral_out = getattr(self, "_ephemeral_max_output_tokens", None)
             if ephemeral_out is not None:
                 self._ephemeral_max_output_tokens = None  # consume immediately
-            return build_anthropic_kwargs(
+            return _transport.build_kwargs(
                 model=self.model,
                 messages=anthropic_messages,
                 tools=self.tools,
@@ -6909,6 +6938,34 @@ class AIAgent:
             # (the documented max output for qwen3-coder models) so the
             # model has adequate output budget for tool calls.
             api_kwargs.update(self._max_tokens_param(65536))
+        elif (
+            base_url_host_matches(self.base_url, "api.kimi.com")
+            or base_url_host_matches(self.base_url, "moonshot.ai")
+            or base_url_host_matches(self.base_url, "moonshot.cn")
+        ):
+            # Kimi/Moonshot defaults to a low max_tokens when omitted.
+            # Reasoning tokens share the output budget — without an explicit
+            # value the model can exhaust it on thinking alone, causing
+            # "Response truncated due to output length limit".  32000 matches
+            # Kimi CLI's default (see MoonshotAI/kimi-cli kimi.py generate()).
+            api_kwargs.update(self._max_tokens_param(32000))
+            # Kimi requires reasoning_effort as a top-level chat completions
+            # parameter (not inside extra_body).  Mirror Kimi CLI's
+            # with_generation_kwargs(reasoning_effort=...) / with_thinking():
+            # when thinking is disabled, Kimi CLI omits reasoning_effort
+            # entirely (maps to None).
+            _kimi_thinking_off = bool(
+                self.reasoning_config
+                and isinstance(self.reasoning_config, dict)
+                and self.reasoning_config.get("enabled") is False
+            )
+            if not _kimi_thinking_off:
+                _kimi_effort = "medium"
+                if self.reasoning_config and isinstance(self.reasoning_config, dict):
+                    _e = (self.reasoning_config.get("effort") or "").strip().lower()
+                    if _e in ("low", "medium", "high"):
+                        _kimi_effort = _e
+                api_kwargs["reasoning_effort"] = _kimi_effort
         elif (self._is_openrouter_url() or "nousresearch" in self._base_url_lower) and "claude" in (self.model or "").lower():
             # OpenRouter and Nous Portal translate requests to Anthropic's
             # Messages API, which requires max_tokens as a mandatory field.
@@ -6939,6 +6996,24 @@ class AIAgent:
         if provider_preferences and _is_openrouter:
             extra_body["provider"] = provider_preferences
         _is_nous = "nousresearch" in self._base_url_lower
+
+        # Kimi/Moonshot API uses extra_body.thinking (separate from the
+        # top-level reasoning_effort) to enable/disable reasoning mode.
+        # Mirror Kimi CLI's with_thinking() behavior exactly — see
+        # MoonshotAI/kimi-cli packages/kosong/src/kosong/chat_provider/kimi.py
+        _is_kimi = (
+            base_url_host_matches(self.base_url, "api.kimi.com")
+            or base_url_host_matches(self.base_url, "moonshot.ai")
+            or base_url_host_matches(self.base_url, "moonshot.cn")
+        )
+        if _is_kimi:
+            _kimi_thinking_enabled = True
+            if self.reasoning_config and isinstance(self.reasoning_config, dict):
+                if self.reasoning_config.get("enabled") is False:
+                    _kimi_thinking_enabled = False
+            extra_body["thinking"] = {
+                "type": "enabled" if _kimi_thinking_enabled else "disabled",
+            }
 
         if self._supports_reasoning_extra_body():
             if _is_github_models:
@@ -7362,9 +7437,9 @@ class AIAgent:
                     codex_kwargs["max_output_tokens"] = 5120
                 response = self._run_codex_stream(codex_kwargs)
             elif not _aux_available and self.api_mode == "anthropic_messages":
-                # Native Anthropic — use the Anthropic client directly
-                from agent.anthropic_adapter import build_anthropic_kwargs as _build_ant_kwargs
-                ant_kwargs = _build_ant_kwargs(
+                # Native Anthropic — use the transport for kwargs
+                _tflush = self._get_anthropic_transport()
+                ant_kwargs = _tflush.build_kwargs(
                     model=self.model, messages=api_messages,
                     tools=[memory_tool_def], max_tokens=5120,
                     reasoning_config=None,
@@ -7392,10 +7467,15 @@ class AIAgent:
                 if assistant_msg and assistant_msg.tool_calls:
                     tool_calls = assistant_msg.tool_calls
             elif self.api_mode == "anthropic_messages" and not _aux_available:
-                from agent.anthropic_adapter import normalize_anthropic_response as _nar_flush
-                _flush_msg, _ = _nar_flush(response, strip_tool_prefix=self._is_anthropic_oauth)
-                if _flush_msg and _flush_msg.tool_calls:
-                    tool_calls = _flush_msg.tool_calls
+                _tfn = self._get_anthropic_transport()
+                _flush_nr = _tfn.normalize_response(response, strip_tool_prefix=self._is_anthropic_oauth)
+                if _flush_nr and _flush_nr.tool_calls:
+                    tool_calls = [
+                        SimpleNamespace(
+                            id=tc.id, type="function",
+                            function=SimpleNamespace(name=tc.name, arguments=tc.arguments),
+                        ) for tc in _flush_nr.tool_calls
+                    ]
             elif hasattr(response, "choices") and response.choices:
                 assistant_message = response.choices[0].message
                 if assistant_message.tool_calls:
@@ -8455,14 +8535,14 @@ class AIAgent:
                     summary_kwargs["extra_body"] = summary_extra_body
 
                 if self.api_mode == "anthropic_messages":
-                    from agent.anthropic_adapter import build_anthropic_kwargs as _bak, normalize_anthropic_response as _nar
-                    _ant_kw = _bak(model=self.model, messages=api_messages, tools=None,
+                    _tsum = self._get_anthropic_transport()
+                    _ant_kw = _tsum.build_kwargs(model=self.model, messages=api_messages, tools=None,
                                    max_tokens=self.max_tokens, reasoning_config=self.reasoning_config,
                                    is_oauth=self._is_anthropic_oauth,
                                    preserve_dots=self._anthropic_preserve_dots())
                     summary_response = self._anthropic_messages_create(_ant_kw)
-                    _msg, _ = _nar(summary_response, strip_tool_prefix=self._is_anthropic_oauth)
-                    final_response = (_msg.content or "").strip()
+                    _sum_nr = _tsum.normalize_response(summary_response, strip_tool_prefix=self._is_anthropic_oauth)
+                    final_response = (_sum_nr.content or "").strip()
                 else:
                     summary_response = self._ensure_primary_openai_client(reason="iteration_limit_summary").chat.completions.create(**summary_kwargs)
 
@@ -8487,14 +8567,14 @@ class AIAgent:
                     retry_msg, _ = self._normalize_codex_response(retry_response)
                     final_response = (retry_msg.content or "").strip() if retry_msg else ""
                 elif self.api_mode == "anthropic_messages":
-                    from agent.anthropic_adapter import build_anthropic_kwargs as _bak2, normalize_anthropic_response as _nar2
-                    _ant_kw2 = _bak2(model=self.model, messages=api_messages, tools=None,
+                    _tretry = self._get_anthropic_transport()
+                    _ant_kw2 = _tretry.build_kwargs(model=self.model, messages=api_messages, tools=None,
                                     is_oauth=self._is_anthropic_oauth,
                                     max_tokens=self.max_tokens, reasoning_config=self.reasoning_config,
                                     preserve_dots=self._anthropic_preserve_dots())
                     retry_response = self._anthropic_messages_create(_ant_kw2)
-                    _retry_msg, _ = _nar2(retry_response, strip_tool_prefix=self._is_anthropic_oauth)
-                    final_response = (_retry_msg.content or "").strip()
+                    _retry_nr = _tretry.normalize_response(retry_response, strip_tool_prefix=self._is_anthropic_oauth)
+                    final_response = (_retry_nr.content or "").strip()
                 else:
                     summary_kwargs = {
                         "model": self.model,
@@ -9363,16 +9443,13 @@ class AIAgent:
                                 response_invalid = True
                                 error_details.append("response.output is empty")
                     elif self.api_mode == "anthropic_messages":
-                        content_blocks = getattr(response, "content", None) if response is not None else None
-                        if response is None:
+                        _tv = self._get_anthropic_transport()
+                        if not _tv.validate_response(response):
                             response_invalid = True
-                            error_details.append("response is None")
-                        elif not isinstance(content_blocks, list):
-                            response_invalid = True
-                            error_details.append("response.content is not a list")
-                        elif not content_blocks:
-                            response_invalid = True
-                            error_details.append("response.content is empty")
+                            if response is None:
+                                error_details.append("response is None")
+                            else:
+                                error_details.append("response.content invalid (not a non-empty list)")
                     else:
                         if response is None or not hasattr(response, 'choices') or response.choices is None or not response.choices:
                             response_invalid = True
@@ -9533,8 +9610,8 @@ class AIAgent:
                         else:
                             finish_reason = "stop"
                     elif self.api_mode == "anthropic_messages":
-                        stop_reason_map = {"end_turn": "stop", "tool_use": "tool_calls", "max_tokens": "length", "stop_sequence": "stop"}
-                        finish_reason = stop_reason_map.get(response.stop_reason, "stop")
+                        _tfr = self._get_anthropic_transport()
+                        finish_reason = _tfr.map_finish_reason(response.stop_reason)
                     else:
                         finish_reason = response.choices[0].finish_reason
                         assistant_message = response.choices[0].message
@@ -9563,9 +9640,23 @@ class AIAgent:
                         if self.api_mode in ("chat_completions", "bedrock_converse"):
                             _trunc_msg = response.choices[0].message if (hasattr(response, "choices") and response.choices) else None
                         elif self.api_mode == "anthropic_messages":
-                            from agent.anthropic_adapter import normalize_anthropic_response
-                            _trunc_msg, _ = normalize_anthropic_response(
+                            _trunc_nr = self._get_anthropic_transport().normalize_response(
                                 response, strip_tool_prefix=self._is_anthropic_oauth
+                            )
+                            _trunc_msg = SimpleNamespace(
+                                content=_trunc_nr.content,
+                                tool_calls=[
+                                    SimpleNamespace(
+                                        id=tc.id, type="function",
+                                        function=SimpleNamespace(name=tc.name, arguments=tc.arguments),
+                                    ) for tc in (_trunc_nr.tool_calls or [])
+                                ] or None,
+                                reasoning=_trunc_nr.reasoning,
+                                reasoning_content=None,
+                                reasoning_details=(
+                                    _trunc_nr.provider_data.get("reasoning_details")
+                                    if _trunc_nr.provider_data else None
+                                ),
                             )
 
                         _trunc_content = getattr(_trunc_msg, "content", None) if _trunc_msg else None
@@ -9822,21 +9913,27 @@ class AIAgent:
                         if self.verbose_logging:
                             logging.debug(f"Token usage: prompt={usage_dict['prompt_tokens']:,}, completion={usage_dict['completion_tokens']:,}, total={usage_dict['total_tokens']:,}")
                         
-                        # Log cache hit stats when prompt caching is active
-                        if self._use_prompt_caching:
-                            if self.api_mode == "anthropic_messages":
-                                # Anthropic uses cache_read_input_tokens / cache_creation_input_tokens
-                                cached = getattr(response.usage, 'cache_read_input_tokens', 0) or 0
-                                written = getattr(response.usage, 'cache_creation_input_tokens', 0) or 0
-                            else:
-                                # OpenRouter uses prompt_tokens_details.cached_tokens
-                                details = getattr(response.usage, 'prompt_tokens_details', None)
-                                cached = getattr(details, 'cached_tokens', 0) or 0 if details else 0
-                                written = getattr(details, 'cache_write_tokens', 0) or 0 if details else 0
-                            prompt = usage_dict["prompt_tokens"]
+                        # Surface cache hit stats for any provider that reports
+                        # them — not just those where we inject cache_control
+                        # markers.  OpenAI/Kimi/DeepSeek/Qwen all do automatic
+                        # server-side prefix caching and return
+                        # ``prompt_tokens_details.cached_tokens``; users
+                        # previously could not see their cache % because this
+                        # line was gated on ``_use_prompt_caching``, which is
+                        # only True for Anthropic-style marker injection.
+                        # ``canonical_usage`` is already normalised from all
+                        # three API shapes (Anthropic / Codex / OpenAI-chat)
+                        # so we can rely on its values directly.
+                        cached = canonical_usage.cache_read_tokens
+                        written = canonical_usage.cache_write_tokens
+                        prompt = usage_dict["prompt_tokens"]
+                        if (cached or written) and not self.quiet_mode:
                             hit_pct = (cached / prompt * 100) if prompt > 0 else 0
-                            if not self.quiet_mode:
-                                self._vprint(f"{self.log_prefix}   💾 Cache: {cached:,}/{prompt:,} tokens ({hit_pct:.0f}% hit, {written:,} written)")
+                            self._vprint(
+                                f"{self.log_prefix}   💾 Cache: "
+                                f"{cached:,}/{prompt:,} tokens "
+                                f"({hit_pct:.0f}% hit, {written:,} written)"
+                            )
                     
                     has_retried_429 = False  # Reset on success
                     # Clear Nous rate limit state on successful request —
@@ -10772,10 +10869,31 @@ class AIAgent:
                 if self.api_mode == "codex_responses":
                     assistant_message, finish_reason = self._normalize_codex_response(response)
                 elif self.api_mode == "anthropic_messages":
-                    from agent.anthropic_adapter import normalize_anthropic_response
-                    assistant_message, finish_reason = normalize_anthropic_response(
+                    _transport = self._get_anthropic_transport()
+                    _nr = _transport.normalize_response(
                         response, strip_tool_prefix=self._is_anthropic_oauth
                     )
+                    # Back-compat shim: downstream code expects SimpleNamespace with
+                    # .content, .tool_calls, .reasoning, .reasoning_content,
+                    # .reasoning_details attributes.
+                    assistant_message = SimpleNamespace(
+                        content=_nr.content,
+                        tool_calls=[
+                            SimpleNamespace(
+                                id=tc.id,
+                                type="function",
+                                function=SimpleNamespace(name=tc.name, arguments=tc.arguments),
+                            )
+                            for tc in (_nr.tool_calls or [])
+                        ] or None,
+                        reasoning=_nr.reasoning,
+                        reasoning_content=None,
+                        reasoning_details=(
+                            _nr.provider_data.get("reasoning_details")
+                            if _nr.provider_data else None
+                        ),
+                    )
+                    finish_reason = _nr.finish_reason
                 else:
                     assistant_message = response.choices[0].message
                 

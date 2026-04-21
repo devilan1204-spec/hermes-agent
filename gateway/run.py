@@ -30,6 +30,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 
+from agent.account_usage import fetch_account_usage, render_account_usage_lines
+
 # --- Agent cache tuning ---------------------------------------------------
 # Bounds the per-session AIAgent cache to prevent unbounded growth in
 # long-lived gateways (each AIAgent holds LLM clients, tool schemas,
@@ -279,6 +281,7 @@ from gateway.session import (
     build_session_context,
     build_session_context_prompt,
     build_session_key,
+    is_shared_multi_user_session,
 )
 from gateway.delivery import DeliveryRouter
 from gateway.platforms.base import (
@@ -3791,12 +3794,12 @@ class GatewayRunner:
         history = history or []
         message_text = event.text or ""
 
-        _is_shared_thread = (
-            source.chat_type != "dm"
-            and source.thread_id
-            and not getattr(self.config, "thread_sessions_per_user", False)
+        _is_shared_multi_user = is_shared_multi_user_session(
+            source,
+            group_sessions_per_user=getattr(self.config, "group_sessions_per_user", True),
+            thread_sessions_per_user=getattr(self.config, "thread_sessions_per_user", False),
         )
-        if _is_shared_thread and source.user_name:
+        if _is_shared_multi_user and source.user_name:
             message_text = f"[{source.user_name}] {message_text}"
 
         if event.media_urls:
@@ -7263,6 +7266,38 @@ class GatewayRunner:
                     if cached:
                         agent = cached[0]
 
+        # Resolve provider/base_url/api_key for the account-usage fetch.
+        # Prefer the live agent; fall back to persisted billing data on the
+        # SessionDB row so `/usage` still returns account info between turns
+        # when no agent is resident.
+        provider = getattr(agent, "provider", None) if agent and agent is not _AGENT_PENDING_SENTINEL else None
+        base_url = getattr(agent, "base_url", None) if agent and agent is not _AGENT_PENDING_SENTINEL else None
+        api_key = getattr(agent, "api_key", None) if agent and agent is not _AGENT_PENDING_SENTINEL else None
+        if not provider and getattr(self, "_session_db", None) is not None:
+            try:
+                _entry_for_billing = self.session_store.get_or_create_session(source)
+                persisted = self._session_db.get_session(_entry_for_billing.session_id) or {}
+            except Exception:
+                persisted = {}
+            provider = provider or persisted.get("billing_provider")
+            base_url = base_url or persisted.get("billing_base_url")
+
+        # Fetch account usage off the event loop so slow provider APIs don't
+        # block the gateway. Failures are non-fatal -- account_lines stays [].
+        account_lines: list[str] = []
+        if provider:
+            try:
+                account_snapshot = await asyncio.to_thread(
+                    fetch_account_usage,
+                    provider,
+                    base_url=base_url,
+                    api_key=api_key,
+                )
+            except Exception:
+                account_snapshot = None
+            if account_snapshot:
+                account_lines = render_account_usage_lines(account_snapshot, markdown=True)
+
         if agent and hasattr(agent, "session_total_tokens") and agent.session_api_calls > 0:
             lines = []
 
@@ -7320,6 +7355,10 @@ class GatewayRunner:
             if ctx.compression_count:
                 lines.append(f"Compressions: {ctx.compression_count}")
 
+            if account_lines:
+                lines.append("")
+                lines.extend(account_lines)
+
             return "\n".join(lines)
 
         # No agent at all -- check session history for a rough count
@@ -7329,12 +7368,18 @@ class GatewayRunner:
             from agent.model_metadata import estimate_messages_tokens_rough
             msgs = [m for m in history if m.get("role") in ("user", "assistant") and m.get("content")]
             approx = estimate_messages_tokens_rough(msgs)
-            return (
-                f"📊 **Session Info**\n"
-                f"Messages: {len(msgs)}\n"
-                f"Estimated context: ~{approx:,} tokens\n"
-                f"_(Detailed usage available after the first agent response)_"
-            )
+            lines = [
+                "📊 **Session Info**",
+                f"Messages: {len(msgs)}",
+                f"Estimated context: ~{approx:,} tokens",
+                "_(Detailed usage available after the first agent response)_",
+            ]
+            if account_lines:
+                lines.append("")
+                lines.extend(account_lines)
+            return "\n".join(lines)
+        if account_lines:
+            return "\n".join(account_lines)
         return "No usage data available for this session."
 
     async def _handle_insights_command(self, event: MessageEvent) -> str:
@@ -10774,6 +10819,12 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
                 except (ProcessLookupError, PermissionError, OSError):
                     pass
             remove_pid_file()
+            # remove_pid_file() is a no-op when the PID doesn't match.
+            # Force-unlink to cover the old-process-crashed case.
+            try:
+                (get_hermes_home() / "gateway.pid").unlink(missing_ok=True)
+            except Exception:
+                pass
             # Clean up any takeover marker the old process didn't consume
             # (e.g. SIGKILL'd before its shutdown handler could read it).
             try:
@@ -10912,6 +10963,30 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     else:
         logger.info("Skipping signal handlers (not running in main thread).")
     
+    # Claim the PID file BEFORE bringing up any platform adapters.
+    # This closes the --replace race window: two concurrent `gateway run
+    # --replace` invocations both pass the termination-wait above, but
+    # only the winner of the O_CREAT|O_EXCL race below will ever open
+    # Telegram polling, Discord gateway sockets, etc. The loser exits
+    # cleanly before touching any external service.
+    import atexit
+    from gateway.status import write_pid_file, remove_pid_file, get_running_pid
+    _current_pid = get_running_pid()
+    if _current_pid is not None and _current_pid != os.getpid():
+        logger.error(
+            "Another gateway instance (PID %d) started during our startup. "
+            "Exiting to avoid double-running.", _current_pid
+        )
+        return False
+    try:
+        write_pid_file()
+    except FileExistsError:
+        logger.error(
+            "PID file race lost to another gateway instance. Exiting."
+        )
+        return False
+    atexit.register(remove_pid_file)
+
     # Start the gateway
     success = await runner.start()
     if not success:
@@ -10920,12 +10995,6 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
         if runner.exit_reason:
             logger.error("Gateway exiting cleanly: %s", runner.exit_reason)
         return True
-    
-    # Write PID file so CLI can detect gateway is running
-    import atexit
-    from gateway.status import write_pid_file, remove_pid_file
-    write_pid_file()
-    atexit.register(remove_pid_file)
     
     # Start background cron ticker so scheduled jobs fire automatically.
     # Pass the event loop so cron delivery can use live adapters (E2EE support).
