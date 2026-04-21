@@ -29,6 +29,7 @@ from hermes_cli.auth import (
     _save_auth_store,
     _save_provider_state,
     read_credential_pool,
+    read_provider_credentials,
     write_credential_pool,
 )
 
@@ -321,7 +322,7 @@ def get_custom_provider_pool_key(base_url: str) -> Optional[str]:
 
 def list_custom_pool_providers() -> List[str]:
     """Return all 'custom:*' pool keys that have entries in auth.json."""
-    pool_data = read_credential_pool(None)
+    pool_data = read_credential_pool()
     return sorted(
         key for key in pool_data
         if key.startswith(CUSTOM_POOL_PREFIX)
@@ -1303,7 +1304,7 @@ def _seed_custom_pool(pool_key: str, entries: List[PooledCredential]) -> Tuple[b
 
 def load_pool(provider: str) -> CredentialPool:
     provider = (provider or "").strip().lower()
-    raw_entries = read_credential_pool(provider)
+    raw_entries = read_provider_credentials(provider)
     entries = [PooledCredential.from_dict(provider, payload) for payload in raw_entries]
 
     if provider.startswith(CUSTOM_POOL_PREFIX):

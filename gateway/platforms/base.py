@@ -426,6 +426,7 @@ async def cache_image_from_url(url: str, ext: str = ".jpg", retries: int = 2) ->
                     await asyncio.sleep(wait)
                     continue
                 raise
+    raise AssertionError("unreachable: retry loop exhausted")
 
 
 def cleanup_image_cache(max_age_hours: int = 24) -> int:
@@ -540,6 +541,7 @@ async def cache_audio_from_url(url: str, ext: str = ".ogg", retries: int = 2) ->
                     await asyncio.sleep(wait)
                     continue
                 raise
+    raise AssertionError("unreachable: retry loop exhausted")
 
 
 # ---------------------------------------------------------------------------

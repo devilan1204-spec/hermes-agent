@@ -2042,8 +2042,8 @@ def check_config_version() -> Tuple[int, int]:
     Returns (current_version, latest_version).
     """
     config = load_config()
-    current = config.get("_config_version", 0)
-    latest = DEFAULT_CONFIG.get("_config_version", 1)
+    current = int(config.get("_config_version", 0))
+    latest = int(DEFAULT_CONFIG.get("_config_version", 1))
     return current, latest
 
 

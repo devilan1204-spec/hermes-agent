@@ -2469,7 +2469,7 @@ class DiscordAdapter(BasePlatformAdapter):
                 if isinstance(skills, str):
                     return [skills]
                 if isinstance(skills, list) and skills:
-                    return list(dict.fromkeys(skills))  # dedup, preserve order
+                    return list(dict.fromkeys(skills))  # ty: ignore[invalid-return-type]  # dedup, preserve order
         return None
 
     def _resolve_channel_prompt(self, channel_id: str, parent_id: str | None = None) -> str | None:
