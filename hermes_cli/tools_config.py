@@ -13,7 +13,7 @@ import json as _json
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypedDict
 
 
 from hermes_cli.config import (
@@ -1098,13 +1098,19 @@ def _detect_active_provider_index(providers: list, config: dict) -> int:
 # right catalog at picker time.
 
 
-def _fal_model_catalog():
+class _ImagegenBackend(TypedDict):
+    display: str
+    config_key: str
+    catalog_fn: Callable[[], Tuple[Dict[str, Dict[str, Any]], str]]
+
+
+def _fal_model_catalog() -> Tuple[Dict[str, Dict[str, Any]], str]:
     """Lazy-load the FAL model catalog from the tool module."""
     from tools.image_generation_tool import FAL_MODELS, DEFAULT_MODEL
     return FAL_MODELS, DEFAULT_MODEL
 
 
-IMAGEGEN_BACKENDS = {
+IMAGEGEN_BACKENDS: Dict[str, _ImagegenBackend] = {
     "fal": {
         "display": "FAL.ai",
         "config_key": "image_gen",

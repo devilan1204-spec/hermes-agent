@@ -1833,8 +1833,11 @@ class BasePlatformAdapter(ABC):
         try:
             await self._run_processing_hook("on_processing_start", event)
 
-            # Call the handler (this can take a while with tool calls)
-            response = await self._message_handler(event)
+            handler = self._message_handler
+            if handler is None:
+                return
+
+            response = await handler(event)
             
             # Send response if any.  A None/empty response is normal when
             # streaming already delivered the text (already_sent=True) or
