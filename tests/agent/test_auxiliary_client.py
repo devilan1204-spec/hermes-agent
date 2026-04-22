@@ -782,6 +782,44 @@ def test_resolve_api_key_provider_skips_unconfigured_anthropic(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+class TestModelDefaultElimination:
+    """_resolve_api_key_provider must skip providers without known aux models."""
+
+    def test_unknown_provider_skipped(self, monkeypatch):
+        """Providers not in _API_KEY_PROVIDER_AUX_MODELS are skipped, not sent model='default'."""
+        from agent.auxiliary_client import _API_KEY_PROVIDER_AUX_MODELS
+
+        # Verify our known providers have entries
+        assert "gemini" in _API_KEY_PROVIDER_AUX_MODELS
+        assert "kimi-coding" in _API_KEY_PROVIDER_AUX_MODELS
+
+        # A random provider_id not in the dict should return None
+        assert _API_KEY_PROVIDER_AUX_MODELS.get("totally-unknown-provider") is None
+
+    def test_known_provider_gets_real_model(self):
+        """Known providers get a real model name, not 'default'."""
+        from agent.auxiliary_client import _API_KEY_PROVIDER_AUX_MODELS
+
+        for provider_id, model in _API_KEY_PROVIDER_AUX_MODELS.items():
+            assert model != "default", f"{provider_id} should not map to 'default'"
+            assert isinstance(model, str) and model.strip(), \
+                f"{provider_id} should have a non-empty model string"
+
+    def test_contract_providers_have_aux_models(self):
+        from agent.auxiliary_client import _API_KEY_PROVIDER_AUX_MODELS
+
+        assert _API_KEY_PROVIDER_AUX_MODELS["volcengine"] == "volcengine/doubao-seed-2-0-lite-260215"
+        assert _API_KEY_PROVIDER_AUX_MODELS["byteplus"] == "byteplus/seed-2-0-lite-260228"
+
+
+class TestContractProviderAliases:
+    def test_coding_plan_aliases_normalize_to_canonical_provider(self):
+        from agent.auxiliary_client import _normalize_aux_provider
+
+        assert _normalize_aux_provider("volcengine-coding-plan") == "volcengine"
+        assert _normalize_aux_provider("byteplus-coding-plan") == "byteplus"
+
+
 # ---------------------------------------------------------------------------
 # _try_payment_fallback reason parameter (#7512 bug 3)
 # ---------------------------------------------------------------------------

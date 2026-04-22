@@ -223,6 +223,22 @@ class TestGetModelContextLength:
         assert get_model_context_length("unknown/never-heard-of-this") == CONTEXT_PROBE_TIERS[0]
 
     @patch("agent.model_metadata.fetch_model_metadata")
+    def test_volcengine_contract_model_uses_contract_context_length(self, mock_fetch):
+        mock_fetch.return_value = {}
+        assert get_model_context_length(
+            "volcengine/doubao-seed-2-0-pro-260215",
+            provider="volcengine",
+        ) == 256000
+
+    @patch("agent.model_metadata.fetch_model_metadata")
+    def test_byteplus_contract_model_infers_provider_from_url(self, mock_fetch):
+        mock_fetch.return_value = {}
+        assert get_model_context_length(
+            "byteplus-coding-plan/kimi-k2.5",
+            base_url="https://ark.ap-southeast.bytepluses.com/api/coding/v3",
+        ) == 256000
+
+    @patch("agent.model_metadata.fetch_model_metadata")
     def test_partial_match_in_defaults(self, mock_fetch):
         mock_fetch.return_value = {}
         assert get_model_context_length("openai/gpt-4o") == 128000

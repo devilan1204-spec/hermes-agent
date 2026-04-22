@@ -102,6 +102,31 @@ class TestProviderPersistsAfterModelSave:
         )
         assert model.get("default") == "kimi-k2.5"
 
+    def test_volcengine_contract_provider_persists_coding_plan_model(self, config_home, monkeypatch):
+        """Volcengine should persist a prefixed coding-plan model and matching base URL."""
+        monkeypatch.setenv("VOLCENGINE_API_KEY", "volc-test-key")
+
+        from hermes_cli.main import _model_flow_contract_provider
+        from hermes_cli.config import load_config
+
+        with patch(
+            "hermes_cli.auth._prompt_model_selection",
+            return_value="volcengine-coding-plan/doubao-seed-2.0-code",
+        ), patch(
+            "hermes_cli.auth.deactivate_provider",
+        ):
+            _model_flow_contract_provider(load_config(), "volcengine", "old-model")
+
+        import yaml
+
+        config = yaml.safe_load((config_home / "config.yaml").read_text()) or {}
+        model = config.get("model")
+        assert isinstance(model, dict), f"model should be dict, got {type(model)}"
+        assert model.get("provider") == "volcengine"
+        assert model.get("default") == "volcengine-coding-plan/doubao-seed-2.0-code"
+        assert model.get("base_url") == "https://ark.cn-beijing.volces.com/api/coding/v3"
+        assert "api_mode" not in model
+
     def test_copilot_provider_saved_when_selected(self, config_home):
         """_model_flow_copilot should persist provider/base_url/model together."""
         from hermes_cli.main import _model_flow_copilot

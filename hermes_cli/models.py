@@ -22,6 +22,12 @@ from hermes_cli import __version__ as _HERMES_VERSION
 # Check (error 1010) don't reject the default ``Python-urllib/*`` signature.
 _HERMES_USER_AGENT = f"hermes-cli/{_HERMES_VERSION}"
 
+from hermes_cli.provider_contracts import (
+    BYTEPLUS_PROVIDER,
+    VOLCENGINE_PROVIDER,
+    provider_models,
+)
+
 COPILOT_BASE_URL = "https://api.githubcopilot.com"
 COPILOT_MODELS_URL = f"{COPILOT_BASE_URL}/models"
 COPILOT_EDITOR_VERSION = "vscode/1.104.1"
@@ -356,6 +362,8 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
         "us.meta.llama4-maverick-17b-instruct-v1:0",
         "us.meta.llama4-scout-17b-instruct-v1:0",
     ],
+    VOLCENGINE_PROVIDER: provider_models(VOLCENGINE_PROVIDER),
+    BYTEPLUS_PROVIDER: provider_models(BYTEPLUS_PROVIDER),
 }
 
 # Vercel AI Gateway: derive the bare-model-id catalog from the curated
@@ -690,6 +698,8 @@ CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("ai-gateway",     "Vercel AI Gateway",        "Vercel AI Gateway (200+ models, $5 free credit, no markup)"),
     ProviderEntry("anthropic",      "Anthropic",                "Anthropic (Claude models — API key or Claude Code)"),
     ProviderEntry("openai-codex",   "OpenAI Codex",             "OpenAI Codex"),
+    ProviderEntry(VOLCENGINE_PROVIDER, "Volcengine",            "Volcengine (standard + Coding Plan catalogs)"),
+    ProviderEntry(BYTEPLUS_PROVIDER, "BytePlus",                "BytePlus (standard + Coding Plan catalogs)"),
     ProviderEntry("xiaomi",         "Xiaomi MiMo",              "Xiaomi MiMo (MiMo-V2 models — pro, omni, flash)"),
     ProviderEntry("nvidia",         "NVIDIA NIM",               "NVIDIA NIM (Nemotron models — build.nvidia.com or local NIM)"),
     ProviderEntry("qwen-oauth",     "Qwen OAuth (Portal)",      "Qwen OAuth (reuses local Qwen CLI login)"),
@@ -718,7 +728,6 @@ CANONICAL_PROVIDERS: list[ProviderEntry] = [
 # Derived dicts — used throughout the codebase
 _PROVIDER_LABELS = {p.slug: p.label for p in CANONICAL_PROVIDERS}
 _PROVIDER_LABELS["custom"] = "Custom endpoint"  # special case: not a named provider
-
 
 _PROVIDER_ALIASES = {
     "glm": "zai",
@@ -782,6 +791,10 @@ _PROVIDER_ALIASES = {
     "nemotron": "nvidia",
     "ollama": "custom",  # bare "ollama" = local; use "ollama-cloud" for cloud
     "ollama_cloud": "ollama-cloud",
+    "volcengine-coding-plan": VOLCENGINE_PROVIDER,
+    "volcengine_coding_plan": VOLCENGINE_PROVIDER,
+    "byteplus-coding-plan": BYTEPLUS_PROVIDER,
+    "byteplus_coding_plan": BYTEPLUS_PROVIDER,
 }
 
 
@@ -1242,7 +1255,6 @@ def list_available_providers() -> list[dict[str, str]]:
     """
     # Derive display order from canonical list + custom
     provider_order = [p.slug for p in CANONICAL_PROVIDERS] + ["custom"]
-
     # Build reverse alias map
     aliases_for: dict[str, list[str]] = {}
     for alias, canonical in _PROVIDER_ALIASES.items():
@@ -1258,7 +1270,7 @@ def list_available_providers() -> list[dict[str, str]]:
             from hermes_cli.auth import get_auth_status, has_usable_secret
             if pid == "custom":
                 custom_base_url = _get_custom_base_url() or ""
-                has_creds = bool(custom_base_url.strip())
+                has_creds = bool(custom_base_url.strip()) and provider_for_base_url(custom_base_url) is None
             elif pid == "openrouter":
                 has_creds = has_usable_secret(os.getenv("OPENROUTER_API_KEY", ""))
             else:
@@ -1322,6 +1334,44 @@ def _get_custom_base_url() -> str:
     except Exception:
         pass
     return ""
+
+
+def provider_for_base_url(base_url: str) -> Optional[str]:
+    """Return a known built-in provider for a configured base URL, if any."""
+    normalized = str(base_url or "").strip().rstrip("/")
+    if not normalized or "openrouter.ai" in normalized.lower():
+        return None
+
+    url_lower = normalized.lower()
+    host_to_provider = {
+        "ark.cn-beijing.volces.com": VOLCENGINE_PROVIDER,
+        "ark.ap-southeast.bytepluses.com": BYTEPLUS_PROVIDER,
+        "api.z.ai": "zai",
+        "api.moonshot.ai": "kimi-coding",
+        "api.kimi.com": "kimi-coding",
+        "api.minimax.io": "minimax",
+        "api.minimaxi.com": "minimax-cn",
+        "dashscope.aliyuncs.com": "alibaba",
+        "dashscope-intl.aliyuncs.com": "alibaba",
+        "portal.qwen.ai": "qwen-oauth",
+        "router.huggingface.co": "huggingface",
+        "generativelanguage.googleapis.com": "gemini",
+        "api.deepseek.com": "deepseek",
+        "api.githubcopilot.com": "copilot",
+        "models.github.ai": "copilot",
+        "opencode.ai": "opencode-go",
+        "api.x.ai": "xai",
+        "api.xiaomimimo.com": "xiaomi",
+        "xiaomimimo.com": "xiaomi",
+        "api.anthropic.com": "anthropic",
+        "inference-api.nousresearch.com": "nous",
+    }
+    for host, provider_id in host_to_provider.items():
+        if host in url_lower:
+            canonical = normalize_provider(provider_id)
+            if canonical in _PROVIDER_LABELS and canonical != "custom":
+                return canonical
+    return None
 
 
 def curated_models_for_provider(

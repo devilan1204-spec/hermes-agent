@@ -42,6 +42,8 @@ class TestProviderRegistry:
         ("minimax-cn", "MiniMax (China)", "api_key"),
         ("ai-gateway", "Vercel AI Gateway", "api_key"),
         ("kilocode", "Kilo Code", "api_key"),
+        ("volcengine", "Volcengine", "api_key"),
+        ("byteplus", "BytePlus", "api_key"),
     ])
     def test_provider_registered(self, provider_id, name, auth_type):
         assert provider_id in PROVIDER_REGISTRY
@@ -111,6 +113,16 @@ class TestProviderRegistry:
         assert pconfig.api_key_env_vars == ("HF_TOKEN",)
         assert pconfig.base_url_env_var == "HF_BASE_URL"
 
+    def test_volcengine_env_vars(self):
+        pconfig = PROVIDER_REGISTRY["volcengine"]
+        assert pconfig.api_key_env_vars == ("VOLCENGINE_API_KEY",)
+        assert pconfig.base_url_env_var == ""
+
+    def test_byteplus_env_vars(self):
+        pconfig = PROVIDER_REGISTRY["byteplus"]
+        assert pconfig.api_key_env_vars == ("BYTEPLUS_API_KEY",)
+        assert pconfig.base_url_env_var == ""
+
     def test_base_urls(self):
         assert PROVIDER_REGISTRY["copilot"].inference_base_url == "https://api.githubcopilot.com"
         assert PROVIDER_REGISTRY["copilot-acp"].inference_base_url == "acp://copilot"
@@ -122,6 +134,8 @@ class TestProviderRegistry:
         assert PROVIDER_REGISTRY["ai-gateway"].inference_base_url == "https://ai-gateway.vercel.sh/v1"
         assert PROVIDER_REGISTRY["kilocode"].inference_base_url == "https://api.kilo.ai/api/gateway"
         assert PROVIDER_REGISTRY["huggingface"].inference_base_url == "https://router.huggingface.co/v1"
+        assert PROVIDER_REGISTRY["volcengine"].inference_base_url == "https://ark.cn-beijing.volces.com/api/v3"
+        assert PROVIDER_REGISTRY["byteplus"].inference_base_url == "https://ark.ap-southeast.bytepluses.com/api/v3"
 
     def test_oauth_providers_unchanged(self):
         """Ensure we didn't break the existing OAuth providers."""
@@ -147,6 +161,7 @@ PROVIDER_ENV_VARS = (
     "NOUS_API_KEY", "GITHUB_TOKEN", "GH_TOKEN",
     "OPENAI_BASE_URL", "HERMES_COPILOT_ACP_COMMAND", "COPILOT_CLI_PATH",
     "HERMES_COPILOT_ACP_ARGS", "COPILOT_ACP_BASE_URL",
+    "VOLCENGINE_API_KEY", "BYTEPLUS_API_KEY",
 )
 
 
@@ -231,6 +246,14 @@ class TestResolveProvider:
     def test_alias_github_copilot_acp(self):
         assert resolve_provider("github-copilot-acp") == "copilot-acp"
         assert resolve_provider("copilot-acp-agent") == "copilot-acp"
+
+    def test_alias_volcengine_coding_plan(self):
+        assert resolve_provider("volcengine-coding-plan") == "volcengine"
+        assert resolve_provider("volcengine_coding_plan") == "volcengine"
+
+    def test_alias_byteplus_coding_plan(self):
+        assert resolve_provider("byteplus-coding-plan") == "byteplus"
+        assert resolve_provider("byteplus_coding_plan") == "byteplus"
 
     def test_explicit_huggingface(self):
         assert resolve_provider("huggingface") == "huggingface"
@@ -339,6 +362,23 @@ class TestApiKeyProviderStatus:
         assert status["configured"] is True
         assert status["base_url"] == STEPFUN_STEP_PLAN_CN_BASE_URL
 
+    def test_volcengine_status_uses_coding_plan_base_url(self, monkeypatch):
+        monkeypatch.setenv("VOLCENGINE_API_KEY", "volc-test-key")
+        monkeypatch.setattr(
+            "hermes_cli.auth.read_raw_config",
+            lambda: {
+                "model": {
+                    "provider": "volcengine",
+                    "default": "volcengine-coding-plan/doubao-seed-2.0-code",
+                }
+            },
+        )
+
+        status = get_api_key_provider_status("volcengine")
+
+        assert status["configured"] is True
+        assert status["base_url"] == "https://ark.cn-beijing.volces.com/api/coding/v3"
+
     def test_copilot_status_uses_gh_cli_token(self, monkeypatch):
         monkeypatch.setattr("hermes_cli.copilot_auth._try_gh_cli_token", lambda: "gho_gh_cli_token")
         status = get_api_key_provider_status("copilot")
@@ -393,6 +433,25 @@ class TestResolveApiKeyProviderCredentials:
         assert creds["api_key"] == "glm-secret-key"
         assert creds["base_url"] == "https://api.z.ai/api/paas/v4"
         assert creds["source"] == "GLM_API_KEY"
+
+    def test_resolve_byteplus_with_coding_plan_model_uses_coding_base_url(self, monkeypatch):
+        monkeypatch.setenv("BYTEPLUS_API_KEY", "byteplus-secret-key")
+        monkeypatch.setattr(
+            "hermes_cli.auth.read_raw_config",
+            lambda: {
+                "model": {
+                    "provider": "byteplus",
+                    "default": "byteplus-coding-plan/dola-seed-2.0-pro",
+                }
+            },
+        )
+
+        creds = resolve_api_key_provider_credentials("byteplus")
+
+        assert creds["provider"] == "byteplus"
+        assert creds["api_key"] == "byteplus-secret-key"
+        assert creds["base_url"] == "https://ark.ap-southeast.bytepluses.com/api/coding/v3"
+        assert creds["source"] == "BYTEPLUS_API_KEY"
 
     def test_resolve_copilot_with_github_token(self, monkeypatch):
         monkeypatch.setenv("GITHUB_TOKEN", "gh-env-secret")

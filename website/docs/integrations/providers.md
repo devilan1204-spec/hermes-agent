@@ -30,6 +30,8 @@ You need at least one way to connect to an LLM. Use `hermes model` to switch pro
 | **Alibaba Cloud** | `DASHSCOPE_API_KEY` in `~/.hermes/.env` (provider: `alibaba`, aliases: `dashscope`, `qwen`) |
 | **Kilo Code** | `KILOCODE_API_KEY` in `~/.hermes/.env` (provider: `kilocode`) |
 | **Xiaomi MiMo** | `XIAOMI_API_KEY` in `~/.hermes/.env` (provider: `xiaomi`, aliases: `mimo`, `xiaomi-mimo`) |
+| **Volcengine** | `hermes model` or `VOLCENGINE_API_KEY` in `~/.hermes/.env` (provider: `volcengine`) |
+| **BytePlus** | `hermes model` or `BYTEPLUS_API_KEY` in `~/.hermes/.env` (provider: `byteplus`) |
 | **OpenCode Zen** | `OPENCODE_ZEN_API_KEY` in `~/.hermes/.env` (provider: `opencode-zen`) |
 | **OpenCode Go** | `OPENCODE_GO_API_KEY` in `~/.hermes/.env` (provider: `opencode-go`) |
 | **DeepSeek** | `DEEPSEEK_API_KEY` in `~/.hermes/.env` (provider: `deepseek`) |
@@ -274,16 +276,58 @@ hermes chat --provider xiaomi --model mimo-v2-pro
 # Arcee AI (Trinity models)
 hermes chat --provider arcee --model trinity-large-thinking
 # Requires: ARCEEAI_API_KEY in ~/.hermes/.env
+
+# Volcengine
+hermes chat --provider volcengine --model volcengine/doubao-seed-2-0-pro-260215
+# Requires: VOLCENGINE_API_KEY in ~/.hermes/.env
+
+# Volcengine Coding Plan catalog (same provider, same API key)
+hermes chat --provider volcengine --model volcengine-coding-plan/doubao-seed-2.0-code
+
+# BytePlus
+hermes chat --provider byteplus --model byteplus/seed-2-0-pro-260328
+# Requires: BYTEPLUS_API_KEY in ~/.hermes/.env
+
+# BytePlus Coding Plan catalog (same provider, same API key)
+hermes chat --provider byteplus --model byteplus-coding-plan/dola-seed-2.0-pro
 ```
 
 Or set the provider permanently in `config.yaml`:
 ```yaml
 model:
-  provider: "zai"       # or: kimi-coding, kimi-coding-cn, minimax, minimax-cn, alibaba, xiaomi, arcee
+  provider: "zai"       # or: kimi-coding, kimi-coding-cn, minimax, minimax-cn, alibaba, xiaomi, arcee, volcengine, byteplus
   default: "glm-5"
 ```
 
 Base URLs can be overridden with `GLM_BASE_URL`, `KIMI_BASE_URL`, `MINIMAX_BASE_URL`, `MINIMAX_CN_BASE_URL`, `DASHSCOPE_BASE_URL`, or `XIAOMI_BASE_URL` environment variables.
+
+### Volcengine and BytePlus Contract Catalogs
+
+Hermes exposes **two** built-in providers for these integrations:
+
+- `volcengine`
+- `byteplus`
+
+Each provider includes both its standard catalog and its Coding Plan catalog. The selected model ID determines the runtime base URL automatically:
+
+- `volcengine/...` -> `https://ark.cn-beijing.volces.com/api/v3`
+- `volcengine-coding-plan/...` -> `https://ark.cn-beijing.volces.com/api/coding/v3`
+- `byteplus/...` -> `https://ark.ap-southeast.bytepluses.com/api/v3`
+- `byteplus-coding-plan/...` -> `https://ark.ap-southeast.bytepluses.com/api/coding/v3`
+
+In `hermes model`, the setup flow is:
+
+1. Enter API key
+2. Select a model
+
+If you pick a `volcengine-coding-plan/...` or `byteplus-coding-plan/...` model, Hermes automatically uses the corresponding coding-plan base URL.
+
+The API key is shared per provider:
+
+- `VOLCENGINE_API_KEY` works for both `volcengine/...` and `volcengine-coding-plan/...`
+- `BYTEPLUS_API_KEY` works for both `byteplus/...` and `byteplus-coding-plan/...`
+
+Use `hermes model` to pick from the built-in curated catalogs. Hermes saves the canonical prefixed model ID in `config.yaml`, so standard and Coding Plan variants remain unambiguous.
 
 :::note Z.AI Endpoint Auto-Detection
 When using the Z.AI / GLM provider, Hermes automatically probes multiple endpoints (global, China, coding variants) to find one that accepts your API key. You don't need to set `GLM_BASE_URL` manually — the working endpoint is detected and cached automatically.

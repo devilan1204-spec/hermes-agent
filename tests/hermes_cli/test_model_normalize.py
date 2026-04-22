@@ -179,6 +179,19 @@ class TestIssue6211NativeProviderPrefixNormalization:
         assert normalize_model_for_provider(model, target_provider) == expected
 
 
+class TestContractProviderPrefixNormalization:
+    @pytest.mark.parametrize("model,target_provider,expected", [
+        ("volcengine/doubao-seed-2-0-pro-260215", "volcengine", "doubao-seed-2-0-pro-260215"),
+        ("volcengine-coding-plan/doubao-seed-2.0-code", "volcengine", "doubao-seed-2.0-code"),
+        ("byteplus/seed-2-0-pro-260328", "byteplus", "seed-2-0-pro-260328"),
+        ("byteplus-coding-plan/dola-seed-2.0-pro", "byteplus", "dola-seed-2.0-pro"),
+    ])
+    def test_contract_provider_prefixes_strip_to_native_model(
+        self, model, target_provider, expected
+    ):
+        assert normalize_model_for_provider(model, target_provider) == expected
+
+
 # ── detect_vendor ──────────────────────────────────────────────────────
 
 class TestDetectVendor:

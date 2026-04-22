@@ -6,6 +6,7 @@ from hermes_cli.models import (
     OPENROUTER_MODELS, fetch_openrouter_models, model_ids, detect_provider_for_model,
     is_nous_free_tier, partition_nous_models_by_tier,
     check_nous_free_tier, _FREE_TIER_CACHE_TTL,
+    list_available_providers, provider_for_base_url,
 )
 import hermes_cli.models as _models_mod
 
@@ -290,6 +291,41 @@ class TestDetectProviderForModel:
             result = detect_provider_for_model("claude-opus-4-6", "openai-codex")
         assert result is not None
         assert result[0] not in ("nous",)  # nous has claude models but shouldn't be suggested
+
+    def test_volcengine_coding_plan_model_detected(self):
+        result = detect_provider_for_model(
+            "volcengine-coding-plan/doubao-seed-2.0-code",
+            "openrouter",
+        )
+        assert result == ("volcengine", "volcengine-coding-plan/doubao-seed-2.0-code")
+
+    def test_byteplus_standard_model_detected(self):
+        result = detect_provider_for_model(
+            "byteplus/seed-2-0-pro-260328",
+            "openrouter",
+        )
+        assert result == ("byteplus", "byteplus/seed-2-0-pro-260328")
+
+
+class TestConfiguredBaseUrlProviderDetection:
+    def test_provider_for_base_url_detects_volcengine(self):
+        assert provider_for_base_url("https://ark.cn-beijing.volces.com/api/v3") == "volcengine"
+
+    def test_provider_for_base_url_detects_byteplus_coding(self):
+        assert provider_for_base_url("https://ark.ap-southeast.bytepluses.com/api/coding/v3") == "byteplus"
+
+    def test_known_builtin_endpoint_is_not_listed_as_custom(self, monkeypatch):
+        monkeypatch.setattr("hermes_cli.models._get_custom_base_url", lambda: "https://ark.cn-beijing.volces.com/api/v3")
+        monkeypatch.setattr(
+            "hermes_cli.auth.get_auth_status",
+            lambda pid: {"configured": pid == "volcengine", "logged_in": pid == "volcengine"},
+        )
+        monkeypatch.setattr("hermes_cli.auth.has_usable_secret", lambda value: False)
+
+        providers = {p["id"]: p for p in list_available_providers()}
+
+        assert providers["volcengine"]["authenticated"] is True
+        assert providers["custom"]["authenticated"] is False
 
 
 class TestIsNousFreeTier:

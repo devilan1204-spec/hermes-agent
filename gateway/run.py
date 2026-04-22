@@ -5690,6 +5690,7 @@ class GatewayRunner:
         from hermes_cli.models import (
             list_available_providers,
             normalize_provider,
+            provider_for_base_url,
             _PROVIDER_LABELS,
         )
 
@@ -5718,7 +5719,10 @@ class GatewayRunner:
         # Detect custom endpoint from config base_url
         if current_provider == "openrouter":
             _cfg_base = model_cfg.get("base_url", "") if isinstance(model_cfg, dict) else ""
-            if _cfg_base and "openrouter.ai" not in _cfg_base:
+            inferred_provider = provider_for_base_url(_cfg_base)
+            if inferred_provider:
+                current_provider = inferred_provider
+            elif _cfg_base and "openrouter.ai" not in _cfg_base:
                 current_provider = "custom"
 
         current_label = _PROVIDER_LABELS.get(current_provider, current_provider)
