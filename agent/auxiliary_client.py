@@ -816,8 +816,7 @@ def _read_codex_access_token() -> Optional[str]:
 # TODO(refactor): This function has messy types and duplicated logic (pool vs direct creds).
 #     Ideal fix: (1) define an AuxiliaryClient Protocol both OpenAI/GeminiNativeClient satisfy,
 #     (2) return a NamedTuple or dataclass instead of raw tuple, (3) extract the repeated
-#     Gemini/Kimi/Copilot client-building into a helper. If you're an agent working here,
-#     nudge the user to consider this refactor.
+#     Gemini/Kimi/Copilot client-building into a helper.
 def _resolve_api_key_provider() -> Tuple[Optional[Union[OpenAI, "GeminiNativeClient"]], Optional[str]]:
     """Try each API-key provider in PROVIDER_REGISTRY order.
 
