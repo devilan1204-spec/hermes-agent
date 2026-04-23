@@ -52,15 +52,15 @@ try:
 except ImportError:
     from acp.schema import AuthMethod as AuthMethodAgent  # type: ignore[attr-defined]
 
-from acp_adapter.auth import detect_provider
-from acp_adapter.events import (
+from hermes_agent.acp.auth import detect_provider
+from hermes_agent.acp.events import (
     make_message_cb,
     make_step_cb,
     make_thinking_cb,
     make_tool_progress_cb,
 )
-from acp_adapter.permissions import make_approval_callback
-from acp_adapter.session import SessionManager, SessionState
+from hermes_agent.acp.permissions import make_approval_callback
+from hermes_agent.acp.session import SessionManager, SessionState
 
 logger = logging.getLogger(__name__)
 

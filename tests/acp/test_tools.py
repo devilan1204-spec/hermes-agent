@@ -1,8 +1,8 @@
-"""Tests for acp_adapter.tools — tool kind mapping and ACP content building."""
+"""Tests for hermes_agent.acp.tools — tool kind mapping and ACP content building."""
 
 import pytest
 
-from acp_adapter.tools import (
+from hermes_agent.acp.tools import (
     TOOL_KIND_MAP,
     build_tool_complete,
     build_tool_start,

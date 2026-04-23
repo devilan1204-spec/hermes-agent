@@ -8516,7 +8516,7 @@ Examples:
     def cmd_acp(args):
         """Launch Hermes Agent as an ACP server."""
         try:
-            from acp_adapter.entry import main as acp_main
+            from hermes_agent.acp.entry import main as acp_main
 
             acp_main()
         except ImportError:

@@ -1,8 +1,8 @@
-"""Tests for acp_adapter.entry startup wiring."""
+"""Tests for hermes_agent.acp.entry startup wiring."""
 
 import acp
 
-from acp_adapter import entry
+from hermes_agent.acp import entry
 
 
 def test_main_enables_unstable_protocol(monkeypatch):

@@ -1,4 +1,4 @@
-"""Tests for acp_adapter.server — HermesACPAgent ACP server."""
+"""Tests for hermes_agent.acp.server — HermesACPAgent ACP server."""
 
 import asyncio
 import os
@@ -28,8 +28,8 @@ from acp.schema import (
     TextContentBlock,
     Usage,
 )
-from acp_adapter.server import HermesACPAgent, HERMES_VERSION
-from acp_adapter.session import SessionManager
+from hermes_agent.acp.server import HermesACPAgent, HERMES_VERSION
+from hermes_agent.acp.session import SessionManager
 from hermes_state import SessionDB
 
 
@@ -97,7 +97,7 @@ class TestAuthenticate:
     @pytest.mark.asyncio
     async def test_authenticate_with_matching_method_id(self, agent, monkeypatch):
         monkeypatch.setattr(
-            "acp_adapter.server.detect_provider",
+            "hermes_agent.acp.server.detect_provider",
             lambda: "openrouter",
         )
         resp = await agent.authenticate(method_id="openrouter")
@@ -106,7 +106,7 @@ class TestAuthenticate:
     @pytest.mark.asyncio
     async def test_authenticate_is_case_insensitive(self, agent, monkeypatch):
         monkeypatch.setattr(
-            "acp_adapter.server.detect_provider",
+            "hermes_agent.acp.server.detect_provider",
             lambda: "openrouter",
         )
         resp = await agent.authenticate(method_id="OpenRouter")
@@ -115,7 +115,7 @@ class TestAuthenticate:
     @pytest.mark.asyncio
     async def test_authenticate_rejects_mismatched_method_id(self, agent, monkeypatch):
         monkeypatch.setattr(
-            "acp_adapter.server.detect_provider",
+            "hermes_agent.acp.server.detect_provider",
             lambda: "openrouter",
         )
         resp = await agent.authenticate(method_id="totally-invalid-method")
@@ -124,7 +124,7 @@ class TestAuthenticate:
     @pytest.mark.asyncio
     async def test_authenticate_without_provider(self, agent, monkeypatch):
         monkeypatch.setattr(
-            "acp_adapter.server.detect_provider",
+            "hermes_agent.acp.server.detect_provider",
             lambda: None,
         )
         resp = await agent.authenticate(method_id="openrouter")
@@ -272,7 +272,7 @@ class TestListAndFork:
 
     @pytest.mark.asyncio
     async def test_list_sessions_pagination_first_page(self, agent):
-        from acp_adapter import server as acp_server
+        from hermes_agent.acp import server as acp_server
 
         infos = [
             {"session_id": f"s{i}", "cwd": "/tmp", "title": None, "updated_at": 0.0}

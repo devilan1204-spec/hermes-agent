@@ -1,5 +1,5 @@
-"""Allow running the ACP adapter as ``python -m acp_adapter``."""
+"""Allow running the ACP adapter as ``python -m hermes_agent.acp``."""
 
-from .entry import main
+from hermes_agent.acp.entry import main
 
 main()

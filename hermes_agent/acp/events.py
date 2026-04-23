@@ -15,7 +15,7 @@ from typing import Any, Callable, Deque, Dict
 
 import acp
 
-from .tools import (
+from hermes_agent.acp.tools import (
     build_tool_complete,
     build_tool_start,
     make_tool_call_id,

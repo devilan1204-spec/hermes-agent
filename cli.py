@@ -8454,7 +8454,7 @@ class HermesCLI:
                 # in terminal_tool is populated for this thread.  The main thread
                 # registration (run() line ~9046) is invisible here because
                 # _callback_tls is threading.local().  Matches the pattern used
-                # by acp_adapter/server.py for ACP sessions.
+                # by hermes_agent/acp/server.py for ACP sessions.
                 set_sudo_password_callback(self._sudo_password_callback)
                 set_approval_callback(self._approval_callback)
                 try:

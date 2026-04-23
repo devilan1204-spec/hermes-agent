@@ -1,4 +1,4 @@
-"""Tests for acp_adapter.session — SessionManager and SessionState."""
+"""Tests for hermes_agent.acp.session — SessionManager and SessionState."""
 
 import contextlib
 import io
@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from unittest.mock import MagicMock, patch
 
-from acp_adapter.session import SessionManager, SessionState
+from hermes_agent.acp.session import SessionManager, SessionState
 from hermes_state import SessionDB
 
 
@@ -38,7 +38,7 @@ class TestCreateSession:
 
     def test_create_session_registers_task_cwd(self, manager, monkeypatch):
         calls = []
-        monkeypatch.setattr("acp_adapter.session._register_task_cwd", lambda task_id, cwd: calls.append((task_id, cwd)))
+        monkeypatch.setattr("hermes_agent.acp.session._register_task_cwd", lambda task_id, cwd: calls.append((task_id, cwd)))
         state = manager.create_session(cwd="/tmp/work")
         assert calls == [(state.session_id, "/tmp/work")]
 
