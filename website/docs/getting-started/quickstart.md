@@ -70,6 +70,7 @@ Good defaults:
 |---|---|
 | Least friction | Nous Portal or OpenRouter |
 | You already have Claude or Codex auth | Anthropic or OpenAI Codex |
+| You want MiniMax models without an API key | MiniMax (OAuth) — browser login, no billing setup |
 | You want local/private inference | Ollama or any custom OpenAI-compatible endpoint |
 | You want multi-provider routing | OpenRouter |
 | You have a custom GPU server | vLLM, SGLang, LiteLLM, or any OpenAI-compatible endpoint |
