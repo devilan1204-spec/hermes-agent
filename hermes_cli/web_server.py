@@ -53,7 +53,7 @@ try:
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
     from fastapi.staticfiles import StaticFiles
-    from pydantic import BaseModel
+    from pydantic import BaseModel, field_validator
 except ImportError:
     raise SystemExit(
         "Web UI requires fastapi and uvicorn.\n"
@@ -424,6 +424,20 @@ class ConfigUpdate(BaseModel):
 class EnvVarUpdate(BaseModel):
     key: str
     value: str
+
+    @field_validator("key")
+    @classmethod
+    def key_must_be_nonempty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("key must not be empty")
+        return v
+
+    @field_validator("value")
+    @classmethod
+    def value_must_be_nonempty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("value must not be empty; use DELETE /api/env to remove a key")
+        return v
 
 
 class EnvVarDelete(BaseModel):
