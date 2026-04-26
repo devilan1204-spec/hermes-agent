@@ -1,11 +1,13 @@
-import React, { useEffect, useRef } from 'react';
-import { Box } from 'ink';
+import React from 'react';
+import { Box, useApp } from 'ink';
+import { usePerformanceMonitor } from '../hooks/usePerformance';
 
 /**
- * A container component that efficiently renders only visible messages
- * Uses a fixed window approach rather than a full virtualization library
+ * A fixed window scroller component for efficient rendering of large lists
+ * This is a lightweight virtualization component that only renders visible items
+ * plus a configurable overscan buffer for smooth scrolling
  */
-export const FixedWindowScroller = React.memo(({
+export const FixedWindowScroller = React.forwardRef(({
   items,
   height,
   width,
@@ -14,10 +16,18 @@ export const FixedWindowScroller = React.memo(({
   overscrollItems = 20, // Number of items to render outside visible area
   onScroll,
   initialScrollToEnd = true,
-}) => {
-  const containerRef = useRef(null);
-  const lastScrollTopRef = useRef(0);
-  const lastItemsLengthRef = useRef(items.length);
+}, ref) => {
+  const { stdout } = useApp();
+  const { logEvent } = usePerformanceMonitor('FixedWindowScroller', { 
+    logToConsole: false 
+  });
+  
+  // Container ref for scroll measurements
+  const containerRef = React.useRef(null);
+  
+  // Track scroll state
+  const lastScrollTopRef = React.useRef(0);
+  const lastItemsLengthRef = React.useRef(items.length);
   
   // Calculate visible window based on container dimensions
   const [visibleWindow, setVisibleWindow] = React.useState({
@@ -25,6 +35,55 @@ export const FixedWindowScroller = React.memo(({
     endIndex: items.length,
     scrollTop: 0
   });
+  
+  // Expose scroll methods via ref
+  React.useImperativeHandle(ref, () => ({
+    scrollToItem: (index, align = 'auto') => {
+      if (!containerRef.current) return;
+      
+      const container = containerRef.current;
+      const itemOffset = index * itemHeight;
+      
+      if (align === 'start') {
+        container.scrollTop = itemOffset;
+      } else if (align === 'end') {
+        container.scrollTop = itemOffset - height + itemHeight;
+      } else if (align === 'center') {
+        container.scrollTop = itemOffset - height / 2 + itemHeight / 2;
+      } else {
+        // Auto alignment - only scroll if item is outside visible area
+        const { scrollTop } = container;
+        const visibleBottom = scrollTop + height;
+        
+        if (itemOffset < scrollTop) {
+          container.scrollTop = itemOffset;
+        } else if (itemOffset + itemHeight > visibleBottom) {
+          container.scrollTop = itemOffset - height + itemHeight;
+        }
+      }
+    },
+    
+    scrollToTop: () => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = 0;
+      }
+    },
+    
+    scrollToBottom: () => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
+    },
+    
+    // Compatibility with ScrollBoxHandle
+    getScrollTop: () => containerRef.current?.scrollTop || 0,
+    getViewportHeight: () => height,
+    getPendingDelta: () => 0,
+    isSticky: () => visibleWindow.startIndex === items.length - visibleItemCount,
+  }), [height, itemHeight, items.length, visibleWindow.startIndex]);
+  
+  // Calculate how many items fit in the viewport
+  const visibleItemCount = Math.ceil(height / itemHeight);
   
   // Handle scroll events
   const handleScroll = React.useCallback((event) => {
@@ -48,6 +107,8 @@ export const FixedWindowScroller = React.memo(({
         firstVisibleItemIndex + visibleItems + overscrollItems
       );
       
+      logEvent(`window-update-${startIndex}-${endIndex}`);
+      
       setVisibleWindow({ startIndex, endIndex, scrollTop });
       lastScrollTopRef.current = scrollTop;
       
@@ -64,10 +125,10 @@ export const FixedWindowScroller = React.memo(({
         });
       }
     }
-  }, [items.length, itemHeight, overscrollItems, onScroll]);
+  }, [items.length, itemHeight, overscrollItems, onScroll, logEvent]);
   
   // Auto-scroll to bottom when new items are added
-  useEffect(() => {
+  React.useEffect(() => {
     if (!containerRef.current) return;
     
     const isNewMessagesAdded = items.length > lastItemsLengthRef.current;
@@ -82,10 +143,12 @@ export const FixedWindowScroller = React.memo(({
         endIndex: items.length,
         scrollTop: containerRef.current.scrollHeight
       });
+      
+      logEvent('auto-scroll');
     }
     
     lastItemsLengthRef.current = items.length;
-  }, [items.length, height, itemHeight, overscrollItems, initialScrollToEnd]);
+  }, [items.length, height, itemHeight, overscrollItems, initialScrollToEnd, logEvent]);
   
   // Get the visible subset of items
   const visibleItems = items.slice(visibleWindow.startIndex, visibleWindow.endIndex);
@@ -128,5 +191,7 @@ export const FixedWindowScroller = React.memo(({
     </Box>
   );
 });
+
+FixedWindowScroller.displayName = 'FixedWindowScroller';
 
 export default FixedWindowScroller;
