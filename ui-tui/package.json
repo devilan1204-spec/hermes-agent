@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "showroom": "tsx .showroom/server.ts",
     "showroom:build": "tsx .showroom/build.ts",
-    "showroom:type-check": "tsc --noEmit -p .showroom/tsconfig.json"
+    "showroom:type-check": "tsc --noEmit -p .showroom/tsconfig.json",
+    "showroom:record": "tsx .showroom/record.tsx"
   },
   "dependencies": {
     "@hermes/ink": "file:./packages/hermes-ink",

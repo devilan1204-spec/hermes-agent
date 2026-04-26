@@ -1,25 +1,18 @@
 {
-  "title": "Voice Mode",
-  "composer": "› ctrl+b to start recording",
-  "viewport": {
-    "cols": 96,
-    "rows": 30,
-    "scale": 4
-  },
+  "composer": "ctrl+b to start recording",
   "timeline": [
-    { "at": 0, "type": "status", "text": "voice · listening", "detail": "STT · openai · TTS · 11labs" },
     {
+      "ansi": "\u001b[?25l\u001b[?2026h\u001b[2C⚡\u001b[1CVAD\u001b[1C·\u001b[1Ccapturing\u001b[1C(3)\r\n\u001b[2C├─\u001b[1C▮\u001b[1C▮▮\u001b[1C▮\u001b[1C▮▮▮▮\u001b[1C▮▮\u001b[1C▮▮▮▮▮▮\u001b[1C▮▮▮\u001b[1C▮\r\n\u001b[2C├─\u001b[1Crms\u001b[1C0.42\u001b[1C·\u001b[1C1.6s\u001b[1Ccaptured\r\n\u001b[2C└─\u001b[1Cauto-stop\u001b[1C·\u001b[1Csilence\u001b[1C380ms\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
       "at": 250,
       "id": "vad",
-      "title": "VAD · capturing",
-      "items": [
-        "▮ ▮▮ ▮ ▮▮▮▮ ▮▮ ▮▮▮▮▮▮ ▮▮▮ ▮",
-        "rms 0.42 · 1.6s captured",
-        "auto-stop · silence 380ms"
-      ],
-      "type": "tool"
+      "type": "frame"
     },
-    { "at": 600, "duration": 1500, "target": "vad", "type": "spotlight" },
+    {
+      "at": 600,
+      "duration": 1500,
+      "target": "vad",
+      "type": "spotlight"
+    },
     {
       "at": 800,
       "duration": 1700,
@@ -28,52 +21,56 @@
       "text": "Continuous loop: VAD detects silence, transcribes, restarts — no key holds.",
       "type": "caption"
     },
-    { "at": 2700, "duration": 500, "target": "vad", "to": 0.18, "type": "fade" },
     {
-      "at": 3000,
-      "duration": 700,
+      "ansi": "\u001b[?25l\u001b[?2026h\r\n❯\u001b[2Cwhat's\u001b[1Cin\u001b[1Cmy\u001b[1Cinbox\u001b[1Ctoday\u001b[1Cand\u001b[1Cwhat\u001b[1Cneeds\u001b[1Ca\u001b[1Creply\u001b[1Cbefore\u001b[1Cnoon?\r\n\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 2700,
       "id": "transcript",
-      "role": "user",
-      "text": "what's in my inbox today and what needs a reply before noon?",
-      "type": "message"
+      "type": "frame"
     },
-    { "at": 3900, "duration": 1100, "target": "transcript", "type": "highlight" },
     {
-      "at": 4100,
+      "at": 3400,
+      "duration": 1100,
+      "target": "transcript",
+      "type": "highlight"
+    },
+    {
+      "at": 3600,
       "duration": 1700,
       "position": "right",
       "target": "transcript",
-      "text": "Transcript flows straight into the composer with the standard ‹ user glyph.",
+      "text": "Transcript flows straight into the composer with the standard ❯ user glyph.",
       "type": "caption"
     },
     {
-      "at": 6000,
-      "duration": 1100,
+      "ansi": "\u001b[?25l\u001b[?2026h┊\u001b[2CThree\u001b[1Cthreads\u001b[1Cneed\u001b[1Cyou\u001b[1Cbefore\u001b[1Cnoon:\u001b[1Cvendor\u001b[1Crenewal,\u001b[1Cpodcast\u001b[1Cintro\u001b[1Cfeedback,\r\n\u001b[4Cand\u001b[1Cthe\u001b[1Cdesign\u001b[1Creview\u001b[1Cat\u001b[1C11.\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 5500,
       "id": "answer",
-      "role": "assistant",
-      "text": "Three threads need you before noon: vendor renewal, podcast intro feedback, and the design review at 11.",
-      "type": "message"
+      "type": "frame"
     },
     {
-      "at": 7300,
+      "ansi": "\u001b[?25l\u001b[?2026h\u001b[2C⚡\u001b[1Ctts\u001b[1C·\u001b[1Cplaying\u001b[1C(3)\r\n\u001b[2C├─\u001b[1Cvoice\u001b[1C11labs\u001b[1C·\u001b[1Cgrace_v3\r\n\u001b[2C├─\u001b[1Celapsed\u001b[1C4.6s\u001b[1C·\u001b[1C2\u001b[1Cchunks\u001b[1Cqueued\r\n\u001b[2C└─\u001b[1Cducking\u001b[1Cmic\u001b[1Cinput\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 6700,
       "id": "tts",
-      "title": "tts · playing",
-      "items": [
-        "voice 11labs · grace_v3",
-        "elapsed 4.6s · 2 chunks queued",
-        "ducking mic input"
-      ],
-      "type": "tool"
+      "type": "frame"
     },
     {
-      "at": 7600,
+      "at": 7000,
       "duration": 1700,
       "position": "right",
       "target": "tts",
       "text": "TTS auto-ducks the mic so the loop never echoes itself back.",
       "type": "caption"
     },
-    { "at": 9400, "duration": 600, "text": "› /voice off", "type": "compose" },
-    { "at": 10100, "type": "status", "text": "voice off", "detail": "transcript saved · 1 turn" }
-  ]
+    {
+      "at": 8800,
+      "duration": 600,
+      "text": "/voice off",
+      "type": "compose"
+    }
+  ],
+  "title": "Hermes TUI · Voice Mode",
+  "viewport": {
+    "cols": 80,
+    "rows": 16
+  }
 }

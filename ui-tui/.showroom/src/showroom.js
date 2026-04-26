@@ -2,12 +2,14 @@ const initial = window.__SHOWROOM_INITIAL__
 const catalog = window.__SHOWROOM_CATALOG__ ?? []
 const root = document.getElementById('showroom')
 const SPEEDS = [0.5, 1, 2]
+const SCALES = [1, 2, 3, 4]
+const XTERM_VERSION = '6.0.0'
 
 const role = {
-  assistant: { color: '#d8d0bd', glyph: '✦' },
-  system: { color: '#8f856f', glyph: '·' },
-  tool: { color: '#f1cb78', glyph: '┊' },
-  user: { color: '#f1cb78', glyph: '›' }
+  assistant: { copy: '#fff8dc', glyph: '┊', tone: '#cd7f32' },
+  system: { copy: '#cc9b1f', glyph: '·', tone: '#cc9b1f' },
+  tool: { copy: '#cc9b1f', glyph: '⚡', tone: '#cd7f32' },
+  user: { copy: '#daa520', glyph: '❯', tone: '#ffd700' }
 }
 
 const escapeHtml = value =>
@@ -19,15 +21,20 @@ const escapeHtml = value =>
 const state = {
   body: null,
   composer: null,
+  frameMode: false,
+  frameTargets: new Map(),
   overlays: null,
   progressFill: null,
   progressLabel: null,
   raf: null,
+  scale: 2,
   shell: null,
   speed: 1,
   startedAt: 0,
   statusLeft: null,
   statusRight: null,
+  term: null,
+  termContainer: null,
   timers: [],
   total: 0,
   viewport: null,
@@ -45,7 +52,13 @@ const clearTimers = () => {
   }
 }
 
-const target = id => (id ? document.querySelector(`[data-target="${CSS.escape(id)}"]`) : null)
+const resolveTarget = id => {
+  if (!id) {
+    return null
+  }
+
+  return state.frameTargets.get(id) ?? document.querySelector(`[data-target="${CSS.escape(id)}"]`)
+}
 
 const setText = (node, text = '', duration = 0) => {
   if (!duration || state.speed <= 0) {
@@ -81,8 +94,8 @@ const removeAfter = (node, duration = 1400) => {
   )
 }
 
-const rectFor = (id, pad = 10) => {
-  const el = target(id)
+const rectFor = (id, pad = 8) => {
+  const el = resolveTarget(id)
 
   if (!el || !state.overlays) {
     return null
@@ -103,21 +116,25 @@ const placeNear = (node, id, position = 'right') => {
   const rect = rectFor(id, 0)
 
   if (!rect) {
-    node.style.left = `${state.viewport.scale * 28}px`
-    node.style.top = `${state.viewport.scale * 28}px`
+    node.style.left = '24px'
+    node.style.top = '24px'
 
     return
   }
 
-  const gap = 24
+  const gap = 18
   const left = position === 'left' ? rect.left - node.offsetWidth - gap : rect.left + rect.width + gap
   const top = position === 'top' ? rect.top - node.offsetHeight - gap : rect.top
 
-  node.style.left = `${Math.max(18, left)}px`
-  node.style.top = `${Math.max(18, top)}px`
+  node.style.left = `${Math.max(12, left)}px`
+  node.style.top = `${Math.max(12, top)}px`
 }
 
 const message = action => {
+  if (state.frameMode) {
+    return
+  }
+
   const spec = role[action.role] ?? role.assistant
   const line = document.createElement('div')
   const glyph = document.createElement('span')
@@ -125,7 +142,8 @@ const message = action => {
 
   line.className = `showroom-line showroom-line-${action.role ?? 'assistant'}`
   line.dataset.target = action.id ?? ''
-  line.style.setProperty('--role', spec.color)
+  line.style.setProperty('--role', spec.tone)
+  line.style.setProperty('--copy', spec.copy)
 
   glyph.className = 'showroom-glyph'
   glyph.textContent = spec.glyph
@@ -138,6 +156,10 @@ const message = action => {
 }
 
 const tool = action => {
+  if (state.frameMode) {
+    return
+  }
+
   const box = document.createElement('div')
   const title = document.createElement('div')
   const items = document.createElement('div')
@@ -161,8 +183,20 @@ const tool = action => {
   state.body.append(box)
 }
 
+const frame = action => {
+  if (!state.term || !action.ansi) {
+    return
+  }
+
+  state.term.write(action.ansi)
+
+  if (action.id) {
+    state.frameTargets.set(action.id, state.termContainer)
+  }
+}
+
 const fade = action => {
-  const el = target(action.target)
+  const el = resolveTarget(action.target)
 
   if (!el) {
     return
@@ -173,7 +207,7 @@ const fade = action => {
 }
 
 const highlight = action => {
-  const el = target(action.target)
+  const el = resolveTarget(action.target)
 
   if (!el) {
     return
@@ -196,7 +230,7 @@ const caption = action => {
 }
 
 const spotlight = action => {
-  const rect = rectFor(action.target, action.pad ?? 10)
+  const rect = rectFor(action.target, action.pad ?? 6)
 
   if (!rect) {
     return
@@ -222,20 +256,27 @@ const status = action => {
 const compose = action => setText(state.composer, action.text ?? '', action.duration ?? 0)
 
 const clearTranscript = () => {
-  state.body.textContent = ''
   state.overlays.textContent = ''
+  state.frameTargets.clear()
+
+  if (state.frameMode && state.term) {
+    state.term.reset()
+    state.term.write('\x1b[?25l')
+
+    return
+  }
+
+  state.body.textContent = ''
 }
 
-const ACTIONS = { caption, clear: clearTranscript, compose, fade, highlight, message, spotlight, status, tool }
+const ACTIONS = { caption, clear: clearTranscript, compose, fade, frame, highlight, message, spotlight, status, tool }
 
 const fmtTime = ms => {
   if (!Number.isFinite(ms)) {
     return '0.0s'
   }
 
-  const sec = Math.max(0, ms) / 1000
-
-  return `${sec.toFixed(1)}s`
+  return `${(Math.max(0, ms) / 1000).toFixed(1)}s`
 }
 
 const tickProgress = () => {
@@ -254,12 +295,68 @@ const tickProgress = () => {
   }
 }
 
+const ensureXtermStylesheet = () => {
+  const id = 'xterm-css'
+
+  if (document.getElementById(id)) {
+    return
+  }
+
+  const link = document.createElement('link')
+  link.id = id
+  link.rel = 'stylesheet'
+  link.href = `https://cdn.jsdelivr.net/npm/@xterm/xterm@${XTERM_VERSION}/css/xterm.css`
+  document.head.append(link)
+}
+
+const initXterm = async () => {
+  ensureXtermStylesheet()
+  const mod = await import(`https://cdn.jsdelivr.net/npm/@xterm/xterm@${XTERM_VERSION}/+esm`)
+  const { Terminal } = mod
+
+  state.term = new Terminal({
+    cols: state.viewport.cols,
+    rows: state.viewport.rows,
+    fontFamily: 'JetBrains Mono, "SF Mono", Consolas, monospace',
+    fontSize: 13,
+    cursorBlink: false,
+    scrollback: 0,
+    convertEol: true,
+    allowProposedApi: true,
+    theme: {
+      background: '#0a0a0a',
+      foreground: '#fff8dc',
+      cursor: '#ffd700',
+      selectionBackground: '#3a3a55',
+      black: '#0a0a0a',
+      red: '#ef5350',
+      green: '#8fbc8f',
+      yellow: '#ffd700',
+      blue: '#5a82ff',
+      magenta: '#cd7f32',
+      cyan: '#daa520',
+      white: '#fff8dc',
+      brightBlack: '#cc9b1f',
+      brightRed: '#ef5350',
+      brightGreen: '#8fbc8f',
+      brightYellow: '#ffbf00',
+      brightBlue: '#5a82ff',
+      brightMagenta: '#cd7f32',
+      brightCyan: '#daa520',
+      brightWhite: '#fff8dc'
+    }
+  })
+
+  state.term.open(state.termContainer)
+  state.term.write('\x1b[?25l')
+}
+
 const play = () => {
   clearTimers()
   clearTranscript()
   state.statusLeft.textContent = ''
   state.statusRight.textContent = ''
-  state.composer.textContent = state.workflow.composer ?? '›'
+  state.composer.textContent = state.workflow.composer ?? ''
 
   const timeline = [...(state.workflow.timeline ?? [])].sort((a, b) => a.at - b.at)
 
@@ -278,9 +375,40 @@ const play = () => {
 const setSpeed = next => {
   state.speed = next
 
-  for (const button of state.shell.querySelectorAll('.showroom-speed button')) {
-    button.classList.toggle('is-active', Number(button.dataset.speed) === next)
+  for (const button of state.shell.querySelectorAll('[data-segment="speed"] button')) {
+    button.classList.toggle('is-active', Number(button.dataset.value) === next)
   }
+}
+
+const setScale = next => {
+  state.scale = next
+  state.shell.style.setProperty('--scale', `${next}`)
+  state.shell.style.setProperty(
+    '--stage-w',
+    `${state.viewport.cols * state.viewport.cellWidth * next}px`
+  )
+  state.shell.style.setProperty(
+    '--stage-h',
+    `${state.viewport.rows * state.viewport.lineHeight * next}px`
+  )
+
+  for (const button of state.shell.querySelectorAll('[data-segment="scale"] button')) {
+    button.classList.toggle('is-active', Number(button.dataset.value) === next)
+  }
+
+  state.shell.querySelector('[data-role="meta"]').textContent =
+    `${state.viewport.cols}x${state.viewport.rows} · ${next}x`
+}
+
+const fitScale = () => {
+  const margin = 96
+  const baseW = state.viewport.cols * state.viewport.cellWidth
+  const baseH = state.viewport.rows * state.viewport.lineHeight
+  const maxW = Math.max(1, window.innerWidth - margin)
+  const maxH = Math.max(1, window.innerHeight - 240)
+  const fit = Math.max(1, Math.floor(Math.min(maxW / baseW, maxH / baseH)))
+
+  return Math.max(1, Math.min(SCALES[SCALES.length - 1], fit))
 }
 
 const loadWorkflow = async name => {
@@ -295,10 +423,10 @@ const loadWorkflow = async name => {
       state.workflow = await response.json()
     }
   } catch {
-    /* fall through to current workflow */
+    /* fall through */
   }
 
-  play()
+  await rebuild()
 }
 
 const buildOptions = () => {
@@ -315,48 +443,55 @@ const buildOptions = () => {
     .join('')
 }
 
-const buildSpeed = () =>
-  SPEEDS.map(
-    speed =>
-      `<button type="button" data-speed="${speed}" class="${speed === 1 ? 'is-active' : ''}">${speed}x</button>`
-  ).join('')
+const buildSegmented = (values, active) =>
+  values
+    .map(value => `<button type="button" data-value="${value}" class="${value === active ? 'is-active' : ''}">${value}x</button>`)
+    .join('')
 
-const mount = () => {
-  const viewport = { cellWidth: 9, cols: 96, lineHeight: 18, rows: 30, scale: 4, ...(state.workflow.viewport ?? {}) }
-  const shell = document.createElement('section')
+const computeViewport = () => {
+  const fromWorkflow = state.workflow.viewport ?? {}
+  const usesFrames = (state.workflow.timeline ?? []).some(a => a.type === 'frame')
 
-  state.viewport = viewport
-  state.shell = shell
+  return {
+    cellWidth: usesFrames ? 9 : 8,
+    cols: 80,
+    lineHeight: usesFrames ? 19 : 18,
+    rows: 24,
+    scale: 2,
+    ...fromWorkflow
+  }
+}
 
-  shell.className = 'showroom-shell'
-  shell.style.setProperty('--cell-w', `${viewport.cellWidth}px`)
-  shell.style.setProperty('--cols', `${viewport.cols}`)
-  shell.style.setProperty('--line-h', `${viewport.lineHeight}px`)
-  shell.style.setProperty('--rows', `${viewport.rows}`)
-  shell.style.setProperty('--scale', `${viewport.scale}`)
-  shell.style.setProperty('--stage-h', `${viewport.rows * viewport.lineHeight * viewport.scale}px`)
-  shell.style.setProperty('--stage-w', `${viewport.cols * viewport.cellWidth * viewport.scale}px`)
-  shell.style.setProperty('--term-h', `${viewport.rows * viewport.lineHeight}px`)
-  shell.style.setProperty('--term-w', `${viewport.cols * viewport.cellWidth}px`)
+const renderShell = () => {
+  state.viewport = computeViewport()
+  state.frameMode = (state.workflow.timeline ?? []).some(a => a.type === 'frame')
+  state.frameTargets.clear()
 
-  shell.innerHTML = `
+  state.shell.style.setProperty('--cell-w', `${state.viewport.cellWidth}px`)
+  state.shell.style.setProperty('--cols', `${state.viewport.cols}`)
+  state.shell.style.setProperty('--line-h', `${state.viewport.lineHeight}px`)
+  state.shell.style.setProperty('--rows', `${state.viewport.rows}`)
+  state.shell.style.setProperty('--term-w', `${state.viewport.cols * state.viewport.cellWidth}px`)
+  state.shell.style.setProperty('--term-h', `${state.viewport.rows * state.viewport.lineHeight}px`)
+
+  state.shell.innerHTML = `
     <header class="showroom-title">
       <span class="showroom-title-name">
         <span data-role="title">${escapeHtml(state.workflow.title ?? 'Hermes TUI Showroom')}</span>
-        <span class="showroom-title-tag">showroom</span>
+        <span class="showroom-title-tag">${state.frameMode ? 'real ink' : 'showroom'}</span>
       </span>
       <span class="showroom-meta">
-        <span>${viewport.cols}x${viewport.rows} · ${viewport.scale}x</span>
+        <span data-role="meta">${state.viewport.cols}x${state.viewport.rows} · ${state.scale}x</span>
         ${catalog.length > 1 ? `<select class="showroom-picker" data-action="picker">${buildOptions()}</select>` : ''}
       </span>
     </header>
     <div class="showroom-stage">
       <div class="showroom-terminal">
         <div class="showroom-status" data-target="status">
-          <span></span>
-          <span></span>
+          <span class="showroom-status-left"></span>
+          <span class="showroom-status-right"></span>
         </div>
-        <div class="showroom-body"></div>
+        <div class="showroom-body${state.frameMode ? ' is-frame-mode' : ''}"></div>
         <div class="showroom-composer" data-target="composer"></div>
       </div>
       <div class="showroom-overlays"></div>
@@ -368,41 +503,71 @@ const mount = () => {
     <footer class="showroom-controls">
       <button type="button" data-action="restart">Restart</button>
       <button type="button" data-action="clear">Clear</button>
-      <span class="showroom-speed">${buildSpeed()}</span>
+      <span class="showroom-segmented-label">scale</span>
+      <span class="showroom-segmented" data-segment="scale">${buildSegmented(SCALES, state.scale)}</span>
+      <span class="showroom-segmented-label">speed</span>
+      <span class="showroom-segmented" data-segment="speed">${buildSegmented(SPEEDS, state.speed)}</span>
     </footer>
   `
 
-  root.replaceChildren(shell)
+  state.body = state.shell.querySelector('.showroom-body')
+  state.composer = state.shell.querySelector('.showroom-composer')
+  state.overlays = state.shell.querySelector('.showroom-overlays')
+  state.statusLeft = state.shell.querySelector('.showroom-status-left')
+  state.statusRight = state.shell.querySelector('.showroom-status-right')
+  state.progressFill = state.shell.querySelector('.showroom-progress-fill')
+  state.progressLabel = state.shell.querySelector('[data-role="time"]')
 
-  state.body = shell.querySelector('.showroom-body')
-  state.composer = shell.querySelector('.showroom-composer')
-  state.overlays = shell.querySelector('.showroom-overlays')
-  state.statusLeft = shell.querySelector('.showroom-status span:first-child')
-  state.statusRight = shell.querySelector('.showroom-status span:last-child')
-  state.progressFill = shell.querySelector('.showroom-progress-fill')
-  state.progressLabel = shell.querySelector('[data-role="time"]')
-
-  shell.querySelector('[data-action="restart"]').addEventListener('click', play)
-  shell.querySelector('[data-action="clear"]').addEventListener('click', () => {
+  state.shell.querySelector('[data-action="restart"]').addEventListener('click', play)
+  state.shell.querySelector('[data-action="clear"]').addEventListener('click', () => {
     clearTimers()
     clearTranscript()
   })
 
-  for (const button of shell.querySelectorAll('.showroom-speed button')) {
-    button.addEventListener('click', () => setSpeed(Number(button.dataset.speed)))
+  for (const button of state.shell.querySelectorAll('[data-segment="speed"] button')) {
+    button.addEventListener('click', () => setSpeed(Number(button.dataset.value)))
   }
 
-  const picker = shell.querySelector('[data-action="picker"]')
+  for (const button of state.shell.querySelectorAll('[data-segment="scale"] button')) {
+    button.addEventListener('click', () => setScale(Number(button.dataset.value)))
+  }
+
+  const picker = state.shell.querySelector('[data-action="picker"]')
 
   if (picker) {
     picker.addEventListener('change', event => {
-      const next = event.target.value
-
-      shell.querySelector('[data-role="title"]').textContent =
-        catalog.find(c => c.name === next)?.title ?? next
-      void loadWorkflow(next)
+      void loadWorkflow(event.target.value)
     })
   }
+
+  if (state.frameMode) {
+    state.body.innerHTML = '<div class="showroom-xterm" data-target="terminal"></div>'
+    state.termContainer = state.body.querySelector('.showroom-xterm')
+  } else {
+    state.term = null
+    state.termContainer = null
+  }
+}
+
+const rebuild = async () => {
+  renderShell()
+  setScale(state.workflow.viewport?.scale ?? fitScale())
+
+  if (state.frameMode) {
+    await initXterm()
+  }
+
+  play()
+}
+
+const mount = () => {
+  state.shell = document.createElement('section')
+  state.shell.className = 'showroom-shell'
+  root.replaceChildren(state.shell)
+
+  void rebuild().then(() => {
+    requestAnimationFrame(() => state.shell.classList.add('is-mounted'))
+  })
 
   window.addEventListener('keydown', event => {
     const key = event.key.toLowerCase()
@@ -416,9 +581,6 @@ const mount = () => {
       setSpeed(SPEEDS[Number(key) - 1])
     }
   })
-
-  requestAnimationFrame(() => shell.classList.add('is-mounted'))
-  play()
 }
 
 mount()

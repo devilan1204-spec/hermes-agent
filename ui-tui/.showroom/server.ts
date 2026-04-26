@@ -6,8 +6,8 @@ import {
   listWorkflows,
   readWorkflow,
   renderPage,
-  type WorkflowEntry,
-  workflowsDir
+  workflowsDir,
+  type WorkflowEntry
 } from './page.js'
 
 const FLAG_VALUES = new Set(['--port', '--workflow'])

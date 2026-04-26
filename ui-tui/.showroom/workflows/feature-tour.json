@@ -1,78 +1,46 @@
 {
-  "title": "Hermes TUI Feature Tour",
-  "composer": "› ask hermes anything",
-  "viewport": {
-    "cellWidth": 9,
-    "cols": 96,
-    "lineHeight": 18,
-    "rows": 30,
-    "scale": 4
-  },
+  "composer": "ask hermes anything",
   "timeline": [
     {
-      "at": 0,
-      "detail": "showroom mode",
-      "text": "summoning hermes...",
-      "type": "status"
+      "ansi": "\u001b[?25l\u001b[?2026h\r\n❯\u001b[2CBuild\u001b[1Ca\u001b[1Cfocused\u001b[1Cplan\u001b[1Cfor\u001b[1Ca\u001b[1Csafer\u001b[1Cgateway\u001b[1Capproval\u001b[1Cflow.\r\n\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 200,
+      "id": "user-row",
+      "type": "frame"
     },
     {
-      "at": 250,
-      "duration": 650,
-      "id": "prompt",
-      "role": "user",
-      "text": "Build a focused plan for a safer gateway approval flow.",
-      "type": "message"
-    },
-    {
-      "at": 1050,
-      "duration": 950,
+      "ansi": "\u001b[?25l\u001b[?2026h┊\u001b[2CI'll\u001b[1Ctrace\u001b[1Cthe\u001b[1Cgateway\u001b[1Cguards\u001b[1Cfirst,\u001b[1Cthen\u001b[1Cpatch\u001b[1Cthe\u001b[1Csmallest\u001b[1Cboundary\u001b[1Cthat\r\n\u001b[3Ckeeps\u001b[1Capproval\u001b[1Ccommands\u001b[1Clive\u001b[1Cwhile\u001b[1Can\u001b[1Cagent\u001b[1Cis\u001b[1Cblocked.\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 1500,
       "id": "assistant-plan",
-      "role": "assistant",
-      "text": "I’ll trace the gateway guards first, then patch the smallest boundary that keeps approval commands live while an agent is blocked.",
-      "type": "message"
+      "type": "frame"
     },
     {
-      "at": 2180,
+      "ansi": "\u001b[?25l\u001b[?2026h\u001b[2C⚡\u001b[1Ctool\u001b[1Ctrail\u001b[1C(3)\r\n\u001b[2C├─\u001b[1Crg\u001b[1C\"approval.request\"\u001b[1Cgateway/\u001b[1Ctui_gateway/\r\n\u001b[2C├─\u001b[1CReadFile\u001b[1Cgateway/run.py\r\n\u001b[2C└─\u001b[1CReadFile\u001b[1Cgateway/platforms/base.py\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 2900,
       "id": "tool-trail",
-      "items": [
-        "rg \"approval.request\" gateway/ tui_gateway/",
-        "ReadFile gateway/run.py",
-        "ReadFile gateway/platforms/base.py"
-      ],
-      "title": "tool trail",
-      "type": "tool"
+      "type": "frame"
     },
     {
-      "at": 2500,
-      "duration": 1500,
+      "at": 3200,
+      "duration": 1700,
       "target": "tool-trail",
       "type": "spotlight"
     },
     {
-      "at": 2680,
-      "duration": 1600,
+      "at": 3400,
+      "duration": 1700,
       "position": "right",
       "target": "tool-trail",
-      "text": "Tool activity is scripted as named targets, so captions and fades can follow the exact beat.",
+      "text": "Real ui-tui MessageLine + Panel rendered to ANSI and replayed in xterm.js.",
       "type": "caption"
     },
     {
-      "at": 4450,
-      "duration": 500,
-      "target": "tool-trail",
-      "to": 0.22,
-      "type": "fade"
-    },
-    {
-      "at": 5050,
-      "duration": 700,
+      "ansi": "\u001b[?25l\u001b[?2026h┊\u001b[2CFound\u001b[1Cthe\u001b[1Csplit\u001b[1Cguard.\u001b[1CBypass\u001b[1Cboth\u001b[1Cqueues\u001b[1Conly\u001b[1Cfor\u001b[1Capproval\u001b[1Ccommands;\r\n\u001b[3Cnormal\u001b[1Cchat\u001b[1Cordering\u001b[1Cstays\u001b[1Cintact.\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 5400,
       "id": "assistant-result",
-      "role": "assistant",
-      "text": "Found the split guard. The fix is to bypass both queues only for approval/control commands and leave normal chat ordering untouched.",
-      "type": "message"
+      "type": "frame"
     },
     {
-      "at": 6050,
+      "at": 6100,
       "duration": 1300,
       "target": "assistant-result",
       "type": "highlight"
@@ -82,20 +50,19 @@
       "duration": 1700,
       "position": "right",
       "target": "assistant-result",
-      "text": "Highlights, captions, opacity fades, and spotlight boxes are all timeline actions.",
+      "text": "Captions, spotlights, and fades layer on top of real ANSI. Best of both.",
       "type": "caption"
     },
     {
-      "at": 8300,
-      "duration": 700,
-      "text": "› /approve",
+      "at": 8100,
+      "duration": 600,
+      "text": "/approve",
       "type": "compose"
-    },
-    {
-      "at": 9400,
-      "detail": "record-ready at 4x",
-      "text": "session complete",
-      "type": "status"
     }
-  ]
+  ],
+  "title": "Hermes TUI · Feature Tour",
+  "viewport": {
+    "cols": 80,
+    "rows": 16
+  }
 }

@@ -1,84 +1,88 @@
 {
-  "title": "Slash Command Tour",
-  "composer": "› press / to open the palette",
-  "viewport": {
-    "cols": 96,
-    "rows": 30,
-    "scale": 4
-  },
+  "composer": "press / to open the palette",
   "timeline": [
-    { "at": 0, "type": "status", "text": "session active", "detail": "model · gpt-5 codex" },
-    { "at": 200, "duration": 500, "text": "› /skills search vibe", "type": "compose" },
     {
-      "at": 800,
-      "id": "skills-results",
-      "title": "/skills search vibe",
-      "items": [
-        "anthropics/skills/frontend-design   ★ trusted",
-        "openai/skills/skill-creator         · official",
-        "skills.sh/community/vibe-coding     ⚙ community"
-      ],
-      "type": "tool"
+      "at": 200,
+      "duration": 500,
+      "text": "/skills search vibe",
+      "type": "compose"
     },
-    { "at": 1100, "duration": 1500, "target": "skills-results", "type": "spotlight" },
+    {
+      "ansi": "\u001b[?25l\u001b[?2026h╭──────────────────────────────────────────────────────────────────────────────╮\r\n│\u001b[78C│\r\n│\u001b[29C/skills\u001b[1Csearch\u001b[1Cvibe\u001b[30C│\r\n│\u001b[78C│\r\n│\u001b[2Canthropics/skills/frontend-design★\u001b[1Ctrusted\u001b[34C│\r\n│\u001b[2Copenai/skills/skill-creator·\u001b[1Cofficial\u001b[39C│\r\n│\u001b[2Cskills.sh/community/vibe-coding⚙\u001b[1Ccommunity\u001b[33C│\r\n│\u001b[78C│\r\n╰──────────────────────────────────────────────────────────────────────────────╯\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 800,
+      "id": "skills",
+      "type": "frame"
+    },
+    {
+      "at": 1100,
+      "duration": 1500,
+      "target": "skills",
+      "type": "spotlight"
+    },
     {
       "at": 1300,
       "duration": 1700,
       "position": "right",
-      "target": "skills-results",
+      "target": "skills",
       "text": "Slash commands stream live results without blocking the composer.",
       "type": "caption"
     },
-    { "at": 3100, "duration": 600, "target": "skills-results", "to": 0.2, "type": "fade" },
     {
       "at": 3300,
       "duration": 600,
-      "id": "model-prompt",
-      "role": "user",
       "text": "/model claude-4.6-sonnet",
-      "type": "message"
+      "type": "compose"
     },
     {
+      "ansi": "\u001b[?25l\u001b[?2026h╭──────────────────────────────────────────────────────────────────────────────╮\r\n│\u001b[78C│\r\n│\u001b[32Cmodel\u001b[1Cswitched\u001b[32C│\r\n│\u001b[78C│\r\n│\u001b[2Cfrom\u001b[16Cgpt-5-codex\u001b[45C│\r\n│\u001b[2Cto\u001b[18Cclaude-4.6-sonnet\u001b[39C│\r\n│\u001b[2Cscope\u001b[15Cthis\u001b[1Csession\u001b[44C│\r\n│\u001b[78C│\r\n╰──────────────────────────────────────────────────────────────────────────────╯\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
       "at": 4100,
-      "id": "model-result",
-      "title": "model switched",
-      "items": [
-        "from   gpt-5-codex",
-        "to     claude-4.6-sonnet",
-        "scope  this session"
-      ],
-      "type": "tool"
+      "id": "model",
+      "type": "frame"
     },
     {
       "at": 4400,
       "duration": 1700,
       "position": "right",
-      "target": "model-result",
-      "text": "/model also pops the inline picker when you don’t pass an arg.",
+      "target": "model",
+      "text": "/model also pops the inline picker when no arg is given.",
       "type": "caption"
     },
-    { "at": 6300, "duration": 600, "text": "› /agents pause", "type": "compose" },
     {
-      "at": 7000,
-      "id": "agents-status",
-      "title": "/agents · paused",
-      "items": [
-        "delegation paused",
-        "max children · 4",
-        "running tasks queued for resume"
-      ],
-      "type": "tool"
+      "at": 6300,
+      "duration": 600,
+      "text": "/agents pause",
+      "type": "compose"
     },
-    { "at": 7300, "duration": 1300, "target": "agents-status", "type": "highlight" },
+    {
+      "ansi": "\u001b[?25l\u001b[?2026h╭──────────────────────────────────────────────────────────────────────────────╮\r\n│\u001b[78C│\r\n│\u001b[31C/agents\u001b[1C·\u001b[1Cpaused\u001b[31C│\r\n│\u001b[78C│\r\n│\u001b[2Cdelegation\u001b[10Cpaused\u001b[50C│\r\n│\u001b[2Cmax\u001b[1Cchildren\u001b[8C4\u001b[55C│\r\n│\u001b[2Crunning\u001b[1Ctasks\u001b[7Cqueued\u001b[1Cfor\u001b[1Cresume\u001b[39C│\r\n│\u001b[78C│\r\n╰──────────────────────────────────────────────────────────────────────────────╯\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 7000,
+      "id": "agents",
+      "type": "frame"
+    },
+    {
+      "at": 7300,
+      "duration": 1300,
+      "target": "agents",
+      "type": "highlight"
+    },
     {
       "at": 7500,
-      "duration": 1600,
+      "duration": 1700,
       "position": "right",
-      "target": "agents-status",
+      "target": "agents",
       "text": "Same registry powers TUI, gateway, Telegram, Discord — one source of truth.",
       "type": "caption"
     },
-    { "at": 9300, "duration": 600, "text": "› /resume", "type": "compose" },
-    { "at": 10000, "type": "status", "text": "ready", "detail": "/help for the full list" }
-  ]
+    {
+      "at": 9300,
+      "duration": 600,
+      "text": "/resume",
+      "type": "compose"
+    }
+  ],
+  "title": "Hermes TUI · Slash Commands",
+  "viewport": {
+    "cols": 80,
+    "rows": 16
+  }
 }

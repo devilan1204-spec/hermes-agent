@@ -1,88 +1,82 @@
 {
-  "title": "Subagent Trail",
-  "composer": "› spawn the deploy fan-out",
-  "viewport": {
-    "cols": 96,
-    "rows": 30,
-    "scale": 4
-  },
+  "composer": "spawn the deploy fan-out",
   "timeline": [
-    { "at": 0, "type": "status", "text": "delegating…", "detail": "depth 1 / max 3" },
     {
+      "ansi": "\u001b[?25l\u001b[?2026h\r\n❯\u001b[2CRun\u001b[1Ctests,\u001b[1Clint,\u001b[1Cand\u001b[1Ca\u001b[1CRailway\u001b[1Cpreview\u001b[1Cdeploy\u001b[1Cin\u001b[1Cparallel.\r\n\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
       "at": 200,
-      "duration": 600,
       "id": "ask",
-      "role": "user",
-      "text": "Run tests, lint, and a Railway preview deploy in parallel.",
-      "type": "message"
+      "type": "frame"
     },
     {
-      "at": 950,
-      "duration": 800,
+      "ansi": "\u001b[?25l\u001b[?2026h┊\u001b[2CSpawning\u001b[1Cthree\u001b[1Csubagents\u001b[1Con\u001b[1Cthe\u001b[1Cfan-out\u001b[1Clane\u001b[1Cand\u001b[1Cwatching\u001b[1Ctheir\u001b[1Ctool\r\n\u001b[3Ccounts.\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 1100,
       "id": "plan",
-      "role": "assistant",
-      "text": "Spawning three subagents on the fan-out lane and watching their tool counts.",
-      "type": "message"
+      "type": "frame"
     },
     {
-      "at": 1900,
-      "id": "agents-table",
-      "title": "/agents · live",
-      "items": [
-        "├─ tests       running   12 tools   ⏱ 14.2s",
-        "├─ lint        running    4 tools   ⏱ 14.2s",
-        "└─ deploy      queued     0 tools   ⏱  0.0s"
-      ],
-      "type": "tool"
+      "ansi": "\u001b[?25l\u001b[?2026h\u001b[2C├─\u001b[1Ctests\u001b[3Crunning\u001b[3C12\u001b[1Ctools\u001b[3C⏱\u001b[1C14.2s\r\n\u001b[2C├─\u001b[1Clint\u001b[4Crunning\u001b[4C4\u001b[1Ctools\u001b[3C⏱\u001b[1C14.2s\r\n\u001b[2C└─\u001b[1Cdeploy\u001b[2Cqueued\u001b[5C0\u001b[1Ctools\u001b[3C⏱\u001b[2C0.0s\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 2100,
+      "id": "live",
+      "type": "frame"
     },
-    { "at": 2200, "duration": 1500, "target": "agents-table", "type": "spotlight" },
     {
-      "at": 2400,
+      "at": 2300,
+      "duration": 1500,
+      "target": "live",
+      "type": "spotlight"
+    },
+    {
+      "at": 2500,
       "duration": 1700,
       "position": "right",
-      "target": "agents-table",
-      "text": "Each subagent gets its own depth and budget; the dashboard tracks tool count + duration live.",
+      "target": "live",
+      "text": "Each subagent gets its own depth and tool budget; the dashboard tracks them live.",
       "type": "caption"
     },
     {
+      "ansi": "\u001b[?25l\u001b[?2026h\u001b[2C├─\u001b[1Ctests\u001b[3Ccomplete\u001b[2C18\u001b[1Ctools\u001b[3C⏱\u001b[1C22.7s\u001b[3C✓\r\n\u001b[2C├─\u001b[1Clint\u001b[4Ccomplete\u001b[3C6\u001b[1Ctools\u001b[3C⏱\u001b[1C18.1s\u001b[3C✓\r\n\u001b[2C└─\u001b[1Cdeploy\u001b[2Crunning\u001b[4C9\u001b[1Ctools\u001b[3C⏱\u001b[2C9.4s\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
       "at": 4400,
-      "id": "lane-update",
-      "title": "depth 2 · hot lane",
-      "items": [
-        "├─ tests       complete  18 tools   ⏱ 22.7s   ✓",
-        "├─ lint        complete   6 tools   ⏱ 18.1s   ✓",
-        "└─ deploy      running    9 tools   ⏱  9.4s"
-      ],
-      "type": "tool"
+      "id": "hot",
+      "type": "frame"
     },
-    { "at": 4500, "duration": 800, "target": "agents-table", "to": 0.18, "type": "fade" },
-    { "at": 5000, "duration": 1300, "target": "lane-update", "type": "highlight" },
     {
-      "at": 5200,
+      "at": 4600,
+      "duration": 1300,
+      "target": "hot",
+      "type": "highlight"
+    },
+    {
+      "at": 4800,
       "duration": 1700,
       "position": "right",
-      "target": "lane-update",
+      "target": "hot",
       "text": "Completed runs collapse, hot lanes stay vivid — the eye tracks the live agent.",
       "type": "caption"
     },
     {
-      "at": 7100,
-      "duration": 800,
+      "ansi": "\u001b[?25l\u001b[?2026h┊\u001b[2CAll\u001b[1Cthree\u001b[1Clanded:\u001b[1C24\u001b[1Ctests\u001b[1Cpass,\u001b[1Clint\u001b[1Cclean,\u001b[1Cpreview\u001b[1Cat\r\n\u001b[?2026l\u001b[?2026h\u001b[?25h\u001b[?2026l\u001b[?25h",
+      "at": 6800,
       "id": "summary",
-      "role": "assistant",
-      "text": "All three landed: 24 tests pass, lint clean, preview at https://pr-128.railway.app.",
-      "type": "message"
+      "type": "frame"
     },
-    { "at": 8050, "duration": 1100, "target": "summary", "type": "highlight" },
     {
-      "at": 8200,
-      "duration": 1500,
+      "at": 7000,
+      "duration": 1700,
       "position": "right",
       "target": "summary",
       "text": "Subagent results stream back into the parent transcript as a single highlight.",
       "type": "caption"
     },
-    { "at": 9700, "duration": 600, "text": "› /agents", "type": "compose" },
-    { "at": 10500, "type": "status", "text": "trail complete", "detail": "3 subagents · 28 tools" }
-  ]
+    {
+      "at": 8800,
+      "duration": 600,
+      "text": "/agents",
+      "type": "compose"
+    }
+  ],
+  "title": "Hermes TUI · Subagent Trail",
+  "viewport": {
+    "cols": 80,
+    "rows": 16
+  }
 }
