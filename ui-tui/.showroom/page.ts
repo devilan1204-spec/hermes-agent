@@ -40,6 +40,7 @@ export const renderPage = (initial: { name: string; workflow: unknown }, catalog
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Hermes TUI Showroom</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" />
     <style>${css}</style>
   </head>
   <body>
@@ -47,6 +48,9 @@ export const renderPage = (initial: { name: string; workflow: unknown }, catalog
     <script>
       window.__SHOWROOM_INITIAL__ = ${initialJson};
       window.__SHOWROOM_CATALOG__ = ${catalogJson};
+    </script>
+    <script type="importmap">
+    { "imports": { "@xterm/": "https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/" } }
     </script>
     <script type="module">${js}</script>
   </body>

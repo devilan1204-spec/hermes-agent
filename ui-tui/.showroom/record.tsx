@@ -143,7 +143,7 @@ const featureTour = async () => {
         duration: 1700,
         position: 'right',
         target: 'tool-trail',
-        text: 'Real ui-tui MessageLine + Panel rendered to ANSI and replayed in the browser.',
+        text: 'Real ui-tui MessageLine + Panel rendered to ANSI and replayed via xterm.js.',
         type: 'caption'
       },
       { ansi: assistantResult, at: 5400, id: 'assistant-result', type: 'frame' },

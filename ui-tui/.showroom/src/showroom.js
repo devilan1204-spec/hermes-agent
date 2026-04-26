@@ -1,66 +1,14 @@
+import { Terminal } from '@xterm/xterm'
+
 const initial = window.__SHOWROOM_INITIAL__
 const catalog = window.__SHOWROOM_CATALOG__ ?? []
 const root = document.getElementById('showroom')
 const SPEEDS = [0.5, 1, 2]
 const SCALES = [1, 2, 3, 4]
 
-const escapeHtml = value =>
-  String(value ?? '').replace(
-    /[&<>\"']/g,
-    char => ({ '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' })[char]
-  )
-
-// Minimal ANSI-to-HTML: handles ESC[NC (cursor forward), strips control sequences.
-// No color SGR support needed — all styling comes from the Ink renderer's own output.
-const ansiToHtml = raw => {
-  let out = ''
-  let i = 0
-
-  while (i < raw.length) {
-    if (raw[i] === '\x1b' && raw[i + 1] === '[') {
-      let j = i + 2
-
-      while (j < raw.length && raw[j] >= '0' && raw[j] <= '9') j++
-      if (j < raw.length && raw[j] === ';') j++
-      while (j < raw.length && raw[j] >= '0' && raw[j] <= '9') j++
-
-      if (j < raw.length) {
-        const cmd = raw[j]
-
-        if (cmd === 'C') {
-          const n = parseInt(raw.slice(i + 2, j), 10) || 1
-          out += ' '.repeat(n)
-        }
-
-        // All other sequences (cursor hide/show, bracketed paste, etc.) — strip
-        i = j + 1
-        continue
-      }
-    }
-
-    if (raw[i] === '\r' && raw[i + 1] === '\n') {
-      out += '\n'
-      i += 2
-      continue
-    }
-
-    if (raw[i] === '\r') {
-      out += '\n'
-      i++
-      continue
-    }
-
-    out += raw[i]
-    i++
-  }
-
-  return out
-}
-
 const state = {
   body: null,
   composer: null,
-  frameMode: false,
   frameTargets: new Map(),
   overlays: null,
   progressFill: null,
@@ -72,6 +20,8 @@ const state = {
   startedAt: 0,
   statusLeft: null,
   statusRight: null,
+  term: null,
+  termContainer: null,
   timers: [],
   total: 0,
   viewport: null,
@@ -167,18 +117,16 @@ const placeNear = (node, id, position = 'right') => {
   node.style.top = `${Math.max(12, top)}px`
 }
 
-const message = action => {
-  if (state.frameMode) {
-    return
-  }
+// --- Actions ---
 
-  const roleSpec = {
+const message = action => {
+  const spec = {
     assistant: { copy: '#fff8dc', glyph: '┊', tone: '#cd7f32' },
     system: { copy: '#cc9b1f', glyph: '·', tone: '#cc9b1f' },
     tool: { copy: '#cc9b1f', glyph: '⚡', tone: '#cd7f32' },
     user: { copy: '#daa520', glyph: '❯', tone: '#ffd700' }
-  }
-  const spec = roleSpec[action.role] ?? roleSpec.assistant
+  }[action.role] ?? { copy: '#fff8dc', glyph: '┊', tone: '#cd7f32' }
+
   const line = document.createElement('div')
   const glyph = document.createElement('span')
   const copy = document.createElement('div')
@@ -199,10 +147,6 @@ const message = action => {
 }
 
 const tool = action => {
-  if (state.frameMode) {
-    return
-  }
-
   const box = document.createElement('div')
   const title = document.createElement('div')
   const items = document.createElement('div')
@@ -227,18 +171,14 @@ const tool = action => {
 }
 
 const frame = action => {
-  if (!action.ansi) {
+  if (!state.term || !action.ansi) {
     return
   }
 
-  const pre = document.createElement('pre')
-  pre.className = 'showroom-frame'
-  pre.dataset.target = action.id ?? ''
-  pre.innerHTML = escapeHtml(ansiToHtml(action.ansi))
-  state.body.append(pre)
+  state.term.write(action.ansi)
 
   if (action.id) {
-    state.frameTargets.set(action.id, pre)
+    state.frameTargets.set(action.id, state.termContainer)
   }
 }
 
@@ -305,10 +245,20 @@ const compose = action => setText(state.composer, action.text ?? '', action.dura
 const clearTranscript = () => {
   state.overlays.textContent = ''
   state.frameTargets.clear()
+
+  if (state.term) {
+    state.term.reset()
+    state.term.write('\x1b[?25l')
+
+    return
+  }
+
   state.body.textContent = ''
 }
 
 const ACTIONS = { caption, clear: clearTranscript, compose, fade, frame, highlight, message, spotlight, status, tool }
+
+// --- Progress ---
 
 const fmtTime = ms => {
   if (!Number.isFinite(ms)) {
@@ -334,6 +284,63 @@ const tickProgress = () => {
   }
 }
 
+// --- xterm ---
+
+const initXterm = () => {
+  const hasFrames = (state.workflow.timeline ?? []).some(a => a.type === 'frame')
+
+  if (!hasFrames) {
+    state.term = null
+    state.termContainer = null
+
+    return
+  }
+
+  state.body.innerHTML = '<div class="showroom-xterm" data-target="terminal"></div>'
+  state.termContainer = state.body.querySelector('.showroom-xterm')
+
+  state.term = new Terminal({
+    cols: state.viewport.cols,
+    rows: state.viewport.rows,
+    fontFamily: 'JetBrains Mono, "SF Mono", Consolas, monospace',
+    fontSize: 13,
+    cursorBlink: false,
+    scrollback: 0,
+    convertEol: true,
+    allowProposedApi: true,
+    theme: {
+      background: '#0a0a0a',
+      foreground: '#fff8dc',
+      cursor: '#ffd700',
+      selectionBackground: '#3a3a55',
+      black: '#0a0a0a',
+      red: '#ef5350',
+      green: '#8fbc8f',
+      yellow: '#ffd700',
+      blue: '#5a82ff',
+      magenta: '#cd7f32',
+      cyan: '#daa520',
+      white: '#fff8dc',
+      brightBlack: '#cc9b1f',
+      brightRed: '#ef5350',
+      brightGreen: '#8fbc8f',
+      brightYellow: '#ffbf00',
+      brightBlue: '#5a82ff',
+      brightMagenta: '#cd7f32',
+      brightCyan: '#daa520',
+      brightWhite: '#fff8dc'
+    }
+  })
+
+  state.term.open(state.termContainer)
+  state.term.write('\x1b[?25l')
+
+  // Fade in
+  requestAnimationFrame(() => state.termContainer.classList.add('is-visible'))
+}
+
+// --- Playback ---
+
 const play = () => {
   clearTimers()
   clearTranscript()
@@ -354,6 +361,8 @@ const play = () => {
 
   state.raf = requestAnimationFrame(tickProgress)
 }
+
+// --- Controls ---
 
 const setSpeed = next => {
   state.speed = next
@@ -403,6 +412,8 @@ const loadWorkflow = async name => {
   await rebuild()
 }
 
+// --- DOM ---
+
 const buildOptions = () => {
   if (!catalog.length) {
     return ''
@@ -412,7 +423,7 @@ const buildOptions = () => {
     .map(({ name, title }) => {
       const selected = name === initial?.name ? ' selected' : ''
 
-      return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(title)}</option>`
+      return `<option value="${name}"${selected}>${title}</option>`
     })
     .join('')
 }
@@ -429,9 +440,9 @@ const computeViewport = () => {
   const fromWorkflow = state.workflow.viewport ?? {}
 
   return {
-    cellWidth: 8,
+    cellWidth: 9,
     cols: 80,
-    lineHeight: 18,
+    lineHeight: 19,
     rows: 24,
     scale: 2,
     ...fromWorkflow
@@ -440,7 +451,6 @@ const computeViewport = () => {
 
 const renderShell = () => {
   state.viewport = computeViewport()
-  state.frameMode = (state.workflow.timeline ?? []).some(a => a.type === 'frame')
   state.frameTargets.clear()
 
   state.shell.style.setProperty('--cell-w', `${state.viewport.cellWidth}px`)
@@ -457,7 +467,7 @@ const renderShell = () => {
           <span class="showroom-status-left"></span>
           <span class="showroom-status-right"></span>
         </div>
-        <div class="showroom-body${state.frameMode ? ' is-frame-mode' : ''}"></div>
+        <div class="showroom-body"></div>
         <div class="showroom-composer" data-target="composer"></div>
       </div>
       <div class="showroom-overlays"></div>
@@ -503,6 +513,7 @@ const renderShell = () => {
 
 const rebuild = async () => {
   renderShell()
+  initXterm()
   setScale(state.workflow.viewport?.scale ?? fitScale())
   play()
 }

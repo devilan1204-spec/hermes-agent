@@ -10,8 +10,6 @@
   --label: #daa520;
   --bg: #0a0a0a;
   --bg-deep: #050505;
-  --status-bg: #1a1a2e;
-  --status-fg: #c0c0c0;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
@@ -26,7 +24,8 @@ body {
   overflow: auto;
   background:
     radial-gradient(circle at 18% 12%, rgba(205, 127, 50, 0.12), transparent 36rem),
-    radial-gradient(circle at 82% 14%, rgba(255, 215, 0, 0.05), transparent 30rem), var(--bg-deep);
+    radial-gradient(circle at 82% 14%, rgba(255, 215, 0, 0.05), transparent 30rem),
+    var(--bg-deep);
 }
 
 #showroom {
@@ -36,6 +35,8 @@ body {
   justify-content: center;
   align-items: flex-start;
 }
+
+/* --- Shell --- */
 
 .showroom-shell {
   display: grid;
@@ -54,23 +55,7 @@ body {
   transform: translateY(0);
 }
 
-.showroom-picker {
-  appearance: none;
-  border: 1px solid rgba(205, 127, 50, 0.4);
-  border-radius: 999px;
-  padding: 6px 30px 6px 14px;
-  background: rgba(205, 127, 50, 0.06)
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23cd7f32' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
-    no-repeat right 12px center / 10px;
-  color: var(--cornsilk);
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.showroom-picker:focus {
-  outline: 1px solid var(--bronze);
-}
+/* --- Stage --- */
 
 .showroom-stage {
   position: relative;
@@ -103,6 +88,8 @@ body {
   line-height: 18px;
 }
 
+/* --- Status bar --- */
+
 .showroom-status {
   display: flex;
   justify-content: space-between;
@@ -126,6 +113,8 @@ body {
   align-items: center;
   gap: 8px;
 }
+
+/* --- Composer --- */
 
 .showroom-composer {
   display: flex;
@@ -164,6 +153,8 @@ body {
   }
 }
 
+/* --- Body (DOM message mode) --- */
+
 .showroom-body {
   display: flex;
   flex-direction: column;
@@ -172,33 +163,32 @@ body {
   padding: 4px 0 6px;
 }
 
-.showroom-body.is-frame-mode {
-  padding: 0;
-  gap: 0;
-  display: block;
+/* --- xterm container (frame mode) --- */
+
+.showroom-xterm {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out);
 }
 
-.showroom-frame {
-  margin: 0;
-  padding: 0;
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--cornsilk);
-  white-space: pre;
-  overflow: hidden;
+.showroom-xterm.is-visible {
+  opacity: 1;
 }
+
+.showroom-xterm .xterm-viewport {
+  overflow: hidden !important;
+  background: transparent !important;
+}
+
+/* --- DOM-mode lines --- */
 
 .showroom-line,
 .showroom-tool {
   opacity: 0;
   transform: translateY(4px);
   animation: showroom-enter 320ms var(--ease-out) forwards;
-  transition:
-    opacity 420ms var(--ease-in-out),
-    filter 420ms var(--ease-in-out),
-    transform 420ms var(--ease-in-out),
-    background 420ms var(--ease-in-out);
 }
 
 @keyframes showroom-enter {
@@ -237,6 +227,8 @@ body {
   color: var(--dim);
 }
 
+/* --- Tool panel --- */
+
 .showroom-tool {
   margin-left: 22px;
   border: 1px solid rgba(205, 127, 50, 0.32);
@@ -268,11 +260,19 @@ body {
   color: var(--bronze);
 }
 
+/* --- Highlight --- */
+
 .is-highlighted {
   filter: brightness(1.4);
   background: rgba(255, 215, 0, 0.1);
   transform: translateX(3px);
+  transition:
+    filter 420ms var(--ease-in-out),
+    background 420ms var(--ease-in-out),
+    transform 420ms var(--ease-in-out);
 }
+
+/* --- Overlays (captions, spotlights) --- */
 
 .showroom-overlays {
   position: absolute;
@@ -315,6 +315,28 @@ body {
   opacity: 1;
   transform: translateY(0);
 }
+
+/* --- Picker --- */
+
+.showroom-picker {
+  appearance: none;
+  border: 1px solid rgba(205, 127, 50, 0.4);
+  border-radius: 999px;
+  padding: 6px 30px 6px 14px;
+  background: rgba(205, 127, 50, 0.06)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23cd7f32' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    no-repeat right 12px center / 10px;
+  color: var(--cornsilk);
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.showroom-picker:focus {
+  outline: 1px solid var(--bronze);
+}
+
+/* --- Controls bar --- */
 
 .showroom-controls {
   display: flex;
@@ -370,6 +392,8 @@ body {
   background: rgba(255, 215, 0, 0.18);
   color: var(--cornsilk);
 }
+
+/* --- Progress --- */
 
 .showroom-progress {
   display: inline-flex;
