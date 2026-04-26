@@ -107,35 +107,42 @@ For best results, pair it with a profile whose toolsets are restricted to board 
 
 ## Dashboard (GUI)
 
-The `/kanban` CLI and slash command are enough to run the board headlessly, but a visual board is often the right interface for humans-in-the-loop: triage, cross-profile supervision, reading comment threads, and dropping cards between columns. Hermes ships this as a **dashboard plugin** — not a core feature, not a separate service — following the model laid out in [Extending the Dashboard](./extending-the-dashboard).
+The `/kanban` CLI and slash command are enough to run the board headlessly, but a visual board is often the right interface for humans-in-the-loop: triage, cross-profile supervision, reading comment threads, and dragging cards between columns. Hermes ships this as a **bundled dashboard plugin** at `plugins/kanban/` — not a core feature, not a separate service — following the model laid out in [Extending the Dashboard](./extending-the-dashboard).
 
-### What the plugin adds
+Open it with:
 
-- A **Kanban** tab in `hermes dashboard` showing one column per status (`triage`, `todo`, `ready`, `claimed`, `running`, `review`, `blocked`, `done`).
-- Cards show task id, title, priority, assigned profile, dependency chips, progress (`N/M` subtasks done), and files-touched count.
-- Live updates via a WebSocket that tails the `task_events` append-only table. No polling, no full-refetch flicker.
-- Click a card → side panel with full description, comment thread, linked tasks, event timeline, and the exact context a worker would see (`hermes kanban context <id>`).
-- Drag a card to a new column → sends a status change through the same code path `/kanban` uses.
-- Inline **New task** row at the top of every column (title + optional assignee dropdown + priority).
-- Per-profile lanes inside the `running` column so you can see at a glance which specialist is busy on what.
+```bash
+hermes kanban init      # one-time: create kanban.db if not already present
+hermes dashboard        # "Kanban" tab appears in the nav, after "Skills"
+```
 
-Visually the target is the familiar Linear / Fusion layout: dark theme, column headers with item counts, coloured status dots, pill chips for dependencies and badges.
+### What the plugin gives you
+
+- A **Kanban** tab showing one column per status: `todo`, `ready`, `running`, `blocked`, `done` (plus `archived` when the toggle is on).
+- Cards show the task id, title, priority badge, tenant tag, assigned profile, comment/link counts, and "created N ago".
+- **Live updates via WebSocket** — the plugin tails the append-only `task_events` table on a short poll interval; the board reflects changes the instant any profile (CLI, gateway, or another dashboard tab) acts.
+- **Drag-drop** cards between columns to change status. The drop sends a `PATCH /api/plugins/kanban/tasks/:id` which routes through the same `kanban_db` code the CLI uses — the three surfaces can never drift.
+- **Inline create** — click `+` on any column header to type a title, assignee, and priority without leaving the board.
+- **Click a card** to open a side drawer with the full description, status actions (→ ready / → running / block / unblock / complete / archive), dependency links, comment thread with Enter-to-submit, and the last 20 events.
+- **Toolbar filters** — free-text search, tenant dropdown, assignee dropdown, "show archived" toggle, and a **Nudge dispatcher** button so you don't have to wait for the next 60 s tick.
+
+Visually the target is the familiar Linear / Fusion layout: dark theme, column headers with counts, coloured status dots, pill chips for priority and tenant. The plugin reads only theme CSS vars (`--color-*`, `--radius`, `--font-mono`, ...), so it reskins automatically with whichever dashboard theme is active.
 
 ### Architecture
 
-The GUI is strictly a **read-through-the-DB + write-through-the-CLI** layer. It has no domain logic of its own:
+The GUI is strictly a **read-through-the-DB + write-through-kanban_db** layer with no domain logic of its own:
 
 ```
-┌────────────────────────┐      WebSocket (task_events tail)
+┌────────────────────────┐      WebSocket (tails task_events)
 │   React SPA (plugin)   │ ◀──────────────────────────────────┐
-│   @dnd-kit drag/drop   │                                    │
+│   HTML5 drag-and-drop  │                                    │
 └──────────┬─────────────┘                                    │
-           │ REST (thin)                                      │
+           │ REST over fetchJSON                              │
            ▼                                                  │
-┌────────────────────────┐     writes go through the same     │
-│  FastAPI router        │     run_slash("<verb> …") that     │
-│  plugins/kanban/       │     CLI + gateway already use      │
-│  dashboard/routes.py   │                                    │
+┌────────────────────────┐     writes call kanban_db.*        │
+│  FastAPI router        │     directly — same code path      │
+│  plugins/kanban/       │     the CLI /kanban verbs use      │
+│  dashboard/plugin_api.py                                    │
 └──────────┬─────────────┘                                    │
            │                                                  │
            ▼                                                  │
@@ -145,44 +152,37 @@ The GUI is strictly a **read-through-the-DB + write-through-the-CLI** layer. It 
 └────────────────────────┘
 ```
 
-Because writes go through `run_slash`, the GUI cannot drift from the CLI or the gateway. A drag-drop is just a `/kanban assign` or a status change under the hood; every action lands in `task_events` the same way a typed `/kanban` command would.
-
 ### REST surface
 
-All routes are mounted under `/api/plugins/kanban/` and protected by the dashboard's ephemeral `_SESSION_TOKEN`:
+All routes are mounted under `/api/plugins/kanban/` and protected by the dashboard's ephemeral session token:
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/board?tenant=<name>` | Full board, grouped by status column |
-| `GET` | `/tasks/:id` | Task + links + comments + events |
-| `POST` | `/tasks` | Create (delegates to `run_slash("create …")`) |
-| `PATCH` | `/tasks/:id` | Status / assignee / title / priority |
+| `GET` | `/board?tenant=<name>&include_archived=…` | Full board grouped by status column, plus tenants + assignees for filter dropdowns |
+| `GET` | `/tasks/:id` | Task + comments + events + links |
+| `POST` | `/tasks` | Create (wraps `kanban_db.create_task`) |
+| `PATCH` | `/tasks/:id` | Status / assignee / priority / title / body / result |
 | `POST` | `/tasks/:id/comments` | Append a comment |
-| `POST` | `/tasks/:id/links` | Add a dependency |
-| `DELETE` | `/tasks/:id/links/:other` | Remove a dependency |
-| `POST` | `/tasks/:id/dispatch` | Nudge the dispatcher (no 60 s wait) |
+| `POST` | `/links` | Add a dependency (`parent_id` → `child_id`) |
+| `DELETE` | `/links?parent_id=…&child_id=…` | Remove a dependency |
+| `POST` | `/dispatch?max=…&dry_run=…` | Nudge the dispatcher — skip the 60 s wait |
 | `WS` | `/events?since=<event_id>` | Live stream of `task_events` rows |
 
-Every handler is a ~5-line wrapper around an existing `kanban_db` function or a `run_slash` invocation — the plugin adds no new business logic.
+Every handler is a thin wrapper — the plugin is ~500 lines of Python (including the WebSocket tail loop) and adds no new business logic.
 
 ### Live updates
 
-`task_events` is an append-only SQLite table with a monotonic `id`. The WebSocket endpoint keeps the last-seen event id per client and pushes new rows as they land. The frontend patches its local state in place, so a card moves between columns the instant any profile — CLI, gateway, or another GUI tab — acts on it. WAL mode means the read loop never blocks the dispatcher's `BEGIN IMMEDIATE` claim.
+`task_events` is an append-only SQLite table with a monotonic `id`. The WebSocket endpoint holds each client's last-seen event id and pushes new rows as they land. When a burst of events arrives, the frontend reloads the (very cheap) board endpoint — simpler and more correct than trying to patch local state from every event kind. WAL mode means the read loop never blocks the dispatcher's `BEGIN IMMEDIATE` claim transactions.
 
-### Installing it
+### Extending it
 
-The plugin is shipped in the repo at `plugins/kanban/` and enabled by default when `hermes dashboard` finds a `kanban.db`:
+The plugin uses the standard Hermes dashboard plugin contract — see [Extending the Dashboard](./extending-the-dashboard) for the full manifest reference, shell slots, page-scoped slots, and the Plugin SDK. Extra columns, custom card chrome, tenant-filtered layouts, or full `tab.override` replacements are all expressible without forking this plugin.
 
-```bash
-hermes dashboard
-# browser opens → "Kanban" tab appears in the nav
-```
-
-To disable: remove or rename `plugins/kanban/` (or set `dashboard.plugins.kanban.enabled: false` in `config.yaml`). To extend it — extra columns, custom card chrome, tenant filters — follow the plugin shape documented in [Extending the Dashboard](./extending-the-dashboard) (`tab`, shell slots, page-scoped slots, and custom CSS all apply).
+To disable without removing: add `dashboard.plugins.kanban.enabled: false` to `config.yaml` (or delete `plugins/kanban/dashboard/manifest.json`).
 
 ### Scope boundary
 
-The GUI is deliberately thin. Everything the plugin does is reachable from the CLI; the plugin just makes it comfortable for humans. Auto-assignment, budgets, governance gates, and org-chart views remain user-space — a router profile, a plugin, or a reuse of `tools/approval.py` — exactly as listed in the out-of-scope section of the design spec.
+The GUI is deliberately thin. Everything the plugin does is reachable from the CLI; the plugin just makes it comfortable for humans. Auto-assignment, budgets, governance gates, and org-chart views remain user-space — a router profile, another plugin, or a reuse of `tools/approval.py` — exactly as listed in the out-of-scope section of the design spec.
 
 ## CLI command reference
 
