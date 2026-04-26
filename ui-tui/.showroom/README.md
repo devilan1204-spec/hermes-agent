@@ -11,12 +11,12 @@ npm run showroom:type-check
 
 ## Bundled workflows
 
-| File                                   | Shows                                                          |
-| -------------------------------------- | -------------------------------------------------------------- |
-| `workflows/feature-tour.json`          | Plan → tool trail → result highlight                            |
-| `workflows/subagent-trail.json`        | Parallel subagents, hot lanes, summary                          |
-| `workflows/slash-commands.json`        | `/skills`, `/model`, `/agents`, `/help` typed → echoed → panel  |
-| `workflows/voice-mode.json`            | VAD capture, transcript, TTS ducking                            |
+| File                            | Shows                                                          |
+| ------------------------------- | -------------------------------------------------------------- |
+| `workflows/feature-tour.json`   | Plan → tool trail → result highlight                           |
+| `workflows/subagent-trail.json` | Parallel subagents, hot lanes, summary                         |
+| `workflows/slash-commands.json` | `/skills`, `/model`, `/agents`, `/help` typed → echoed → panel |
+| `workflows/voice-mode.json`     | VAD capture, transcript, TTS ducking                           |
 
 Pick a workflow from the dropdown or deep-link with `?w=<name>`.
 
@@ -39,16 +39,16 @@ browser
 
 ## Timeline actions
 
-| Action      | Required             | Optional                                              |
-| ----------- | -------------------- | ----------------------------------------------------- |
-| `frame`     | `ansi`               | `id`                                                  |
-| `status`    | `text`               | `detail`                                              |
-| `compose`   | `text`               | `duration` (typewriter)                               |
-| `caption`   | `target`, `text`     | `position` (`left`/`right`/`top`), `duration`         |
-| `spotlight` | `target`             | `pad`, `duration`                                     |
-| `highlight` | `target`             | `duration`                                            |
-| `fade`      | `target`             | `to` (default `0`), `duration`                        |
-| `clear`     | —                    | —                                                     |
+| Action      | Required         | Optional                                      |
+| ----------- | ---------------- | --------------------------------------------- |
+| `frame`     | `ansi`           | `id`                                          |
+| `status`    | `text`           | `detail`                                      |
+| `compose`   | `text`           | `duration` (typewriter)                       |
+| `caption`   | `target`, `text` | `position` (`left`/`right`/`top`), `duration` |
+| `spotlight` | `target`         | `pad`, `duration`                             |
+| `highlight` | `target`         | `duration`                                    |
+| `fade`      | `target`         | `to` (default `0`), `duration`                |
+| `clear`     | —                | —                                             |
 
 `target` references the `id` of an earlier `frame`. `viewport.scale` (or the 1x–4x picker) controls the upscale factor for capture.
 

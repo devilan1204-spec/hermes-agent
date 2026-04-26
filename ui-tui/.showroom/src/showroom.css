@@ -26,8 +26,7 @@ body {
   overflow: auto;
   background:
     radial-gradient(circle at 18% 12%, rgba(205, 127, 50, 0.12), transparent 36rem),
-    radial-gradient(circle at 82% 14%, rgba(255, 215, 0, 0.05), transparent 30rem),
-    var(--bg-deep);
+    radial-gradient(circle at 82% 14%, rgba(255, 215, 0, 0.05), transparent 30rem), var(--bg-deep);
 }
 
 #showroom {
@@ -60,8 +59,7 @@ body {
   border: 1px solid rgba(205, 127, 50, 0.4);
   border-radius: 999px;
   padding: 6px 30px 6px 14px;
-  background:
-    rgba(205, 127, 50, 0.06)
+  background: rgba(205, 127, 50, 0.06)
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23cd7f32' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
     no-repeat right 12px center / 10px;
   color: var(--cornsilk);
@@ -342,7 +340,7 @@ body {
   color: var(--cornsilk);
 }
 
-.showroom-controls button[data-action="restart"] {
+.showroom-controls button[data-action='restart'] {
   width: 28px;
   height: 28px;
   padding: 0;

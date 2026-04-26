@@ -383,14 +383,8 @@ const setSpeed = next => {
 const setScale = next => {
   state.scale = next
   state.shell.style.setProperty('--scale', `${next}`)
-  state.shell.style.setProperty(
-    '--stage-w',
-    `${state.viewport.cols * state.viewport.cellWidth * next}px`
-  )
-  state.shell.style.setProperty(
-    '--stage-h',
-    `${state.viewport.rows * state.viewport.lineHeight * next}px`
-  )
+  state.shell.style.setProperty('--stage-w', `${state.viewport.cols * state.viewport.cellWidth * next}px`)
+  state.shell.style.setProperty('--stage-h', `${state.viewport.rows * state.viewport.lineHeight * next}px`)
 
   for (const button of state.shell.querySelectorAll('[data-segment="scale"] button')) {
     button.classList.toggle('is-active', Number(button.dataset.value) === next)
@@ -442,7 +436,10 @@ const buildOptions = () => {
 
 const buildSegmented = (values, active) =>
   values
-    .map(value => `<button type="button" data-value="${value}" class="${value === active ? 'is-active' : ''}">${value}x</button>`)
+    .map(
+      value =>
+        `<button type="button" data-value="${value}" class="${value === active ? 'is-active' : ''}">${value}x</button>`
+    )
     .join('')
 
 const computeViewport = () => {

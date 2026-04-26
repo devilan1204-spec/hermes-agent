@@ -9,8 +9,8 @@ import { Box, render, Text } from '@hermes/ink'
 
 import { Panel } from '../src/components/branding.js'
 import { MessageLine } from '../src/components/messageLine.js'
-import { DEFAULT_THEME } from '../src/theme.js'
 import type { Theme } from '../src/theme.js'
+import { DEFAULT_THEME } from '../src/theme.js'
 import type { Msg } from '../src/types.js'
 
 const showroomRoot = dirname(fileURLToPath(import.meta.url))
@@ -56,10 +56,7 @@ const ToolPanel = ({ items, title, theme }: { items: string[]; theme: Theme; tit
       <Text bold color={theme.color.amber}>
         {title}
       </Text>
-      <Text color={theme.color.dim}>
-        {' '}
-        ({items.length})
-      </Text>
+      <Text color={theme.color.dim}> ({items.length})</Text>
     </Box>
     {items.map((item, i) => (
       <Box key={i}>
@@ -70,7 +67,13 @@ const ToolPanel = ({ items, title, theme }: { items: string[]; theme: Theme; tit
   </Box>
 )
 
-const Tree = ({ rows, theme }: { rows: { branch: 'mid' | 'last'; cols: string[]; tone?: 'amber' | 'dim' | 'gold' | 'ok' }[]; theme: Theme }) => (
+const Tree = ({
+  rows,
+  theme
+}: {
+  rows: { branch: 'mid' | 'last'; cols: string[]; tone?: 'amber' | 'dim' | 'gold' | 'ok' }[]
+  theme: Theme
+}) => (
   <Box flexDirection="column" marginLeft={2}>
     {rows.map((row, i) => {
       const stem = row.branch === 'last' ? '└─ ' : '├─ '
@@ -100,9 +103,7 @@ const writeWorkflow = (name: string, workflow: Record<string, unknown>) => {
 }
 
 const featureTour = async () => {
-  const userPrompt = await snap(
-    <Msg role="user" text="Build a focused plan for a safer gateway approval flow." />
-  )
+  const userPrompt = await snap(<Msg role="user" text="Build a focused plan for a safer gateway approval flow." />)
 
   const assistantPlan = await snap(
     <Msg
@@ -163,15 +164,10 @@ const featureTour = async () => {
 }
 
 const subagentTrail = async () => {
-  const userPrompt = await snap(
-    <Msg role="user" text="Run tests, lint, and a Railway preview deploy in parallel." />
-  )
+  const userPrompt = await snap(<Msg role="user" text="Run tests, lint, and a Railway preview deploy in parallel." />)
 
   const plan = await snap(
-    <Msg
-      role="assistant"
-      text="Spawning three subagents on the fan-out lane and watching their tool counts."
-    />
+    <Msg role="assistant" text="Spawning three subagents on the fan-out lane and watching their tool counts." />
   )
 
   const live = await snap(
@@ -197,10 +193,7 @@ const subagentTrail = async () => {
   )
 
   const summary = await snap(
-    <Msg
-      role="assistant"
-      text="All three landed: 24 tests pass, lint clean, preview at https://pr-128.railway.app."
-    />
+    <Msg role="assistant" text="All three landed: 24 tests pass, lint clean, preview at https://pr-128.railway.app." />
   )
 
   return {
@@ -305,9 +298,22 @@ const slashCommands = async () => {
   const helpPanel = await snap(
     <Panel
       sections={[
-        { items: ['/skills    search · install · inspect', '/model     switch model · pop picker'], title: 'Tools & Skills' },
-        { items: ['/agents    spawn-tree dashboard', '/queue     queue prompt for next turn', '/steer     inject after next tool call'], title: 'Session' },
-        { items: ['/voice     toggle voice mode', '/details   thinking · tools · subagents · activity'], title: 'Configuration' }
+        {
+          items: ['/skills    search · install · inspect', '/model     switch model · pop picker'],
+          title: 'Tools & Skills'
+        },
+        {
+          items: [
+            '/agents    spawn-tree dashboard',
+            '/queue     queue prompt for next turn',
+            '/steer     inject after next tool call'
+          ],
+          title: 'Session'
+        },
+        {
+          items: ['/voice     toggle voice mode', '/details   thinking · tools · subagents · activity'],
+          title: 'Configuration'
+        }
       ]}
       t={t}
       title="(^_^)? Commands"
@@ -373,9 +379,7 @@ const voiceMode = async () => {
     />
   )
 
-  const transcript = await snap(
-    <Msg role="user" text="what's in my inbox today and what needs a reply before noon?" />
-  )
+  const transcript = await snap(<Msg role="user" text="what's in my inbox today and what needs a reply before noon?" />)
 
   const answer = await snap(
     <Msg
@@ -438,7 +442,13 @@ const main = async () => {
   // Wipe the workflows dir so deleted/renamed scenes don't linger.
   const workflowsDir = join(showroomRoot, 'workflows')
 
-  for (const file of ['feature-tour.json', 'subagent-trail.json', 'slash-commands.json', 'voice-mode.json', 'ink-frames.json']) {
+  for (const file of [
+    'feature-tour.json',
+    'subagent-trail.json',
+    'slash-commands.json',
+    'voice-mode.json',
+    'ink-frames.json'
+  ]) {
     try {
       rmSync(join(workflowsDir, file))
     } catch {
