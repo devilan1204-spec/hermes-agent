@@ -1,13 +1,7 @@
-const workflow = window.__SHOWROOM_WORKFLOW__
+const initial = window.__SHOWROOM_INITIAL__
+const catalog = window.__SHOWROOM_CATALOG__ ?? []
 const root = document.getElementById('showroom')
-const timers = []
-
-let body
-let composer
-let overlays
-let statusLeft
-let statusRight
-let viewportConfig
+const SPEEDS = [0.5, 1, 2]
 
 const role = {
   assistant: { color: '#d8d0bd', glyph: '✦' },
@@ -19,36 +13,53 @@ const role = {
 const escapeHtml = value =>
   String(value ?? '').replace(
     /[&<>"']/g,
-    char =>
-      ({
-        '&': '&amp;',
-        '"': '&quot;',
-        "'": '&#39;',
-        '<': '&lt;',
-        '>': '&gt;'
-      })[char]
+    char => ({ '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' })[char]
   )
 
+const state = {
+  body: null,
+  composer: null,
+  overlays: null,
+  progressFill: null,
+  progressLabel: null,
+  raf: null,
+  shell: null,
+  speed: 1,
+  startedAt: 0,
+  statusLeft: null,
+  statusRight: null,
+  timers: [],
+  total: 0,
+  viewport: null,
+  workflow: initial?.workflow ?? { timeline: [] }
+}
+
 const clearTimers = () => {
-  while (timers.length) {
-    clearTimeout(timers.pop())
+  while (state.timers.length) {
+    clearTimeout(state.timers.pop())
+  }
+
+  if (state.raf) {
+    cancelAnimationFrame(state.raf)
+    state.raf = null
   }
 }
 
 const target = id => (id ? document.querySelector(`[data-target="${CSS.escape(id)}"]`) : null)
 
 const setText = (node, text = '', duration = 0) => {
-  if (!duration) {
+  if (!duration || state.speed <= 0) {
     node.textContent = text
 
     return
   }
 
   const chars = [...text]
+  const adjusted = duration / state.speed
   const started = performance.now()
 
   const frame = now => {
-    const n = Math.min(chars.length, Math.ceil(((now - started) / duration) * chars.length))
+    const n = Math.min(chars.length, Math.ceil(((now - started) / adjusted) * chars.length))
     node.textContent = chars.slice(0, n).join('')
 
     if (n < chars.length) {
@@ -60,22 +71,24 @@ const setText = (node, text = '', duration = 0) => {
 }
 
 const removeAfter = (node, duration = 1400) => {
-  timers.push(
+  const wait = duration / state.speed
+
+  state.timers.push(
     setTimeout(() => {
       node.classList.remove('is-visible')
-      timers.push(setTimeout(() => node.remove(), 420))
-    }, duration)
+      state.timers.push(setTimeout(() => node.remove(), 420 / state.speed))
+    }, wait)
   )
 }
 
 const rectFor = (id, pad = 10) => {
   const el = target(id)
 
-  if (!el) {
+  if (!el || !state.overlays) {
     return null
   }
 
-  const stage = overlays.getBoundingClientRect()
+  const stage = state.overlays.getBoundingClientRect()
   const rect = el.getBoundingClientRect()
 
   return {
@@ -90,8 +103,8 @@ const placeNear = (node, id, position = 'right') => {
   const rect = rectFor(id, 0)
 
   if (!rect) {
-    node.style.left = `${viewportConfig.scale * 28}px`
-    node.style.top = `${viewportConfig.scale * 28}px`
+    node.style.left = `${state.viewport.scale * 28}px`
+    node.style.top = `${state.viewport.scale * 28}px`
 
     return
   }
@@ -120,7 +133,7 @@ const message = action => {
   copy.className = 'showroom-copy'
 
   line.append(glyph, copy)
-  body.append(line)
+  state.body.append(line)
   setText(copy, action.text, action.duration)
 }
 
@@ -145,7 +158,7 @@ const tool = action => {
   }
 
   box.append(title, items)
-  body.append(box)
+  state.body.append(box)
 }
 
 const fade = action => {
@@ -155,7 +168,7 @@ const fade = action => {
     return
   }
 
-  el.style.transition = `opacity ${action.duration ?? 420}ms ease`
+  el.style.transition = `opacity ${(action.duration ?? 420) / state.speed}ms var(--ease-in-out)`
   el.style.opacity = String(action.to ?? 0)
 }
 
@@ -167,7 +180,7 @@ const highlight = action => {
   }
 
   el.classList.add('is-highlighted')
-  timers.push(setTimeout(() => el.classList.remove('is-highlighted'), action.duration ?? 1200))
+  state.timers.push(setTimeout(() => el.classList.remove('is-highlighted'), (action.duration ?? 1200) / state.speed))
 }
 
 const caption = action => {
@@ -176,10 +189,10 @@ const caption = action => {
   node.className = 'showroom-caption'
   node.dataset.target = action.id ?? ''
   node.textContent = action.text ?? ''
-  overlays.append(node)
+  state.overlays.append(node)
   placeNear(node, action.target, action.position)
   requestAnimationFrame(() => node.classList.add('is-visible'))
-  removeAfter(node, action.duration)
+  removeAfter(node, action.duration ?? 1600)
 }
 
 const spotlight = action => {
@@ -196,53 +209,125 @@ const spotlight = action => {
   node.style.top = `${rect.top}px`
   node.style.width = `${rect.width}px`
   node.style.height = `${rect.height}px`
-  overlays.append(node)
+  state.overlays.append(node)
   requestAnimationFrame(() => node.classList.add('is-visible'))
-  removeAfter(node, action.duration)
+  removeAfter(node, action.duration ?? 1500)
 }
 
 const status = action => {
-  statusLeft.textContent = action.text ?? ''
-  statusRight.textContent = action.detail ?? ''
+  state.statusLeft.textContent = action.text ?? ''
+  state.statusRight.textContent = action.detail ?? ''
 }
 
-const compose = action => setText(composer, action.text ?? '', action.duration)
+const compose = action => setText(state.composer, action.text ?? '', action.duration ?? 0)
 
-const clear = () => {
-  body.textContent = ''
-  overlays.textContent = ''
+const clearTranscript = () => {
+  state.body.textContent = ''
+  state.overlays.textContent = ''
 }
 
-const run = action =>
-  ({
-    caption,
-    clear,
-    compose,
-    fade,
-    highlight,
-    message,
-    spotlight,
-    status,
-    tool
-  })[action.type]?.(action)
+const ACTIONS = { caption, clear: clearTranscript, compose, fade, highlight, message, spotlight, status, tool }
 
-const play = () => {
-  clearTimers()
-  clear()
-  statusLeft.textContent = ''
-  statusRight.textContent = ''
-  composer.textContent = workflow.composer ?? '›'
+const fmtTime = ms => {
+  if (!Number.isFinite(ms)) {
+    return '0.0s'
+  }
 
-  for (const action of [...(workflow.timeline ?? [])].sort((a, b) => a.at - b.at)) {
-    timers.push(setTimeout(() => run(action), action.at))
+  const sec = Math.max(0, ms) / 1000
+
+  return `${sec.toFixed(1)}s`
+}
+
+const tickProgress = () => {
+  if (!state.startedAt) {
+    return
+  }
+
+  const elapsed = Math.min(state.total, (performance.now() - state.startedAt) * state.speed)
+  const ratio = state.total ? elapsed / state.total : 0
+
+  state.progressFill.style.width = `${(ratio * 100).toFixed(2)}%`
+  state.progressLabel.textContent = `${fmtTime(elapsed)} / ${fmtTime(state.total)}`
+
+  if (elapsed < state.total) {
+    state.raf = requestAnimationFrame(tickProgress)
   }
 }
 
+const play = () => {
+  clearTimers()
+  clearTranscript()
+  state.statusLeft.textContent = ''
+  state.statusRight.textContent = ''
+  state.composer.textContent = state.workflow.composer ?? '›'
+
+  const timeline = [...(state.workflow.timeline ?? [])].sort((a, b) => a.at - b.at)
+
+  state.total = timeline.reduce((max, action) => Math.max(max, action.at + (action.duration ?? 0)), 0)
+  state.startedAt = performance.now()
+  state.progressFill.style.width = '0%'
+  state.progressLabel.textContent = `0.0s / ${fmtTime(state.total)}`
+
+  for (const action of timeline) {
+    state.timers.push(setTimeout(() => ACTIONS[action.type]?.(action), action.at / state.speed))
+  }
+
+  state.raf = requestAnimationFrame(tickProgress)
+}
+
+const setSpeed = next => {
+  state.speed = next
+
+  for (const button of state.shell.querySelectorAll('.showroom-speed button')) {
+    button.classList.toggle('is-active', Number(button.dataset.speed) === next)
+  }
+}
+
+const loadWorkflow = async name => {
+  const url = new URL(window.location.href)
+  url.searchParams.set('w', name)
+  window.history.replaceState(null, '', url)
+
+  try {
+    const response = await fetch(`/api/workflow/${encodeURIComponent(name)}`)
+
+    if (response.ok) {
+      state.workflow = await response.json()
+    }
+  } catch {
+    /* fall through to current workflow */
+  }
+
+  play()
+}
+
+const buildOptions = () => {
+  if (!catalog.length) {
+    return ''
+  }
+
+  return catalog
+    .map(({ name, title }) => {
+      const selected = name === initial?.name ? ' selected' : ''
+
+      return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(title)}</option>`
+    })
+    .join('')
+}
+
+const buildSpeed = () =>
+  SPEEDS.map(
+    speed =>
+      `<button type="button" data-speed="${speed}" class="${speed === 1 ? 'is-active' : ''}">${speed}x</button>`
+  ).join('')
+
 const mount = () => {
-  const viewport = { cellWidth: 9, cols: 96, lineHeight: 18, rows: 30, scale: 4, ...workflow.viewport }
+  const viewport = { cellWidth: 9, cols: 96, lineHeight: 18, rows: 30, scale: 4, ...(state.workflow.viewport ?? {}) }
   const shell = document.createElement('section')
 
-  viewportConfig = viewport
+  state.viewport = viewport
+  state.shell = shell
+
   shell.className = 'showroom-shell'
   shell.style.setProperty('--cell-w', `${viewport.cellWidth}px`)
   shell.style.setProperty('--cols', `${viewport.cols}`)
@@ -256,8 +341,14 @@ const mount = () => {
 
   shell.innerHTML = `
     <header class="showroom-title">
-      <span>${escapeHtml(workflow.title ?? 'Hermes TUI Showroom')}</span>
-      <span class="showroom-meta">${viewport.cols}x${viewport.rows} · ${viewport.scale}x</span>
+      <span class="showroom-title-name">
+        <span data-role="title">${escapeHtml(state.workflow.title ?? 'Hermes TUI Showroom')}</span>
+        <span class="showroom-title-tag">showroom</span>
+      </span>
+      <span class="showroom-meta">
+        <span>${viewport.cols}x${viewport.rows} · ${viewport.scale}x</span>
+        ${catalog.length > 1 ? `<select class="showroom-picker" data-action="picker">${buildOptions()}</select>` : ''}
+      </span>
     </header>
     <div class="showroom-stage">
       <div class="showroom-terminal">
@@ -270,32 +361,63 @@ const mount = () => {
       </div>
       <div class="showroom-overlays"></div>
     </div>
+    <div class="showroom-progress">
+      <span data-role="time">0.0s / 0.0s</span>
+      <div class="showroom-progress-track"><div class="showroom-progress-fill"></div></div>
+    </div>
     <footer class="showroom-controls">
       <button type="button" data-action="restart">Restart</button>
       <button type="button" data-action="clear">Clear</button>
+      <span class="showroom-speed">${buildSpeed()}</span>
     </footer>
   `
 
   root.replaceChildren(shell)
 
-  body = shell.querySelector('.showroom-body')
-  composer = shell.querySelector('.showroom-composer')
-  overlays = shell.querySelector('.showroom-overlays')
-  statusLeft = shell.querySelector('.showroom-status span:first-child')
-  statusRight = shell.querySelector('.showroom-status span:last-child')
+  state.body = shell.querySelector('.showroom-body')
+  state.composer = shell.querySelector('.showroom-composer')
+  state.overlays = shell.querySelector('.showroom-overlays')
+  state.statusLeft = shell.querySelector('.showroom-status span:first-child')
+  state.statusRight = shell.querySelector('.showroom-status span:last-child')
+  state.progressFill = shell.querySelector('.showroom-progress-fill')
+  state.progressLabel = shell.querySelector('[data-role="time"]')
 
   shell.querySelector('[data-action="restart"]').addEventListener('click', play)
   shell.querySelector('[data-action="clear"]').addEventListener('click', () => {
     clearTimers()
-    clear()
+    clearTranscript()
   })
 
+  for (const button of shell.querySelectorAll('.showroom-speed button')) {
+    button.addEventListener('click', () => setSpeed(Number(button.dataset.speed)))
+  }
+
+  const picker = shell.querySelector('[data-action="picker"]')
+
+  if (picker) {
+    picker.addEventListener('change', event => {
+      const next = event.target.value
+
+      shell.querySelector('[data-role="title"]').textContent =
+        catalog.find(c => c.name === next)?.title ?? next
+      void loadWorkflow(next)
+    })
+  }
+
   window.addEventListener('keydown', event => {
-    if (event.key.toLowerCase() === 'r') {
+    const key = event.key.toLowerCase()
+
+    if (key === 'r') {
       play()
+    } else if (key === 'c') {
+      clearTimers()
+      clearTranscript()
+    } else if (key === '1' || key === '2' || key === '3') {
+      setSpeed(SPEEDS[Number(key) - 1])
     }
   })
 
+  requestAnimationFrame(() => shell.classList.add('is-mounted'))
   play()
 }
 

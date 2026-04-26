@@ -1,0 +1,79 @@
+{
+  "title": "Voice Mode",
+  "composer": "› ctrl+b to start recording",
+  "viewport": {
+    "cols": 96,
+    "rows": 30,
+    "scale": 4
+  },
+  "timeline": [
+    { "at": 0, "type": "status", "text": "voice · listening", "detail": "STT · openai · TTS · 11labs" },
+    {
+      "at": 250,
+      "id": "vad",
+      "title": "VAD · capturing",
+      "items": [
+        "▮ ▮▮ ▮ ▮▮▮▮ ▮▮ ▮▮▮▮▮▮ ▮▮▮ ▮",
+        "rms 0.42 · 1.6s captured",
+        "auto-stop · silence 380ms"
+      ],
+      "type": "tool"
+    },
+    { "at": 600, "duration": 1500, "target": "vad", "type": "spotlight" },
+    {
+      "at": 800,
+      "duration": 1700,
+      "position": "right",
+      "target": "vad",
+      "text": "Continuous loop: VAD detects silence, transcribes, restarts — no key holds.",
+      "type": "caption"
+    },
+    { "at": 2700, "duration": 500, "target": "vad", "to": 0.18, "type": "fade" },
+    {
+      "at": 3000,
+      "duration": 700,
+      "id": "transcript",
+      "role": "user",
+      "text": "what's in my inbox today and what needs a reply before noon?",
+      "type": "message"
+    },
+    { "at": 3900, "duration": 1100, "target": "transcript", "type": "highlight" },
+    {
+      "at": 4100,
+      "duration": 1700,
+      "position": "right",
+      "target": "transcript",
+      "text": "Transcript flows straight into the composer with the standard ‹ user glyph.",
+      "type": "caption"
+    },
+    {
+      "at": 6000,
+      "duration": 1100,
+      "id": "answer",
+      "role": "assistant",
+      "text": "Three threads need you before noon: vendor renewal, podcast intro feedback, and the design review at 11.",
+      "type": "message"
+    },
+    {
+      "at": 7300,
+      "id": "tts",
+      "title": "tts · playing",
+      "items": [
+        "voice 11labs · grace_v3",
+        "elapsed 4.6s · 2 chunks queued",
+        "ducking mic input"
+      ],
+      "type": "tool"
+    },
+    {
+      "at": 7600,
+      "duration": 1700,
+      "position": "right",
+      "target": "tts",
+      "text": "TTS auto-ducks the mic so the loop never echoes itself back.",
+      "type": "caption"
+    },
+    { "at": 9400, "duration": 600, "text": "› /voice off", "type": "compose" },
+    { "at": 10100, "type": "status", "text": "voice off", "detail": "transcript saved · 1 turn" }
+  ]
+}

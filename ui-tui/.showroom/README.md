@@ -1,6 +1,6 @@
 # TUI Showroom
 
-Scripted, record-ready demos for `ui-tui`.
+Scripted, record-ready demos for `ui-tui`. Drop a JSON workflow into `workflows/`, hit play.
 
 ```bash
 npm run showroom
@@ -8,16 +8,25 @@ npm run showroom:build
 npm run showroom:type-check
 ```
 
-`npm run showroom` serves the default workflow at `http://127.0.0.1:4317`.
+`npm run showroom` serves every workflow in `workflows/` at `http://127.0.0.1:4317`. Use the dropdown in the top-right or pass `?w=<name>` to deep-link a workflow.
 
 ```bash
-npm run showroom -- --workflow .showroom/workflows/feature-tour.json --port 4318
-npm run showroom:build -- .showroom/workflows/feature-tour.json .showroom/dist/feature-tour.html
+npm run showroom -- --port 4318
+npm run showroom -- --workflow .showroom/workflows/feature-tour.json
+npm run showroom:build                                  # builds dist/<name>.html for every workflow + dist/index.html
+npm run showroom:build .showroom/workflows/voice-mode.json dist/voice.html
 ```
 
-## Workflow Shape
+## Bundled workflows
 
-Workflows are JSON so the renderer has no extra deps.
+| File                                   | Demonstrates                           |
+| -------------------------------------- | -------------------------------------- |
+| `workflows/feature-tour.json`          | Plan → tool trail → result highlight   |
+| `workflows/subagent-trail.json`        | Parallel subagents, hot lanes, summary |
+| `workflows/slash-commands.json`        | Slash palette: /skills, /model, /agents |
+| `workflows/voice-mode.json`            | VAD capture, transcript, TTS ducking   |
+
+## Workflow Shape
 
 ```json
 {
@@ -33,14 +42,29 @@ Workflows are JSON so the renderer has no extra deps.
 
 ## Timeline Actions
 
-- `status`: set top status text, with optional `detail`
-- `compose`: type into the composer
-- `message`: append a transcript line; supports `role`, `id`, `text`, `duration`
-- `tool`: append a tool activity card; supports `id`, `title`, `items`
-- `caption`: fade in a caption near `target`; supports `position`, `duration`
-- `spotlight`: draw a spotlight around `target`; supports `pad`, `duration`
-- `highlight`: temporarily emphasize `target`
-- `fade`: set `target` opacity over `duration`
-- `clear`: reset transcript and overlays
+| Action      | Required             | Optional                                    |
+| ----------- | -------------------- | ------------------------------------------- |
+| `status`    | `text`                | `detail`                                    |
+| `compose`   | `text`                | `duration` (typewriter)                     |
+| `message`   | `role`, `text`        | `id`, `duration`                            |
+| `tool`      | `title`, `items`      | `id`                                        |
+| `caption`   | `target`, `text`      | `position` (`left`/`right`/`top`), `duration` |
+| `spotlight` | `target`              | `pad`, `duration`                           |
+| `highlight` | `target`              | `duration`                                  |
+| `fade`      | `target`              | `to` (default `0`), `duration`              |
+| `clear`     | —                     | —                                           |
 
-Targets are `id` values from `message`, `tool`, and captions. The stage is rendered at `viewport.scale`, so `scale: 4` creates a 4x capture surface without changing the source terminal proportions.
+`target` references the `id` of an earlier `message`, `tool`, or caption. `viewport.scale` is the upscale factor — `scale: 4` produces a 4x capture surface without rescaling the source terminal proportions.
+
+## Player
+
+- Restart, Clear, and 0.5x / 1x / 2x speed buttons under the stage.
+- Keyboard: `R` restart, `C` clear, `1`/`2`/`3` speed.
+- Progress bar tracks elapsed/total based on the slowest action's `at + duration`.
+
+## Authoring tips
+
+- Keep `at` values in milliseconds; sort happens automatically.
+- Use `id`s on every element you want to spotlight, fade, or caption later.
+- Captions auto-position next to their target; pass `position: "left"` or `"top"` when the right side is busy.
+- Test at a non-default speed before recording — fast reads are unforgiving.

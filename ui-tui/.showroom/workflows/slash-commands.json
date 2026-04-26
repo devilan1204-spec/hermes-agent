@@ -1,0 +1,84 @@
+{
+  "title": "Slash Command Tour",
+  "composer": "› press / to open the palette",
+  "viewport": {
+    "cols": 96,
+    "rows": 30,
+    "scale": 4
+  },
+  "timeline": [
+    { "at": 0, "type": "status", "text": "session active", "detail": "model · gpt-5 codex" },
+    { "at": 200, "duration": 500, "text": "› /skills search vibe", "type": "compose" },
+    {
+      "at": 800,
+      "id": "skills-results",
+      "title": "/skills search vibe",
+      "items": [
+        "anthropics/skills/frontend-design   ★ trusted",
+        "openai/skills/skill-creator         · official",
+        "skills.sh/community/vibe-coding     ⚙ community"
+      ],
+      "type": "tool"
+    },
+    { "at": 1100, "duration": 1500, "target": "skills-results", "type": "spotlight" },
+    {
+      "at": 1300,
+      "duration": 1700,
+      "position": "right",
+      "target": "skills-results",
+      "text": "Slash commands stream live results without blocking the composer.",
+      "type": "caption"
+    },
+    { "at": 3100, "duration": 600, "target": "skills-results", "to": 0.2, "type": "fade" },
+    {
+      "at": 3300,
+      "duration": 600,
+      "id": "model-prompt",
+      "role": "user",
+      "text": "/model claude-4.6-sonnet",
+      "type": "message"
+    },
+    {
+      "at": 4100,
+      "id": "model-result",
+      "title": "model switched",
+      "items": [
+        "from   gpt-5-codex",
+        "to     claude-4.6-sonnet",
+        "scope  this session"
+      ],
+      "type": "tool"
+    },
+    {
+      "at": 4400,
+      "duration": 1700,
+      "position": "right",
+      "target": "model-result",
+      "text": "/model also pops the inline picker when you don’t pass an arg.",
+      "type": "caption"
+    },
+    { "at": 6300, "duration": 600, "text": "› /agents pause", "type": "compose" },
+    {
+      "at": 7000,
+      "id": "agents-status",
+      "title": "/agents · paused",
+      "items": [
+        "delegation paused",
+        "max children · 4",
+        "running tasks queued for resume"
+      ],
+      "type": "tool"
+    },
+    { "at": 7300, "duration": 1300, "target": "agents-status", "type": "highlight" },
+    {
+      "at": 7500,
+      "duration": 1600,
+      "position": "right",
+      "target": "agents-status",
+      "text": "Same registry powers TUI, gateway, Telegram, Discord — one source of truth.",
+      "type": "caption"
+    },
+    { "at": 9300, "duration": 600, "text": "› /resume", "type": "compose" },
+    { "at": 10000, "type": "status", "text": "ready", "detail": "/help for the full list" }
+  ]
+}
