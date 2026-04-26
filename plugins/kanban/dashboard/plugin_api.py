@@ -100,6 +100,9 @@ BOARD_COLUMNS: list[str] = [
 
 def _task_dict(task: kanban_db.Task) -> dict[str, Any]:
     d = asdict(task)
+    # Add derived age metrics so the UI can colour stale cards without
+    # computing deltas client-side.
+    d["age"] = kanban_db.task_age(task)
     # Keep body short on list endpoints; full body comes from /tasks/:id.
     return d
 
@@ -278,6 +281,7 @@ class CreateTaskBody(BaseModel):
     workspace_path: Optional[str] = None
     parents: list[str] = Field(default_factory=list)
     triage: bool = False
+    idempotency_key: Optional[str] = None
 
 
 @router.post("/tasks")
@@ -296,6 +300,7 @@ def create_task(payload: CreateTaskBody):
             priority=payload.priority,
             parents=payload.parents,
             triage=payload.triage,
+            idempotency_key=payload.idempotency_key,
         )
         task = kanban_db.get_task(conn, task_id)
         return {"task": _task_dict(task) if task else None}
@@ -600,6 +605,60 @@ def get_config():
         "lane_by_profile": bool(k_cfg.get("lane_by_profile", True)),
         "include_archived_by_default": bool(k_cfg.get("include_archived_by_default", False)),
         "render_markdown": bool(k_cfg.get("render_markdown", True)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Stats (per-profile / per-status counts + oldest-ready age)
+# ---------------------------------------------------------------------------
+
+@router.get("/stats")
+def get_stats():
+    """Per-status + per-assignee counts + oldest-ready age.
+
+    Designed for the dashboard HUD and for router profiles that need to
+    answer "is this specialist overloaded?" without scanning the whole
+    board themselves.
+    """
+    conn = _conn()
+    try:
+        return kanban_db.board_stats(conn)
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Worker log (read-only; file written by _default_spawn)
+# ---------------------------------------------------------------------------
+
+@router.get("/tasks/{task_id}/log")
+def get_task_log(task_id: str, tail: Optional[int] = Query(None, ge=1, le=2_000_000)):
+    """Return the worker's stdout/stderr log.
+
+    ``tail`` caps the response size (bytes) so the dashboard drawer
+    doesn't paginate megabytes into the browser. Returns 404 if the task
+    has never spawned. The on-disk log is rotated at 2 MiB per
+    ``_rotate_worker_log`` — a single ``.log.1`` is kept, no further
+    generations, so disk usage per task is bounded at ~4 MiB.
+    """
+    conn = _conn()
+    try:
+        task = kanban_db.get_task(conn, task_id)
+    finally:
+        conn.close()
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+    content = kanban_db.read_worker_log(task_id, tail_bytes=tail)
+    log_path = kanban_db.worker_log_path(task_id)
+    size = log_path.stat().st_size if log_path.exists() else 0
+    return {
+        "task_id": task_id,
+        "path": str(log_path),
+        "exists": content is not None,
+        "size_bytes": size,
+        "content": content or "",
+        # Truncated when the on-disk file was larger than the tail cap.
+        "truncated": bool(tail and size > tail),
     }
 
 

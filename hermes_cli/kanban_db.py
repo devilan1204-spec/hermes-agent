@@ -84,9 +84,14 @@ class Task:
     claim_expires: Optional[int]
     tenant: Optional[str]
     result: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    spawn_failures: int = 0
+    worker_pid: Optional[int] = None
+    last_spawn_error: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "Task":
+        keys = set(row.keys())
         return cls(
             id=row["id"],
             title=row["title"],
@@ -102,8 +107,12 @@ class Task:
             workspace_path=row["workspace_path"],
             claim_lock=row["claim_lock"],
             claim_expires=row["claim_expires"],
-            tenant=row["tenant"] if "tenant" in row.keys() else None,
-            result=row["result"] if "result" in row.keys() else None,
+            tenant=row["tenant"] if "tenant" in keys else None,
+            result=row["result"] if "result" in keys else None,
+            idempotency_key=row["idempotency_key"] if "idempotency_key" in keys else None,
+            spawn_failures=row["spawn_failures"] if "spawn_failures" in keys else 0,
+            worker_pid=row["worker_pid"] if "worker_pid" in keys else None,
+            last_spawn_error=row["last_spawn_error"] if "last_spawn_error" in keys else None,
         )
 
 
@@ -131,22 +140,26 @@ class Event:
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS tasks (
-    id             TEXT PRIMARY KEY,
-    title          TEXT NOT NULL,
-    body           TEXT,
-    assignee       TEXT,
-    status         TEXT NOT NULL,
-    priority       INTEGER DEFAULT 0,
-    created_by     TEXT,
-    created_at     INTEGER NOT NULL,
-    started_at     INTEGER,
-    completed_at   INTEGER,
-    workspace_kind TEXT NOT NULL DEFAULT 'scratch',
-    workspace_path TEXT,
-    claim_lock     TEXT,
-    claim_expires  INTEGER,
-    tenant         TEXT,
-    result         TEXT
+    id               TEXT PRIMARY KEY,
+    title            TEXT NOT NULL,
+    body             TEXT,
+    assignee         TEXT,
+    status           TEXT NOT NULL,
+    priority         INTEGER DEFAULT 0,
+    created_by       TEXT,
+    created_at       INTEGER NOT NULL,
+    started_at       INTEGER,
+    completed_at     INTEGER,
+    workspace_kind   TEXT NOT NULL DEFAULT 'scratch',
+    workspace_path   TEXT,
+    claim_lock       TEXT,
+    claim_expires    INTEGER,
+    tenant           TEXT,
+    result           TEXT,
+    idempotency_key  TEXT,
+    spawn_failures   INTEGER NOT NULL DEFAULT 0,
+    worker_pid       INTEGER,
+    last_spawn_error TEXT
 );
 
 CREATE TABLE IF NOT EXISTS task_links (
@@ -171,13 +184,30 @@ CREATE TABLE IF NOT EXISTS task_events (
     created_at INTEGER NOT NULL
 );
 
+-- Subscription from a gateway source (platform + chat + thread) to a
+-- task. The gateway's kanban-notifier watcher tails task_events and
+-- pushes ``completed`` / ``blocked`` / ``spawn_auto_blocked`` events to
+-- the original requester so human-in-the-loop workflows close the loop.
+CREATE TABLE IF NOT EXISTS kanban_notify_subs (
+    task_id       TEXT NOT NULL,
+    platform      TEXT NOT NULL,
+    chat_id       TEXT NOT NULL,
+    thread_id     TEXT NOT NULL DEFAULT '',
+    user_id       TEXT,
+    created_at    INTEGER NOT NULL,
+    last_event_id INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (task_id, platform, chat_id, thread_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee_status ON tasks(assignee, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_status          ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_tenant          ON tasks(tenant);
+CREATE INDEX IF NOT EXISTS idx_tasks_idempotency     ON tasks(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_links_child           ON task_links(child_id);
 CREATE INDEX IF NOT EXISTS idx_links_parent          ON task_links(parent_id);
 CREATE INDEX IF NOT EXISTS idx_comments_task         ON task_comments(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_events_task           ON task_events(task_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_notify_task           ON kanban_notify_subs(task_id);
 """
 
 
@@ -220,6 +250,20 @@ def _migrate_add_optional_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE tasks ADD COLUMN tenant TEXT")
     if "result" not in cols:
         conn.execute("ALTER TABLE tasks ADD COLUMN result TEXT")
+    if "idempotency_key" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN idempotency_key TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_idempotency "
+            "ON tasks(idempotency_key)"
+        )
+    if "spawn_failures" not in cols:
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN spawn_failures INTEGER NOT NULL DEFAULT 0"
+        )
+    if "worker_pid" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN worker_pid INTEGER")
+    if "last_spawn_error" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN last_spawn_error TEXT")
 
 
 @contextlib.contextmanager
@@ -280,6 +324,7 @@ def create_task(
     priority: int = 0,
     parents: Iterable[str] = (),
     triage: bool = False,
+    idempotency_key: Optional[str] = None,
 ) -> str:
     """Create a new task and optionally link it under parent tasks.
 
@@ -288,6 +333,11 @@ def create_task(
     If ``triage=True``, status is forced to ``triage`` regardless of
     parents — a specifier/triager is expected to promote the task to
     ``todo`` once the spec is fleshed out.
+
+    If ``idempotency_key`` is provided and a non-archived task with the
+    same key already exists, returns the existing task's id instead of
+    creating a duplicate. Useful for retried webhooks / automation that
+    should not double-write.
     """
     if not title or not title.strip():
         raise ValueError("title is required")
@@ -297,6 +347,21 @@ def create_task(
             f"got {workspace_kind!r}"
         )
     parents = tuple(p for p in parents if p)
+
+    # Idempotency check — return the existing task instead of creating a
+    # duplicate. Done BEFORE entering write_txn to keep the fast path fast
+    # and to avoid holding a write lock during the lookup. Race is
+    # acceptable: two concurrent creators with the same key might both
+    # insert, at which point both rows exist but the next lookup stabilises.
+    if idempotency_key:
+        row = conn.execute(
+            "SELECT id FROM tasks WHERE idempotency_key = ? "
+            "AND status != 'archived' "
+            "ORDER BY created_at DESC LIMIT 1",
+            (idempotency_key,),
+        ).fetchone()
+        if row:
+            return row["id"]
 
     now = int(time.time())
 
@@ -335,8 +400,8 @@ def create_task(
                     INSERT INTO tasks (
                         id, title, body, assignee, status, priority,
                         created_by, created_at, workspace_kind, workspace_path,
-                        tenant
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tenant, idempotency_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task_id,
@@ -350,6 +415,7 @@ def create_task(
                         workspace_kind,
                         workspace_path,
                         tenant,
+                        idempotency_key,
                     ),
                 )
                 for pid in parents:
@@ -743,7 +809,7 @@ def release_stale_claims(conn: sqlite3.Connection) -> int:
         for row in stale:
             conn.execute(
                 "UPDATE tasks SET status = 'ready', claim_lock = NULL, "
-                "claim_expires = NULL "
+                "claim_expires = NULL, worker_pid = NULL "
                 "WHERE id = ? AND status = 'running'",
                 (row["id"],),
             )
@@ -776,7 +842,8 @@ def complete_task(
                    result       = ?,
                    completed_at = ?,
                    claim_lock   = NULL,
-                   claim_expires= NULL
+                   claim_expires= NULL,
+                   worker_pid   = NULL
              WHERE id = ?
                AND status IN ('running', 'ready', 'blocked')
             """,
@@ -806,7 +873,8 @@ def block_task(
             UPDATE tasks
                SET status       = 'blocked',
                    claim_lock   = NULL,
-                   claim_expires= NULL
+                   claim_expires= NULL,
+                   worker_pid   = NULL
              WHERE id = ?
                AND status IN ('running', 'ready')
             """,
@@ -897,6 +965,17 @@ def set_workspace_path(
 # Dispatcher (one-shot pass)
 # ---------------------------------------------------------------------------
 
+# After this many consecutive `spawn_failed` events on a task, the dispatcher
+# stops retrying and parks the task in ``blocked`` with a reason so a human
+# can investigate. Prevents the dispatcher from thrashing forever on a task
+# whose profile doesn't exist, whose workspace is unmountable, etc.
+DEFAULT_SPAWN_FAILURE_LIMIT = 5
+
+# Max bytes to keep in a single worker log file. The dispatcher truncates
+# and rotates on spawn if the file is larger than this at spawn time.
+DEFAULT_LOG_ROTATE_BYTES = 2 * 1024 * 1024   # 2 MiB
+
+
 @dataclass
 class DispatchResult:
     """Outcome of a single ``dispatch`` pass."""
@@ -906,6 +985,137 @@ class DispatchResult:
     spawned: list[tuple[str, str, str]] = field(default_factory=list)
     """List of ``(task_id, assignee, workspace_path)`` triples."""
     skipped_unassigned: list[str] = field(default_factory=list)
+    crashed: list[str] = field(default_factory=list)
+    """Task ids reclaimed because their worker PID disappeared."""
+    auto_blocked: list[str] = field(default_factory=list)
+    """Task ids auto-blocked by the spawn-failure circuit breaker."""
+
+
+def _pid_alive(pid: Optional[int]) -> bool:
+    """Return True if ``pid`` is still running on this host.
+
+    Cross-platform: uses ``os.kill(pid, 0)`` on POSIX and ``OpenProcess``
+    on Windows. Returns False for falsy PIDs or on any OS error.
+    """
+    if not pid or pid <= 0:
+        return False
+    try:
+        if hasattr(os, "kill"):
+            os.kill(int(pid), 0)
+            return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Process exists, we just can't signal it.
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def detect_crashed_workers(conn: sqlite3.Connection) -> list[str]:
+    """Reclaim ``running`` tasks whose worker PID is no longer alive.
+
+    Appends a ``crashed`` event and drops the task back to ``ready``.
+    Different from ``release_stale_claims``: this checks liveness
+    immediately rather than waiting for the claim TTL.
+
+    Only considers tasks claimed by *this host* — PIDs from other hosts
+    are meaningless here. The host-local check is enough because
+    ``_default_spawn`` always runs the worker on the same host as the
+    dispatcher (the whole design is single-host).
+    """
+    crashed: list[str] = []
+    with write_txn(conn):
+        rows = conn.execute(
+            "SELECT id, worker_pid, claim_lock FROM tasks "
+            "WHERE status = 'running' AND worker_pid IS NOT NULL"
+        ).fetchall()
+        host_prefix = f"{_claimer_id().split(':', 1)[0]}:"
+        for row in rows:
+            # Only check liveness for claims owned by this host.
+            lock = row["claim_lock"] or ""
+            if not lock.startswith(host_prefix):
+                continue
+            if _pid_alive(row["worker_pid"]):
+                continue
+            cur = conn.execute(
+                "UPDATE tasks SET status = 'ready', claim_lock = NULL, "
+                "claim_expires = NULL, worker_pid = NULL "
+                "WHERE id = ? AND status = 'running'",
+                (row["id"],),
+            )
+            if cur.rowcount == 1:
+                _append_event(
+                    conn, row["id"], "crashed",
+                    {"pid": int(row["worker_pid"]), "claimer": row["claim_lock"]},
+                )
+                crashed.append(row["id"])
+    return crashed
+
+
+def _record_spawn_failure(
+    conn: sqlite3.Connection,
+    task_id: str,
+    error: str,
+    *,
+    failure_limit: int = DEFAULT_SPAWN_FAILURE_LIMIT,
+) -> bool:
+    """Release the claim, increment the failure counter, maybe auto-block.
+
+    Returns True when the task was auto-blocked (N failures exceeded),
+    False when it was just released back to ``ready`` for another try.
+    """
+    blocked = False
+    with write_txn(conn):
+        row = conn.execute(
+            "SELECT spawn_failures FROM tasks WHERE id = ?", (task_id,),
+        ).fetchone()
+        failures = int(row["spawn_failures"]) + 1 if row else 1
+        if failures >= failure_limit:
+            conn.execute(
+                "UPDATE tasks SET status = 'blocked', claim_lock = NULL, "
+                "claim_expires = NULL, worker_pid = NULL, "
+                "spawn_failures = ?, last_spawn_error = ? "
+                "WHERE id = ? AND status IN ('running', 'ready')",
+                (failures, error[:500], task_id),
+            )
+            _append_event(
+                conn, task_id, "spawn_auto_blocked",
+                {"failures": failures, "error": error[:500]},
+            )
+            blocked = True
+        else:
+            conn.execute(
+                "UPDATE tasks SET status = 'ready', claim_lock = NULL, "
+                "claim_expires = NULL, worker_pid = NULL, "
+                "spawn_failures = ?, last_spawn_error = ? "
+                "WHERE id = ? AND status = 'running'",
+                (failures, error[:500], task_id),
+            )
+            _append_event(
+                conn, task_id, "spawn_failed",
+                {"error": error[:500], "failures": failures},
+            )
+    return blocked
+
+
+def _set_worker_pid(conn: sqlite3.Connection, task_id: str, pid: int) -> None:
+    with write_txn(conn):
+        conn.execute(
+            "UPDATE tasks SET worker_pid = ? WHERE id = ?",
+            (int(pid), task_id),
+        )
+
+
+def _clear_spawn_failures(conn: sqlite3.Connection, task_id: str) -> None:
+    """Reset the failure counter after a successful spawn."""
+    with write_txn(conn):
+        conn.execute(
+            "UPDATE tasks SET spawn_failures = 0, last_spawn_error = NULL "
+            "WHERE id = ?",
+            (task_id,),
+        )
 
 
 def dispatch_once(
@@ -915,21 +1125,28 @@ def dispatch_once(
     ttl_seconds: int = DEFAULT_CLAIM_TTL_SECONDS,
     dry_run: bool = False,
     max_spawn: Optional[int] = None,
+    failure_limit: int = DEFAULT_SPAWN_FAILURE_LIMIT,
 ) -> DispatchResult:
     """Run one dispatcher tick.
 
     Steps:
-      1. Reclaim stale running tasks.
-      2. Promote todo -> ready where all parents are done.
-      3. For each ready task with an assignee, atomically claim and call
-         ``spawn_fn(task, workspace_path)``.
+      1. Reclaim stale running tasks (TTL expired).
+      2. Reclaim crashed running tasks (host-local PID no longer alive).
+      3. Promote todo -> ready where all parents are done.
+      4. For each ready task with an assignee, atomically claim and call
+         ``spawn_fn(task, workspace_path) -> Optional[int]``. The return
+         value (if any) is recorded as ``worker_pid`` so subsequent ticks
+         can detect crashes before the TTL expires.
 
-    ``spawn_fn`` defaults to ``_default_spawn`` which invokes
-    ``hermes -p <profile> chat -q "..."`` in the background.  Tests pass
-    a stub.
+    Spawn failures are counted per-task. After ``failure_limit`` consecutive
+    failures the task is auto-blocked with the last error as its reason —
+    prevents the dispatcher from thrashing forever on an unfixable task.
+
+    ``spawn_fn`` defaults to ``_default_spawn``. Tests pass a stub.
     """
     result = DispatchResult()
     result.reclaimed = release_stale_claims(conn)
+    result.crashed = detect_crashed_workers(conn)
     result.promoted = recompute_ready(conn)
 
     ready_rows = conn.execute(
@@ -950,35 +1167,66 @@ def dispatch_once(
         claimed = claim_task(conn, row["id"], ttl_seconds=ttl_seconds)
         if claimed is None:
             continue
-        workspace = resolve_workspace(claimed)
+        try:
+            workspace = resolve_workspace(claimed)
+        except Exception as exc:
+            auto = _record_spawn_failure(
+                conn, claimed.id, f"workspace: {exc}",
+                failure_limit=failure_limit,
+            )
+            if auto:
+                result.auto_blocked.append(claimed.id)
+            continue
         # Persist the resolved workspace path so the worker can cd there.
         set_workspace_path(conn, claimed.id, str(workspace))
-        if spawn_fn is None:
-            spawn_fn = _default_spawn
+        _spawn = spawn_fn if spawn_fn is not None else _default_spawn
         try:
-            spawn_fn(claimed, str(workspace))
+            pid = _spawn(claimed, str(workspace))
+            if pid:
+                _set_worker_pid(conn, claimed.id, int(pid))
+            _clear_spawn_failures(conn, claimed.id)
             result.spawned.append((claimed.id, claimed.assignee or "", str(workspace)))
             spawned += 1
         except Exception as exc:
-            # Spawn failed: release the claim so the next tick can retry.
-            with write_txn(conn):
-                conn.execute(
-                    "UPDATE tasks SET status = 'ready', claim_lock = NULL, "
-                    "claim_expires = NULL WHERE id = ? AND status = 'running'",
-                    (claimed.id,),
-                )
-                _append_event(
-                    conn, claimed.id, "spawn_failed",
-                    {"error": str(exc)[:500]},
-                )
+            auto = _record_spawn_failure(
+                conn, claimed.id, str(exc),
+                failure_limit=failure_limit,
+            )
+            if auto:
+                result.auto_blocked.append(claimed.id)
     return result
 
 
-def _default_spawn(task: Task, workspace: str) -> None:
+def _rotate_worker_log(log_path: Path, max_bytes: int) -> None:
+    """Rotate ``<log>`` to ``<log>.1`` if it exceeds ``max_bytes``.
+
+    Single-generation rotation — one old file kept, newer one replaces it.
+    Keeps disk usage bounded while still giving the user a chance to grab
+    the prior run's output.
+    """
+    try:
+        if not log_path.exists():
+            return
+        if log_path.stat().st_size <= max_bytes:
+            return
+        rotated = log_path.with_suffix(log_path.suffix + ".1")
+        try:
+            if rotated.exists():
+                rotated.unlink()
+        except OSError:
+            pass
+        log_path.rename(rotated)
+    except OSError:
+        pass
+
+
+def _default_spawn(task: Task, workspace: str) -> Optional[int]:
     """Fire-and-forget ``hermes -p <profile> chat -q ...`` subprocess.
 
-    We don't wait for the child; its completion is observed by polling
-    the board ``complete``/``block`` transitions that the worker writes.
+    Returns the spawned child's PID so the dispatcher can detect crashes
+    before the claim TTL expires. The child's completion is still observed
+    via the ``complete`` / ``block`` transitions the worker writes itself;
+    the PID check is a safety net for crashes, OOM kills, and Ctrl+C.
     """
     import subprocess
     if not task.assignee:
@@ -997,17 +1245,17 @@ def _default_spawn(task: Task, workspace: str) -> None:
         "chat",
         "-q", prompt,
     ]
-    # Use Popen with DEVNULL stdin so the child doesn't inherit our tty.
     # Redirect output to a per-task log under HERMES_HOME/kanban/logs/.
     from hermes_constants import get_hermes_home
     log_dir = get_hermes_home() / "kanban" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{task.id}.log"
+    _rotate_worker_log(log_path, DEFAULT_LOG_ROTATE_BYTES)
 
     # Use 'a' so a re-run on unblock appends rather than overwrites.
     log_f = open(log_path, "ab")
     try:
-        subprocess.Popen(  # noqa: S603 -- argv is a fixed list built above
+        proc = subprocess.Popen(  # noqa: S603 -- argv is a fixed list built above
             cmd,
             cwd=workspace if os.path.isdir(workspace) else None,
             stdin=subprocess.DEVNULL,
@@ -1027,6 +1275,66 @@ def _default_spawn(task: Task, workspace: str) -> None:
     # handle is kept alive by the child's inheritance.  The parent's
     # reference goes out of scope and is GC'd, but the OS-level FD stays
     # open in the child until the child exits.
+    return proc.pid
+
+
+# ---------------------------------------------------------------------------
+# Long-lived dispatcher daemon
+# ---------------------------------------------------------------------------
+
+def run_daemon(
+    *,
+    interval: float = 60.0,
+    max_spawn: Optional[int] = None,
+    failure_limit: int = DEFAULT_SPAWN_FAILURE_LIMIT,
+    stop_event=None,
+    on_tick=None,
+) -> None:
+    """Run the dispatcher in a loop until interrupted.
+
+    Calls :func:`dispatch_once` every ``interval`` seconds. Exits cleanly
+    on SIGINT / SIGTERM so ``hermes kanban daemon`` is systemd-friendly.
+    ``stop_event`` (a :class:`threading.Event`) and ``on_tick`` (a
+    callable receiving the :class:`DispatchResult`) are test hooks.
+    """
+    import signal
+    import threading
+
+    if stop_event is None:
+        stop_event = threading.Event()
+
+    def _handle(_signum, _frame):
+        stop_event.set()
+
+    # Install handlers only when running on the main thread — tests call
+    # this inline from worker threads and signal() would raise there.
+    if threading.current_thread() is threading.main_thread():
+        for sig_name in ("SIGINT", "SIGTERM"):
+            sig = getattr(signal, sig_name, None)
+            if sig is not None:
+                try:
+                    signal.signal(sig, _handle)
+                except (ValueError, OSError):
+                    pass
+
+    while not stop_event.is_set():
+        try:
+            with contextlib.closing(connect()) as conn:
+                res = dispatch_once(
+                    conn,
+                    max_spawn=max_spawn,
+                    failure_limit=failure_limit,
+                )
+            if on_tick is not None:
+                try:
+                    on_tick(res)
+                except Exception:
+                    pass
+        except Exception:
+            # Don't let any single tick kill the daemon.
+            import traceback
+            traceback.print_exc()
+        stop_event.wait(timeout=interval)
 
 
 # ---------------------------------------------------------------------------
@@ -1079,3 +1387,266 @@ def build_worker_context(conn: sqlite3.Connection, task_id: str) -> str:
             lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Stats + SLA helpers
+# ---------------------------------------------------------------------------
+
+def board_stats(conn: sqlite3.Connection) -> dict:
+    """Per-status + per-assignee counts, plus the oldest ``ready`` age in
+    seconds (the clearest staleness signal for a router or HUD).
+    """
+    by_status: dict[str, int] = {}
+    for row in conn.execute(
+        "SELECT status, COUNT(*) AS n FROM tasks "
+        "WHERE status != 'archived' GROUP BY status"
+    ):
+        by_status[row["status"]] = int(row["n"])
+
+    by_assignee: dict[str, dict[str, int]] = {}
+    for row in conn.execute(
+        "SELECT assignee, status, COUNT(*) AS n FROM tasks "
+        "WHERE status != 'archived' AND assignee IS NOT NULL "
+        "GROUP BY assignee, status"
+    ):
+        by_assignee.setdefault(row["assignee"], {})[row["status"]] = int(row["n"])
+
+    oldest_row = conn.execute(
+        "SELECT MIN(created_at) AS ts FROM tasks WHERE status = 'ready'"
+    ).fetchone()
+    now = int(time.time())
+    oldest_ready_age = (
+        (now - int(oldest_row["ts"]))
+        if oldest_row and oldest_row["ts"] is not None else None
+    )
+
+    return {
+        "by_status": by_status,
+        "by_assignee": by_assignee,
+        "oldest_ready_age_seconds": oldest_ready_age,
+        "now": now,
+    }
+
+
+def task_age(task: Task) -> dict:
+    """Return age metrics for a single task. All values are seconds or None."""
+    now = int(time.time())
+    age_since_created = now - int(task.created_at) if task.created_at else None
+    age_since_started = (
+        now - int(task.started_at) if task.started_at else None
+    )
+    time_to_complete = (
+        int(task.completed_at) - int(task.started_at or task.created_at)
+        if task.completed_at else None
+    )
+    return {
+        "created_age_seconds": age_since_created,
+        "started_age_seconds": age_since_started,
+        "time_to_complete_seconds": time_to_complete,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Notification subscriptions (used by the gateway kanban-notifier)
+# ---------------------------------------------------------------------------
+
+def add_notify_sub(
+    conn: sqlite3.Connection,
+    *,
+    task_id: str,
+    platform: str,
+    chat_id: str,
+    thread_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> None:
+    """Register a gateway source that wants terminal-state notifications
+    for ``task_id``. Idempotent on (task, platform, chat, thread)."""
+    now = int(time.time())
+    with write_txn(conn):
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO kanban_notify_subs
+                (task_id, platform, chat_id, thread_id, user_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (task_id, platform, chat_id, thread_id or "", user_id, now),
+        )
+
+
+def list_notify_subs(
+    conn: sqlite3.Connection, task_id: Optional[str] = None,
+) -> list[dict]:
+    if task_id is not None:
+        rows = conn.execute(
+            "SELECT * FROM kanban_notify_subs WHERE task_id = ?", (task_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM kanban_notify_subs").fetchall()
+    return [dict(r) for r in rows]
+
+
+def remove_notify_sub(
+    conn: sqlite3.Connection,
+    *,
+    task_id: str,
+    platform: str,
+    chat_id: str,
+    thread_id: Optional[str] = None,
+) -> bool:
+    with write_txn(conn):
+        cur = conn.execute(
+            "DELETE FROM kanban_notify_subs WHERE task_id = ? "
+            "AND platform = ? AND chat_id = ? AND thread_id = ?",
+            (task_id, platform, chat_id, thread_id or ""),
+        )
+    return cur.rowcount > 0
+
+
+def unseen_events_for_sub(
+    conn: sqlite3.Connection,
+    *,
+    task_id: str,
+    platform: str,
+    chat_id: str,
+    thread_id: Optional[str] = None,
+    kinds: Optional[Iterable[str]] = None,
+) -> tuple[int, list[Event]]:
+    """Return ``(new_cursor, events)`` for a given subscription.
+
+    Only events with ``id > last_event_id`` are returned. The subscription's
+    cursor is NOT advanced here; call :func:`advance_notify_cursor` after
+    the gateway has successfully delivered the notifications.
+    """
+    row = conn.execute(
+        "SELECT last_event_id FROM kanban_notify_subs "
+        "WHERE task_id = ? AND platform = ? AND chat_id = ? AND thread_id = ?",
+        (task_id, platform, chat_id, thread_id or ""),
+    ).fetchone()
+    if row is None:
+        return 0, []
+    cursor = int(row["last_event_id"])
+    kind_list = list(kinds) if kinds else None
+    q = (
+        "SELECT * FROM task_events WHERE task_id = ? AND id > ? "
+        + ("AND kind IN (" + ",".join("?" * len(kind_list)) + ") " if kind_list else "")
+        + "ORDER BY id ASC"
+    )
+    params: list[Any] = [task_id, cursor]
+    if kind_list:
+        params.extend(kind_list)
+    rows = conn.execute(q, params).fetchall()
+    out: list[Event] = []
+    max_id = cursor
+    for r in rows:
+        try:
+            payload = json.loads(r["payload"]) if r["payload"] else None
+        except Exception:
+            payload = None
+        out.append(Event(
+            id=r["id"], task_id=r["task_id"], kind=r["kind"],
+            payload=payload, created_at=r["created_at"],
+        ))
+        max_id = max(max_id, int(r["id"]))
+    return max_id, out
+
+
+def advance_notify_cursor(
+    conn: sqlite3.Connection,
+    *,
+    task_id: str,
+    platform: str,
+    chat_id: str,
+    thread_id: Optional[str] = None,
+    new_cursor: int,
+) -> None:
+    with write_txn(conn):
+        conn.execute(
+            "UPDATE kanban_notify_subs SET last_event_id = ? "
+            "WHERE task_id = ? AND platform = ? AND chat_id = ? AND thread_id = ?",
+            (int(new_cursor), task_id, platform, chat_id, thread_id or ""),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Retention + garbage collection
+# ---------------------------------------------------------------------------
+
+def gc_events(
+    conn: sqlite3.Connection, *, older_than_seconds: int = 30 * 24 * 3600,
+) -> int:
+    """Delete task_events rows older than ``older_than_seconds`` for tasks
+    in a terminal state (``done`` or ``archived``). Returns the number of
+    rows deleted. Running / ready / blocked tasks keep their full event
+    history."""
+    cutoff = int(time.time()) - int(older_than_seconds)
+    with write_txn(conn):
+        cur = conn.execute(
+            "DELETE FROM task_events WHERE created_at < ? AND task_id IN "
+            "(SELECT id FROM tasks WHERE status IN ('done', 'archived'))",
+            (cutoff,),
+        )
+    return int(cur.rowcount or 0)
+
+
+def gc_worker_logs(
+    *, older_than_seconds: int = 30 * 24 * 3600,
+) -> int:
+    """Delete worker log files older than ``older_than_seconds``. Returns
+    the number of files removed. Kept separate from ``gc_events`` because
+    log files live on disk, not in SQLite."""
+    from hermes_constants import get_hermes_home
+    log_dir = get_hermes_home() / "kanban" / "logs"
+    if not log_dir.exists():
+        return 0
+    cutoff = time.time() - older_than_seconds
+    removed = 0
+    for p in log_dir.iterdir():
+        try:
+            if p.is_file() and p.stat().st_mtime < cutoff:
+                p.unlink()
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
+# ---------------------------------------------------------------------------
+# Worker log accessor
+# ---------------------------------------------------------------------------
+
+def worker_log_path(task_id: str) -> Path:
+    """Return the path to a worker's log file. The file may not exist
+    (task never spawned, or log already GC'd)."""
+    from hermes_constants import get_hermes_home
+    return get_hermes_home() / "kanban" / "logs" / f"{task_id}.log"
+
+
+def read_worker_log(
+    task_id: str, *, tail_bytes: Optional[int] = None,
+) -> Optional[str]:
+    """Read the worker log for ``task_id``. Returns None if the file
+    doesn't exist. If ``tail_bytes`` is set, only the last N bytes are
+    returned (useful for the dashboard drawer which shouldn't page megabytes)."""
+    path = worker_log_path(task_id)
+    if not path.exists():
+        return None
+    try:
+        if tail_bytes is None:
+            return path.read_text(encoding="utf-8", errors="replace")
+        size = path.stat().st_size
+        with open(path, "rb") as f:
+            if size > tail_bytes:
+                f.seek(size - tail_bytes)
+                # Skip a partial line if we tailed mid-line. But if the
+                # window has no newline at all (one giant log line),
+                # readline() would eat everything — in that case don't
+                # skip and return the raw tail.
+                probe = f.tell()
+                partial = f.readline()
+                if not partial.endswith(b"\n") and f.tell() >= size:
+                    f.seek(probe)
+            data = f.read()
+        return data.decode("utf-8", errors="replace")
+    except OSError:
+        return None

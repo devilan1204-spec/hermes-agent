@@ -654,3 +654,31 @@
   transform: scale(1.02);
   transition: none;
 }
+
+
+/* ---- Staleness tiers ------------------------------------------------ */
+
+.hermes-kanban-card--stale-amber :where(.hermes-kanban-card-content) {
+  box-shadow: 0 0 0 1px #d4b34888 inset;
+}
+.hermes-kanban-card--stale-amber:hover :where(.hermes-kanban-card-content) {
+  box-shadow: 0 0 0 2px #d4b348 inset;
+}
+.hermes-kanban-card--stale-red :where(.hermes-kanban-card-content) {
+  box-shadow: 0 0 0 1px var(--color-destructive, #d14a4a) inset,
+              0 0 8px color-mix(in srgb, var(--color-destructive, #d14a4a) 30%, transparent);
+}
+.hermes-kanban-card--stale-red:hover :where(.hermes-kanban-card-content) {
+  box-shadow: 0 0 0 2px var(--color-destructive, #d14a4a) inset,
+              0 0 10px color-mix(in srgb, var(--color-destructive, #d14a4a) 45%, transparent);
+}
+
+/* ---- Worker log pane ------------------------------------------------ */
+
+.hermes-kanban-log {
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}

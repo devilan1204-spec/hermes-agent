@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes Kanban dispatcher (hermes kanban daemon)
+Documentation=https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env hermes kanban daemon --interval 60 --pidfile %t/hermes-kanban-dispatcher.pid
+Restart=on-failure
+RestartSec=5
+# Log to the journal via stdout/stderr; the dispatcher also writes per-task
+# worker output to $HERMES_HOME/kanban/logs/<task>.log.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

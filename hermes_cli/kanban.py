@@ -132,6 +132,9 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
     p_create.add_argument("--priority", type=int, default=0, help="Priority tiebreaker")
     p_create.add_argument("--triage", action="store_true",
                           help="Park in triage — a specifier will flesh out the spec and promote to todo")
+    p_create.add_argument("--idempotency-key", default=None,
+                          help="Dedup key. If a non-archived task with this key exists, "
+                               "its id is returned instead of creating a duplicate.")
     p_create.add_argument("--created-by", default="user",
                           help="Author name recorded on the task (default: user)")
     p_create.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -182,19 +185,22 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
     p_comment.add_argument("--author", default=None,
                            help="Author name (default: $HERMES_PROFILE or 'user')")
 
-    p_complete = sub.add_parser("complete", help="Mark a task done")
-    p_complete.add_argument("task_id")
+    p_complete = sub.add_parser("complete", help="Mark one or more tasks done")
+    p_complete.add_argument("task_ids", nargs="+",
+                            help="One or more task ids (only --result applies to all of them)")
     p_complete.add_argument("--result", default=None, help="Result summary")
 
-    p_block = sub.add_parser("block", help="Mark a task blocked (needs input)")
+    p_block = sub.add_parser("block", help="Mark one or more tasks blocked")
     p_block.add_argument("task_id")
     p_block.add_argument("reason", nargs="*", help="Reason (also appended as a comment)")
+    p_block.add_argument("--ids", nargs="+", default=None,
+                         help="Additional task ids to block with the same reason (bulk mode)")
 
-    p_unblock = sub.add_parser("unblock", help="Return a blocked task to ready")
-    p_unblock.add_argument("task_id")
+    p_unblock = sub.add_parser("unblock", help="Return one or more blocked tasks to ready")
+    p_unblock.add_argument("task_ids", nargs="+")
 
-    p_archive = sub.add_parser("archive", help="Archive a task (hide from default list)")
-    p_archive.add_argument("task_id")
+    p_archive = sub.add_parser("archive", help="Archive one or more tasks")
+    p_archive.add_argument("task_ids", nargs="+")
 
     # --- tail ---
     p_tail = sub.add_parser("tail", help="Follow a task's event stream")
@@ -210,7 +216,85 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
                         help="Don't actually spawn processes; just print what would happen")
     p_disp.add_argument("--max", type=int, default=None,
                         help="Cap number of spawns this pass")
+    p_disp.add_argument("--failure-limit", type=int,
+                        default=kb.DEFAULT_SPAWN_FAILURE_LIMIT,
+                        help=f"Auto-block a task after this many consecutive spawn failures "
+                             f"(default: {kb.DEFAULT_SPAWN_FAILURE_LIMIT})")
     p_disp.add_argument("--json", action="store_true")
+
+    # --- daemon ---
+    p_daemon = sub.add_parser(
+        "daemon",
+        help="Run the dispatcher continuously until SIGINT/SIGTERM",
+    )
+    p_daemon.add_argument("--interval", type=float, default=60.0,
+                          help="Seconds between dispatch ticks (default: 60)")
+    p_daemon.add_argument("--max", type=int, default=None,
+                          help="Cap number of spawns per tick")
+    p_daemon.add_argument("--failure-limit", type=int,
+                          default=kb.DEFAULT_SPAWN_FAILURE_LIMIT)
+    p_daemon.add_argument("--pidfile", default=None,
+                          help="Write the daemon's PID to this file on start")
+    p_daemon.add_argument("--verbose", "-v", action="store_true",
+                          help="Log each tick's outcome to stdout")
+
+    # --- watch ---
+    p_watch = sub.add_parser(
+        "watch",
+        help="Live-stream task_events to the terminal (Ctrl+C to exit)",
+    )
+    p_watch.add_argument("--assignee", default=None,
+                         help="Only show events for tasks assigned to this profile")
+    p_watch.add_argument("--tenant", default=None,
+                         help="Only show events from tasks in this tenant")
+    p_watch.add_argument("--kinds", default=None,
+                         help="Comma-separated event kinds to include "
+                              "(e.g. 'completed,blocked,spawn_auto_blocked')")
+    p_watch.add_argument("--interval", type=float, default=0.5,
+                         help="Poll interval in seconds (default: 0.5)")
+
+    # --- stats ---
+    p_stats = sub.add_parser(
+        "stats", help="Per-status + per-assignee counts + oldest-ready age",
+    )
+    p_stats.add_argument("--json", action="store_true")
+
+    # --- notify subscribe / list / remove ---
+    p_nsub = sub.add_parser(
+        "notify-subscribe",
+        help="Subscribe a gateway source to a task's terminal events "
+             "(used by /kanban subscribe in the gateway adapter)",
+    )
+    p_nsub.add_argument("task_id")
+    p_nsub.add_argument("--platform", required=True)
+    p_nsub.add_argument("--chat-id", required=True)
+    p_nsub.add_argument("--thread-id", default=None)
+    p_nsub.add_argument("--user-id", default=None)
+
+    p_nlist = sub.add_parser(
+        "notify-list",
+        help="List notification subscriptions (optionally for a single task)",
+    )
+    p_nlist.add_argument("task_id", nargs="?", default=None)
+    p_nlist.add_argument("--json", action="store_true")
+
+    p_nrm = sub.add_parser(
+        "notify-unsubscribe",
+        help="Remove a gateway subscription from a task",
+    )
+    p_nrm.add_argument("task_id")
+    p_nrm.add_argument("--platform", required=True)
+    p_nrm.add_argument("--chat-id", required=True)
+    p_nrm.add_argument("--thread-id", default=None)
+
+    # --- log ---
+    p_log = sub.add_parser(
+        "log",
+        help="Print the worker log for a task (from $HERMES_HOME/kanban/logs/)",
+    )
+    p_log.add_argument("task_id")
+    p_log.add_argument("--tail", type=int, default=None,
+                       help="Only print the last N bytes")
 
     # --- context --- (for spawned workers)
     p_ctx = sub.add_parser(
@@ -221,9 +305,13 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
     p_ctx.add_argument("task_id")
 
     # --- gc ---
-    sub.add_parser(
-        "gc", help="Garbage-collect workspaces of archived tasks"
+    p_gc = sub.add_parser(
+        "gc", help="Garbage-collect archived-task workspaces, old events, and old logs",
     )
+    p_gc.add_argument("--event-retention-days", type=int, default=30,
+                      help="Delete task_events older than N days for terminal tasks (default: 30)")
+    p_gc.add_argument("--log-retention-days", type=int, default=30,
+                      help="Delete worker log files older than N days (default: 30)")
 
     kanban_parser.set_defaults(_kanban_parser=kanban_parser)
     return kanban_parser
@@ -269,6 +357,13 @@ def kanban_command(args: argparse.Namespace) -> int:
         "archive":  _cmd_archive,
         "tail":     _cmd_tail,
         "dispatch": _cmd_dispatch,
+        "daemon":   _cmd_daemon,
+        "watch":    _cmd_watch,
+        "stats":    _cmd_stats,
+        "log":      _cmd_log,
+        "notify-subscribe":   _cmd_notify_subscribe,
+        "notify-list":        _cmd_notify_list,
+        "notify-unsubscribe": _cmd_notify_unsubscribe,
         "context":  _cmd_context,
         "gc":       _cmd_gc,
     }
@@ -303,6 +398,15 @@ def _profile_author() -> str:
 def _cmd_init(args: argparse.Namespace) -> int:
     path = kb.init_db()
     print(f"Kanban DB initialized at {path}")
+    print()
+    print("Next step: run the dispatcher so ready tasks actually get picked up.")
+    print("  # Foreground (interactive, Ctrl-C to stop):")
+    print("  hermes kanban daemon")
+    print()
+    print("  # As a systemd user unit (persists across logins):")
+    print("  systemctl --user enable --now hermes-kanban-dispatcher.service")
+    print()
+    print("Without a running dispatcher, tasks stay in 'ready' forever.")
     return 0
 
 
@@ -321,6 +425,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
             priority=args.priority,
             parents=tuple(args.parent or ()),
             triage=bool(getattr(args, "triage", False)),
+            idempotency_key=getattr(args, "idempotency_key", None),
         )
         task = kb.get_task(conn, task_id)
     if getattr(args, "json", False):
@@ -482,47 +587,69 @@ def _cmd_comment(args: argparse.Namespace) -> int:
 
 
 def _cmd_complete(args: argparse.Namespace) -> int:
-    with kb.connect() as conn:
-        ok = kb.complete_task(conn, args.task_id, result=args.result)
-    if not ok:
-        print(f"cannot complete {args.task_id} (unknown id or terminal state)", file=sys.stderr)
+    """Mark one or more tasks done. Supports a single id or a list."""
+    ids = list(args.task_ids or [])
+    if not ids:
+        print("at least one task_id is required", file=sys.stderr)
         return 1
-    print(f"Completed {args.task_id}")
-    return 0
+    failed: list[str] = []
+    with kb.connect() as conn:
+        for tid in ids:
+            if not kb.complete_task(conn, tid, result=args.result):
+                failed.append(tid)
+                print(f"cannot complete {tid} (unknown id or terminal state)", file=sys.stderr)
+            else:
+                print(f"Completed {tid}")
+    return 0 if not failed else 1
 
 
 def _cmd_block(args: argparse.Namespace) -> int:
     reason = " ".join(args.reason).strip() if args.reason else None
     author = _profile_author()
+    ids = [args.task_id] + list(getattr(args, "ids", None) or [])
+    failed: list[str] = []
     with kb.connect() as conn:
-        if reason:
-            kb.add_comment(conn, args.task_id, author, f"BLOCKED: {reason}")
-        ok = kb.block_task(conn, args.task_id, reason=reason)
-    if not ok:
-        print(f"cannot block {args.task_id}", file=sys.stderr)
-        return 1
-    print(f"Blocked {args.task_id}" + (f": {reason}" if reason else ""))
-    return 0
+        for tid in ids:
+            if reason:
+                kb.add_comment(conn, tid, author, f"BLOCKED: {reason}")
+            if not kb.block_task(conn, tid, reason=reason):
+                failed.append(tid)
+                print(f"cannot block {tid}", file=sys.stderr)
+            else:
+                print(f"Blocked {tid}" + (f": {reason}" if reason else ""))
+    return 0 if not failed else 1
 
 
 def _cmd_unblock(args: argparse.Namespace) -> int:
-    with kb.connect() as conn:
-        ok = kb.unblock_task(conn, args.task_id)
-    if not ok:
-        print(f"cannot unblock {args.task_id} (not blocked?)", file=sys.stderr)
+    ids = list(args.task_ids or [])
+    if not ids:
+        print("at least one task_id is required", file=sys.stderr)
         return 1
-    print(f"Unblocked {args.task_id}")
-    return 0
+    failed: list[str] = []
+    with kb.connect() as conn:
+        for tid in ids:
+            if not kb.unblock_task(conn, tid):
+                failed.append(tid)
+                print(f"cannot unblock {tid} (not blocked?)", file=sys.stderr)
+            else:
+                print(f"Unblocked {tid}")
+    return 0 if not failed else 1
 
 
 def _cmd_archive(args: argparse.Namespace) -> int:
-    with kb.connect() as conn:
-        ok = kb.archive_task(conn, args.task_id)
-    if not ok:
-        print(f"cannot archive {args.task_id}", file=sys.stderr)
+    ids = list(args.task_ids or [])
+    if not ids:
+        print("at least one task_id is required", file=sys.stderr)
         return 1
-    print(f"Archived {args.task_id}")
-    return 0
+    failed: list[str] = []
+    with kb.connect() as conn:
+        for tid in ids:
+            if not kb.archive_task(conn, tid):
+                failed.append(tid)
+                print(f"cannot archive {tid}", file=sys.stderr)
+            else:
+                print(f"Archived {tid}")
+    return 0 if not failed else 1
 
 
 def _cmd_tail(args: argparse.Namespace) -> int:
@@ -549,10 +676,13 @@ def _cmd_dispatch(args: argparse.Namespace) -> int:
             conn,
             dry_run=args.dry_run,
             max_spawn=args.max,
+            failure_limit=getattr(args, "failure_limit", kb.DEFAULT_SPAWN_FAILURE_LIMIT),
         )
     if getattr(args, "json", False):
         print(json.dumps({
             "reclaimed": res.reclaimed,
+            "crashed": res.crashed,
+            "auto_blocked": res.auto_blocked,
             "promoted": res.promoted,
             "spawned": [
                 {"task_id": tid, "assignee": who, "workspace": ws}
@@ -561,14 +691,198 @@ def _cmd_dispatch(args: argparse.Namespace) -> int:
             "skipped_unassigned": res.skipped_unassigned,
         }, indent=2))
         return 0
-    print(f"Reclaimed:  {res.reclaimed}")
-    print(f"Promoted:   {res.promoted}")
-    print(f"Spawned:    {len(res.spawned)}")
+    print(f"Reclaimed:    {res.reclaimed}")
+    print(f"Crashed:      {len(res.crashed)}")
+    if res.crashed:
+        print(f"  {', '.join(res.crashed)}")
+    print(f"Auto-blocked: {len(res.auto_blocked)}")
+    if res.auto_blocked:
+        print(f"  {', '.join(res.auto_blocked)}")
+    print(f"Promoted:     {res.promoted}")
+    print(f"Spawned:      {len(res.spawned)}")
     for tid, who, ws in res.spawned:
         tag = " (dry)" if args.dry_run else ""
         print(f"  - {tid}  ->  {who}  @ {ws or '-'}{tag}")
     if res.skipped_unassigned:
         print(f"Skipped (unassigned): {', '.join(res.skipped_unassigned)}")
+    return 0
+
+
+def _cmd_daemon(args: argparse.Namespace) -> int:
+    """Run the dispatcher continuously. Foreground-safe, signal-clean."""
+    # Make sure the DB exists before printing "started" so the user sees the
+    # correct DB path and any init error surfaces immediately.
+    kb.init_db()
+
+    pidfile = getattr(args, "pidfile", None)
+    if pidfile:
+        try:
+            Path(pidfile).parent.mkdir(parents=True, exist_ok=True)
+            Path(pidfile).write_text(str(os.getpid()), encoding="utf-8")
+        except OSError as exc:
+            print(f"warning: could not write pidfile {pidfile}: {exc}", file=sys.stderr)
+
+    verbose = bool(getattr(args, "verbose", False))
+    print(f"Kanban dispatcher running (interval={args.interval}s, pid={os.getpid()}). "
+          f"Ctrl-C to stop.")
+
+    def _on_tick(res):
+        if not verbose:
+            return
+        did_work = (
+            res.reclaimed or res.crashed or res.promoted
+            or res.spawned or res.auto_blocked
+        )
+        if did_work:
+            print(
+                f"[{_fmt_ts(int(time.time()))}] "
+                f"reclaimed={res.reclaimed} crashed={len(res.crashed)} "
+                f"promoted={res.promoted} spawned={len(res.spawned)} "
+                f"auto_blocked={len(res.auto_blocked)}",
+                flush=True,
+            )
+
+    try:
+        kb.run_daemon(
+            interval=args.interval,
+            max_spawn=args.max,
+            failure_limit=getattr(args, "failure_limit", kb.DEFAULT_SPAWN_FAILURE_LIMIT),
+            on_tick=_on_tick,
+        )
+    finally:
+        if pidfile:
+            try:
+                Path(pidfile).unlink()
+            except OSError:
+                pass
+    print("(dispatcher stopped)")
+    return 0
+
+
+def _cmd_watch(args: argparse.Namespace) -> int:
+    """Live-stream task_events to the terminal."""
+    kinds = (
+        {k.strip() for k in args.kinds.split(",") if k.strip()}
+        if args.kinds else None
+    )
+    cursor = 0
+    print("Watching kanban events. Ctrl-C to stop.", flush=True)
+    # Seed cursor at the latest id so we don't replay history.
+    with kb.connect() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(MAX(id), 0) AS m FROM task_events"
+        ).fetchone()
+        cursor = int(row["m"])
+
+    try:
+        while True:
+            with kb.connect() as conn:
+                rows = conn.execute(
+                    "SELECT e.id, e.task_id, e.kind, e.payload, e.created_at, "
+                    "       t.assignee, t.tenant "
+                    "FROM task_events e LEFT JOIN tasks t ON t.id = e.task_id "
+                    "WHERE e.id > ? ORDER BY e.id ASC LIMIT 200",
+                    (cursor,),
+                ).fetchall()
+            for r in rows:
+                cursor = max(cursor, int(r["id"]))
+                if kinds and r["kind"] not in kinds:
+                    continue
+                if args.assignee and r["assignee"] != args.assignee:
+                    continue
+                if args.tenant and r["tenant"] != args.tenant:
+                    continue
+                try:
+                    payload = json.loads(r["payload"]) if r["payload"] else None
+                except Exception:
+                    payload = None
+                pl = f" {payload}" if payload else ""
+                print(
+                    f"[{_fmt_ts(r['created_at'])}] {r['task_id']:10s} "
+                    f"{r['kind']:18s} (@{r['assignee'] or '-'}){pl}",
+                    flush=True,
+                )
+            time.sleep(max(0.1, args.interval))
+    except KeyboardInterrupt:
+        print("\n(stopped)")
+        return 0
+
+
+def _cmd_stats(args: argparse.Namespace) -> int:
+    with kb.connect() as conn:
+        stats = kb.board_stats(conn)
+    if getattr(args, "json", False):
+        print(json.dumps(stats, indent=2, ensure_ascii=False))
+        return 0
+    print("By status:")
+    for k in ("triage", "todo", "ready", "running", "blocked", "done"):
+        print(f"  {k:8s}  {stats['by_status'].get(k, 0)}")
+    if stats["by_assignee"]:
+        print("\nBy assignee:")
+        for who, counts in sorted(stats["by_assignee"].items()):
+            parts = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+            print(f"  {who:20s}  {parts}")
+    age = stats["oldest_ready_age_seconds"]
+    if age is not None:
+        print(f"\nOldest ready task age: {int(age)}s")
+    return 0
+
+
+def _cmd_notify_subscribe(args: argparse.Namespace) -> int:
+    with kb.connect() as conn:
+        if kb.get_task(conn, args.task_id) is None:
+            print(f"no such task: {args.task_id}", file=sys.stderr)
+            return 1
+        kb.add_notify_sub(
+            conn, task_id=args.task_id,
+            platform=args.platform, chat_id=args.chat_id,
+            thread_id=args.thread_id, user_id=args.user_id,
+        )
+    print(f"Subscribed {args.platform}:{args.chat_id}"
+          + (f":{args.thread_id}" if args.thread_id else "")
+          + f" to {args.task_id}")
+    return 0
+
+
+def _cmd_notify_list(args: argparse.Namespace) -> int:
+    with kb.connect() as conn:
+        subs = kb.list_notify_subs(conn, args.task_id)
+    if getattr(args, "json", False):
+        print(json.dumps(subs, indent=2, ensure_ascii=False))
+        return 0
+    if not subs:
+        print("(no subscriptions)")
+        return 0
+    for s in subs:
+        thr = f":{s['thread_id']}" if s.get("thread_id") else ""
+        print(f"  {s['task_id']:10s}  {s['platform']}:{s['chat_id']}{thr}"
+              f"  (since event {s['last_event_id']})")
+    return 0
+
+
+def _cmd_notify_unsubscribe(args: argparse.Namespace) -> int:
+    with kb.connect() as conn:
+        ok = kb.remove_notify_sub(
+            conn, task_id=args.task_id,
+            platform=args.platform, chat_id=args.chat_id,
+            thread_id=args.thread_id,
+        )
+    if not ok:
+        print("(no such subscription)", file=sys.stderr)
+        return 1
+    print(f"Unsubscribed from {args.task_id}")
+    return 0
+
+
+def _cmd_log(args: argparse.Namespace) -> int:
+    content = kb.read_worker_log(args.task_id, tail_bytes=args.tail)
+    if content is None:
+        print(f"(no log for {args.task_id} — task may not have spawned yet)",
+              file=sys.stderr)
+        return 1
+    sys.stdout.write(content)
+    if not content.endswith("\n"):
+        sys.stdout.write("\n")
     return 0
 
 
@@ -580,14 +894,11 @@ def _cmd_context(args: argparse.Namespace) -> int:
 
 
 def _cmd_gc(args: argparse.Namespace) -> int:
-    """Remove scratch workspaces of archived tasks.
-
-    Only touches directories under the default scratch root; leaves user
-    ``dir:`` workspaces and ``worktree`` dirs alone (user owns those).
-    """
+    """Remove scratch workspaces of archived tasks, prune old events, and
+    delete old worker logs."""
     import shutil
     scratch_root = kb.workspaces_root()
-    removed = 0
+    removed_ws = 0
     with kb.connect() as conn:
         rows = conn.execute(
             "SELECT id, workspace_kind, workspace_path FROM tasks WHERE status = 'archived'"
@@ -601,15 +912,25 @@ def _cmd_gc(args: argparse.Namespace) -> int:
         except OSError:
             continue
         try:
-            scratch_root.resolve().relative_to(scratch_root.resolve())
             path.relative_to(scratch_root.resolve())
         except ValueError:
             # Safety: never delete outside the scratch root.
             continue
         if path.exists() and path.is_dir():
             shutil.rmtree(path, ignore_errors=True)
-            removed += 1
-    print(f"GC complete: removed {removed} scratch workspace(s)")
+            removed_ws += 1
+
+    event_days = getattr(args, "event_retention_days", 30)
+    log_days = getattr(args, "log_retention_days", 30)
+    with kb.connect() as conn:
+        removed_events = kb.gc_events(
+            conn, older_than_seconds=event_days * 24 * 3600,
+        )
+    removed_logs = kb.gc_worker_logs(
+        older_than_seconds=log_days * 24 * 3600,
+    )
+    print(f"GC complete: {removed_ws} workspace(s), "
+          f"{removed_events} event row(s), {removed_logs} log file(s) removed")
     return 0
 
 

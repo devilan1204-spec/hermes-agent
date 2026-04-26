@@ -43,14 +43,14 @@ They coexist: a kanban worker may call `delegate_task` internally during its run
 
 ## Core concepts
 
-- **Task** — a row with title, optional body, one assignee (a profile name), status (`todo | ready | running | blocked | done | archived`), optional tenant namespace.
+- **Task** — a row with title, optional body, one assignee (a profile name), status (`triage | todo | ready | running | blocked | done | archived`), optional tenant namespace, optional idempotency key (dedup for retried automation).
 - **Link** — `task_links` row recording a parent → child dependency. The dispatcher promotes `todo → ready` when all parents are `done`.
 - **Comment** — the inter-agent protocol. Agents and humans append comments; when a worker is (re-)spawned it reads the full comment thread as part of its context.
 - **Workspace** — the directory a worker operates in. Three kinds:
   - `scratch` (default) — fresh tmp dir under `~/.hermes/kanban/workspaces/<id>/`.
   - `dir:<path>` — an existing shared directory (Obsidian vault, mail ops dir, per-account folder).
   - `worktree` — a git worktree under `.worktrees/<id>/` for coding tasks.
-- **Dispatcher** — `hermes kanban dispatch` runs a one-shot pass: reclaim stale claims, promote ready tasks, atomically claim, spawn assigned profiles. Runs via cron every 60 seconds.
+- **Dispatcher** — a long-lived loop that, every N seconds (default 60): reclaims stale claims, reclaims crashed workers (PID gone but TTL not yet expired), promotes ready tasks, atomically claims, spawns assigned profiles. Runs as `hermes kanban daemon` (foreground) or as a systemd user service. After ~5 consecutive spawn failures on the same task the dispatcher auto-blocks it with the last error as the reason — prevents thrashing on tasks whose profile doesn't exist, workspace can't mount, etc.
 - **Tenant** — optional string namespace. One specialist fleet can serve multiple businesses (`--tenant business-a`) with data isolation by workspace path and memory key prefix.
 
 ## Quick start
@@ -59,23 +59,58 @@ They coexist: a kanban worker may call `delegate_task` internally during its run
 # 1. Create the board
 hermes kanban init
 
-# 2. Create a task
+# 2. Start the dispatcher (foreground; Ctrl-C to stop)
+hermes kanban daemon &
+
+# 3. Create a task
 hermes kanban create "research AI funding landscape" --assignee researcher
 
-# 3. List what's on the board
-hermes kanban list
+# 4. Watch activity live
+hermes kanban watch
 
-# 4. Run a dispatcher pass (dry-run to preview, real to spawn workers)
-hermes kanban dispatch --dry-run
-hermes kanban dispatch
+# 5. See the board
+hermes kanban list
+hermes kanban stats
 ```
 
-To have the board run continuously, schedule the dispatcher:
+### Running the dispatcher as a service
+
+For production, install the systemd user unit shipped at
+`plugins/kanban/systemd/hermes-kanban-dispatcher.service`:
 
 ```bash
-hermes cron add --schedule "*/1 * * * *" \
-    --name kanban-dispatch \
-    hermes kanban dispatch
+mkdir -p ~/.config/systemd/user
+cp plugins/kanban/systemd/hermes-kanban-dispatcher.service \
+   ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now hermes-kanban-dispatcher.service
+systemctl --user status hermes-kanban-dispatcher
+journalctl --user -u hermes-kanban-dispatcher -f   # follow logs
+```
+
+Without a running dispatcher `ready` tasks stay where they are — `hermes kanban init` will remind you of this on first run.
+
+### Idempotent create (for automation / webhooks)
+
+```bash
+# First call creates the task. Any subsequent call with the same key
+# returns the existing task id instead of duplicating.
+hermes kanban create "nightly ops review" \
+    --assignee ops \
+    --idempotency-key "nightly-ops-$(date -u +%Y-%m-%d)" \
+    --json
+```
+
+### Bulk CLI verbs
+
+All the lifecycle verbs accept multiple ids so you can clean up a batch
+in one command:
+
+```bash
+hermes kanban complete t_abc t_def t_hij --result "batch wrap"
+hermes kanban archive  t_abc t_def t_hij
+hermes kanban unblock  t_abc t_def
+hermes kanban block    t_abc "need input" --ids t_def t_hij
 ```
 
 ## The worker skill
@@ -223,11 +258,12 @@ The GUI is deliberately thin. Everything the plugin does is reachable from the C
 ## CLI command reference
 
 ```
-hermes kanban init                                     # create kanban.db
+hermes kanban init                                     # create kanban.db + print daemon hint
 hermes kanban create "<title>" [--body ...] [--assignee <profile>]
                                 [--parent <id>]... [--tenant <name>]
                                 [--workspace scratch|worktree|dir:<path>]
-                                [--priority N] [--triage] [--json]
+                                [--priority N] [--triage] [--idempotency-key KEY]
+                                [--json]
 hermes kanban list [--mine] [--assignee P] [--status S] [--tenant T] [--archived] [--json]
 hermes kanban show <id> [--json]
 hermes kanban assign <id> <profile>                    # or 'none' to unassign
@@ -235,14 +271,30 @@ hermes kanban link <parent_id> <child_id>
 hermes kanban unlink <parent_id> <child_id>
 hermes kanban claim <id> [--ttl SECONDS]
 hermes kanban comment <id> "<text>" [--author NAME]
-hermes kanban complete <id> [--result "..."]
-hermes kanban block <id> "<reason>"
-hermes kanban unblock <id>
-hermes kanban archive <id>
-hermes kanban tail <id>                                # follow event stream
-hermes kanban dispatch [--dry-run] [--max N] [--json]
+
+# Bulk verbs — accept multiple ids:
+hermes kanban complete <id>... [--result "..."]
+hermes kanban block <id> "<reason>" [--ids <id>...]
+hermes kanban unblock <id>...
+hermes kanban archive <id>...
+
+hermes kanban tail <id>                                # follow a single task's event stream
+hermes kanban watch [--assignee P] [--tenant T]        # live stream ALL events to the terminal
+        [--kinds completed,blocked,…] [--interval SECS]
+hermes kanban dispatch [--dry-run] [--max N]           # one-shot pass
+        [--failure-limit N] [--json]
+hermes kanban daemon [--interval SECS] [--max N]       # long-lived loop
+        [--failure-limit N] [--pidfile PATH] [-v]
+hermes kanban stats [--json]                           # per-status + per-assignee counts
+hermes kanban log <id> [--tail BYTES]                  # worker log from ~/.hermes/kanban/logs/
+hermes kanban notify-subscribe <id>                    # gateway bridge hook (used by /kanban in the gateway)
+        --platform <name> --chat-id <id> [--thread-id <id>] [--user-id <id>]
+hermes kanban notify-list [<id>] [--json]
+hermes kanban notify-unsubscribe <id>
+        --platform <name> --chat-id <id> [--thread-id <id>]
 hermes kanban context <id>                             # what a worker sees
-hermes kanban gc                                       # remove scratch dirs of archived tasks
+hermes kanban gc [--event-retention-days N]            # workspaces + old events + old logs
+        [--log-retention-days N]
 ```
 
 All commands are also available as a slash command in the gateway (`/kanban list`, `/kanban comment t_abc "need docs"`, etc.). The slash command bypasses the running-agent guard, so you can `/kanban unblock` a stuck worker while the main agent is still chatting.
@@ -277,6 +329,26 @@ hermes kanban create "monthly report" \
 ```
 
 Workers receive `$HERMES_TENANT` and namespace their memory writes by prefix. The board, the dispatcher, and the profile definitions are all shared; only the data is scoped.
+
+## Gateway notifications
+
+When you run `/kanban create …` from the gateway (Telegram, Discord, Slack, etc.), the originating chat is automatically subscribed to the new task. The gateway's background notifier polls `task_events` every few seconds and delivers one message per terminal event (`completed`, `blocked`, `spawn_auto_blocked`, `crashed`) to that chat. Completed tasks also send the first line of the worker's `--result` so you see the outcome without having to `/kanban show`.
+
+You can manage subscriptions explicitly from the CLI — useful when a script / cron job wants to notify a chat it didn't originate from:
+
+```bash
+hermes kanban notify-subscribe t_abcd \
+    --platform telegram --chat-id 12345678 --thread-id 7
+hermes kanban notify-list
+hermes kanban notify-unsubscribe t_abcd \
+    --platform telegram --chat-id 12345678 --thread-id 7
+```
+
+A subscription removes itself automatically once the task reaches `done` or `archived`; no cleanup needed.
+
+## Out of scope
+
+Kanban is deliberately single-host. `~/.hermes/kanban.db` is a local SQLite file and the dispatcher spawns workers on the same machine. Running a shared board across two hosts is not supported — there's no coordination primitive for "worker X on host A, worker Y on host B," and the crash-detection path assumes PIDs are host-local. If you need multi-host, run an independent board per host and use `delegate_task` / a message queue to bridge them.
 
 ## Design spec
 

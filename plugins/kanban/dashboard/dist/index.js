@@ -777,6 +777,27 @@
   // Card
   // -------------------------------------------------------------------------
 
+  // Staleness tiers — amber after a grace window, red when clearly stuck.
+  // Values below are seconds.
+  const STALENESS = {
+    ready:   { amber: 1 * 60 * 60,   red: 24 * 60 * 60 },
+    running: { amber: 10 * 60,       red: 60 * 60 },
+    blocked: { amber: 1 * 60 * 60,   red: 24 * 60 * 60 },
+    todo:    { amber: 7 * 24 * 60 * 60, red: 30 * 24 * 60 * 60 },
+  };
+
+  function stalenessClass(task) {
+    if (!task || !task.age) return "";
+    const age = task.status === "running"
+      ? task.age.started_age_seconds
+      : task.age.created_age_seconds;
+    const tier = STALENESS[task.status];
+    if (!tier || age == null) return "";
+    if (age >= tier.red)   return "hermes-kanban-card--stale-red";
+    if (age >= tier.amber) return "hermes-kanban-card--stale-amber";
+    return "";
+  }
+
   function TaskCard(props) {
     const t = props.task;
     const cardRef = useRef(null);
@@ -811,6 +832,7 @@
       className: cn(
         "hermes-kanban-card",
         props.selected ? "hermes-kanban-card--selected" : "",
+        stalenessClass(t),
       ),
       draggable: true,
       onDragStart: handleDragStart,
@@ -1148,6 +1170,54 @@
           );
         }),
       ),
+      h(WorkerLogSection, { taskId: t.id }),
+    );
+  }
+
+  // Worker log: loads lazily (one GET on mount), refresh button, tail cap.
+  function WorkerLogSection(props) {
+    const [state, setState] = useState({ loading: false, data: null, err: null });
+    const load = useCallback(function () {
+      setState({ loading: true, data: null, err: null });
+      SDK.fetchJSON(`${API}/tasks/${encodeURIComponent(props.taskId)}/log?tail=100000`)
+        .then(function (d) { setState({ loading: false, data: d, err: null }); })
+        .catch(function (e) { setState({ loading: false, data: null, err: String(e.message || e) }); });
+    }, [props.taskId]);
+
+    // Auto-load when the section mounts; the user opened the drawer so the
+    // cost is one small HTTP round-trip.
+    useEffect(function () { load(); }, [load]);
+
+    const data = state.data;
+    let body;
+    if (state.loading) {
+      body = h("div", { className: "text-xs text-muted-foreground" }, "Loading log…");
+    } else if (state.err) {
+      body = h("div", { className: "text-xs text-destructive" }, state.err);
+    } else if (!data || !data.exists) {
+      body = h("div", { className: "text-xs text-muted-foreground italic" },
+        "— no worker log yet (task hasn't spawned or log was rotated away) —");
+    } else {
+      body = h("pre", { className: "hermes-kanban-pre hermes-kanban-log" },
+        data.content || "(empty)");
+    }
+
+    return h("div", { className: "hermes-kanban-section" },
+      h("div", { className: "hermes-kanban-section-head-row" },
+        h("span", { className: "hermes-kanban-section-head" },
+          "Worker log" + (data && data.size_bytes ? ` (${data.size_bytes} B)` : "")),
+        h("button", {
+          type: "button",
+          onClick: load,
+          className: "hermes-kanban-edit-link",
+          title: "Refresh log",
+        }, "refresh"),
+      ),
+      body,
+      data && data.truncated
+        ? h("div", { className: "text-xs text-muted-foreground" },
+            "(showing last 100 KB — full log at ", data.path, ")")
+        : null,
     );
   }
 

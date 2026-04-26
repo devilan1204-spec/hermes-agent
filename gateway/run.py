@@ -2288,6 +2288,11 @@ class GatewayRunner:
         # Start background session expiry watcher to finalize expired sessions
         asyncio.create_task(self._session_expiry_watcher())
 
+        # Start background kanban notifier — delivers `completed`, `blocked`,
+        # `spawn_auto_blocked`, and `crashed` events to gateway subscribers
+        # so human-in-the-loop workflows hear back without polling.
+        asyncio.create_task(self._kanban_notifier_watcher())
+
         # Start background reconnection watcher for platforms that failed at startup
         if self._failed_platforms:
             logger.info(
@@ -2462,6 +2467,174 @@ class GatewayRunner:
                 if not self._running:
                     break
                 await asyncio.sleep(1)
+
+    async def _kanban_notifier_watcher(self, interval: float = 5.0) -> None:
+        """Poll ``kanban_notify_subs`` and deliver terminal events to users.
+
+        For each subscription row, fetches ``task_events`` newer than the
+        stored cursor with kind in the terminal set (``completed``,
+        ``blocked``, ``spawn_auto_blocked``, ``crashed``). Sends one message
+        per new event to ``(platform, chat_id, thread_id)``, then advances
+        the cursor. When a task reaches a terminal state (``completed`` /
+        ``archived``), the subscription is removed.
+
+        Runs in the gateway event loop; all SQLite work is pushed to a
+        thread via ``asyncio.to_thread`` so the loop never blocks on the
+        WAL lock. Failures in one tick don't stop subsequent ticks.
+        """
+        from gateway.config import Platform as _Platform
+        try:
+            from hermes_cli import kanban_db as _kb
+        except Exception:
+            logger.warning("kanban notifier: kanban_db not importable; notifier disabled")
+            return
+
+        TERMINAL_KINDS = ("completed", "blocked", "spawn_auto_blocked", "crashed")
+        # Initial delay so the gateway can finish wiring adapters.
+        await asyncio.sleep(5)
+
+        while self._running:
+            try:
+                def _collect():
+                    conn = _kb.connect()
+                    try:
+                        _kb.init_db()  # idempotent; handles first-run
+                    except Exception:
+                        pass
+                    try:
+                        subs = _kb.list_notify_subs(conn)
+                        deliveries: list[dict] = []
+                        for sub in subs:
+                            cursor, events = _kb.unseen_events_for_sub(
+                                conn,
+                                task_id=sub["task_id"],
+                                platform=sub["platform"],
+                                chat_id=sub["chat_id"],
+                                thread_id=sub.get("thread_id") or "",
+                                kinds=TERMINAL_KINDS,
+                            )
+                            if not events:
+                                continue
+                            task = _kb.get_task(conn, sub["task_id"])
+                            deliveries.append({
+                                "sub": sub,
+                                "cursor": cursor,
+                                "events": events,
+                                "task": task,
+                            })
+                        return deliveries
+                    finally:
+                        conn.close()
+
+                deliveries = await asyncio.to_thread(_collect)
+                for d in deliveries:
+                    sub = d["sub"]
+                    task = d["task"]
+                    platform_str = (sub["platform"] or "").lower()
+                    try:
+                        plat = _Platform(platform_str)
+                    except ValueError:
+                        # Unknown platform string; skip and advance cursor so
+                        # we don't replay forever.
+                        await asyncio.to_thread(
+                            self._kanban_advance, sub, d["cursor"],
+                        )
+                        continue
+                    adapter = self.adapters.get(plat)
+                    if adapter is None:
+                        continue  # platform not currently connected
+                    title = (task.title if task else sub["task_id"])[:120]
+                    for ev in d["events"]:
+                        kind = ev.kind
+                        if kind == "completed":
+                            result_preview = ""
+                            if task and task.result:
+                                r = task.result.strip().splitlines()[0][:160]
+                                result_preview = f"\n{r}"
+                            msg = (
+                                f"✔ Kanban {sub['task_id']} done"
+                                f" — {title}{result_preview}"
+                            )
+                        elif kind == "blocked":
+                            reason = ""
+                            if ev.payload and ev.payload.get("reason"):
+                                reason = f": {str(ev.payload['reason'])[:160]}"
+                            msg = f"⏸ Kanban {sub['task_id']} blocked{reason}"
+                        elif kind == "spawn_auto_blocked":
+                            err = ""
+                            if ev.payload and ev.payload.get("error"):
+                                err = f"\n{str(ev.payload['error'])[:200]}"
+                            msg = (
+                                f"✖ Kanban {sub['task_id']} auto-blocked "
+                                f"after repeated spawn failures{err}"
+                            )
+                        elif kind == "crashed":
+                            msg = (
+                                f"✖ Kanban {sub['task_id']} worker crashed "
+                                f"(pid gone); dispatcher will retry"
+                            )
+                        else:
+                            continue
+                        metadata: dict[str, Any] = {}
+                        if sub.get("thread_id"):
+                            metadata["thread_id"] = sub["thread_id"]
+                        try:
+                            await adapter.send(
+                                sub["chat_id"], msg, metadata=metadata,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "kanban notifier: send failed for %s on %s: %s",
+                                sub["task_id"], platform_str, exc,
+                            )
+                            # Don't advance cursor on send failure — retry next tick.
+                            break
+                    else:
+                        # All events delivered; advance cursor + maybe unsub.
+                        await asyncio.to_thread(
+                            self._kanban_advance, sub, d["cursor"],
+                        )
+                        if task and task.status in ("done", "archived"):
+                            await asyncio.to_thread(
+                                self._kanban_unsub, sub,
+                            )
+            except Exception as exc:
+                logger.warning("kanban notifier tick failed: %s", exc)
+            # Sleep with cancellation checks.
+            for _ in range(int(max(1, interval))):
+                if not self._running:
+                    return
+                await asyncio.sleep(1)
+
+    def _kanban_advance(self, sub: dict, cursor: int) -> None:
+        """Sync helper: advance a subscription's cursor. Runs in to_thread."""
+        from hermes_cli import kanban_db as _kb
+        conn = _kb.connect()
+        try:
+            _kb.advance_notify_cursor(
+                conn,
+                task_id=sub["task_id"],
+                platform=sub["platform"],
+                chat_id=sub["chat_id"],
+                thread_id=sub.get("thread_id") or "",
+                new_cursor=cursor,
+            )
+        finally:
+            conn.close()
+
+    def _kanban_unsub(self, sub: dict) -> None:
+        from hermes_cli import kanban_db as _kb
+        conn = _kb.connect()
+        try:
+            _kb.remove_notify_sub(
+                conn,
+                task_id=sub["task_id"],
+                platform=sub["platform"],
+                chat_id=sub["chat_id"],
+                thread_id=sub.get("thread_id") or "",
+            )
+        finally:
+            conn.close()
 
     async def _platform_reconnect_watcher(self) -> None:
         """Background task that periodically retries connecting failed platforms.
@@ -5174,8 +5347,14 @@ class GatewayRunner:
         show, context, tail) are permitted while an agent is running;
         mutations are allowed too because the board is profile-agnostic
         and does not touch the running agent's state.
+
+        For ``/kanban create`` invocations we also auto-subscribe the
+        originating gateway source (platform + chat + thread) to the new
+        task's terminal events, so the user hears back when the worker
+        completes / blocks / auto-blocks / crashes without having to poll.
         """
         import asyncio
+        import re
         from hermes_cli.kanban import run_slash
 
         text = (event.text or "").strip()
@@ -5185,10 +5364,51 @@ class GatewayRunner:
         if text.startswith("kanban"):
             text = text[len("kanban"):].lstrip()
 
+        is_create = text.split(None, 1)[:1] == ["create"]
+
         try:
             output = await asyncio.to_thread(run_slash, text)
         except Exception as exc:  # pragma: no cover - defensive
             return f"⚠ kanban error: {exc}"
+
+        # Auto-subscribe on create. Parse the task id from the CLI's standard
+        # success line ("Created t_abcd  (ready, assignee=...)"). If the user
+        # passed --json we don't subscribe; they're clearly scripting and
+        # can call /kanban notify-subscribe explicitly.
+        if is_create and output:
+            m = re.search(r"Created\s+(t_[0-9a-f]+)\b", output)
+            if m:
+                task_id = m.group(1)
+                try:
+                    source = event.source
+                    platform = getattr(source, "platform", None)
+                    platform_str = (
+                        platform.value if hasattr(platform, "value") else str(platform or "")
+                    ).lower()
+                    chat_id = str(getattr(source, "chat_id", "") or "")
+                    thread_id = str(getattr(source, "thread_id", "") or "")
+                    user_id = str(getattr(source, "user_id", "") or "") or None
+                    if platform_str and chat_id:
+                        def _sub():
+                            from hermes_cli import kanban_db as _kb
+                            conn = _kb.connect()
+                            try:
+                                _kb.add_notify_sub(
+                                    conn, task_id=task_id,
+                                    platform=platform_str, chat_id=chat_id,
+                                    thread_id=thread_id or None,
+                                    user_id=user_id,
+                                )
+                            finally:
+                                conn.close()
+                        await asyncio.to_thread(_sub)
+                        output = (
+                            output.rstrip()
+                            + f"\n(subscribed — you'll be notified when {task_id} "
+                              f"completes or blocks)"
+                        )
+                except Exception as exc:
+                    logger.warning("kanban create auto-subscribe failed: %s", exc)
 
         # Gateway messages have practical length caps; truncate long
         # listings to keep the UX reasonable.
