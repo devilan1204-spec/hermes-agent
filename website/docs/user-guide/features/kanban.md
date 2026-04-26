@@ -105,6 +105,85 @@ hermes skills install devops/kanban-orchestrator
 
 For best results, pair it with a profile whose toolsets are restricted to board operations (`kanban`, `gateway`, `memory`) so the orchestrator literally cannot execute implementation tasks even if it tries.
 
+## Dashboard (GUI)
+
+The `/kanban` CLI and slash command are enough to run the board headlessly, but a visual board is often the right interface for humans-in-the-loop: triage, cross-profile supervision, reading comment threads, and dropping cards between columns. Hermes ships this as a **dashboard plugin** — not a core feature, not a separate service — following the model laid out in [Extending the Dashboard](./extending-the-dashboard).
+
+### What the plugin adds
+
+- A **Kanban** tab in `hermes dashboard` showing one column per status (`triage`, `todo`, `ready`, `claimed`, `running`, `review`, `blocked`, `done`).
+- Cards show task id, title, priority, assigned profile, dependency chips, progress (`N/M` subtasks done), and files-touched count.
+- Live updates via a WebSocket that tails the `task_events` append-only table. No polling, no full-refetch flicker.
+- Click a card → side panel with full description, comment thread, linked tasks, event timeline, and the exact context a worker would see (`hermes kanban context <id>`).
+- Drag a card to a new column → sends a status change through the same code path `/kanban` uses.
+- Inline **New task** row at the top of every column (title + optional assignee dropdown + priority).
+- Per-profile lanes inside the `running` column so you can see at a glance which specialist is busy on what.
+
+Visually the target is the familiar Linear / Fusion layout: dark theme, column headers with item counts, coloured status dots, pill chips for dependencies and badges.
+
+### Architecture
+
+The GUI is strictly a **read-through-the-DB + write-through-the-CLI** layer. It has no domain logic of its own:
+
+```
+┌────────────────────────┐      WebSocket (task_events tail)
+│   React SPA (plugin)   │ ◀──────────────────────────────────┐
+│   @dnd-kit drag/drop   │                                    │
+└──────────┬─────────────┘                                    │
+           │ REST (thin)                                      │
+           ▼                                                  │
+┌────────────────────────┐     writes go through the same     │
+│  FastAPI router        │     run_slash("<verb> …") that     │
+│  plugins/kanban/       │     CLI + gateway already use      │
+│  dashboard/routes.py   │                                    │
+└──────────┬─────────────┘                                    │
+           │                                                  │
+           ▼                                                  │
+┌────────────────────────┐                                    │
+│  ~/.hermes/kanban.db   │ ───── append task_events ──────────┘
+│  (WAL, shared)         │
+└────────────────────────┘
+```
+
+Because writes go through `run_slash`, the GUI cannot drift from the CLI or the gateway. A drag-drop is just a `/kanban assign` or a status change under the hood; every action lands in `task_events` the same way a typed `/kanban` command would.
+
+### REST surface
+
+All routes are mounted under `/api/plugins/kanban/` and protected by the dashboard's ephemeral `_SESSION_TOKEN`:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/board?tenant=<name>` | Full board, grouped by status column |
+| `GET` | `/tasks/:id` | Task + links + comments + events |
+| `POST` | `/tasks` | Create (delegates to `run_slash("create …")`) |
+| `PATCH` | `/tasks/:id` | Status / assignee / title / priority |
+| `POST` | `/tasks/:id/comments` | Append a comment |
+| `POST` | `/tasks/:id/links` | Add a dependency |
+| `DELETE` | `/tasks/:id/links/:other` | Remove a dependency |
+| `POST` | `/tasks/:id/dispatch` | Nudge the dispatcher (no 60 s wait) |
+| `WS` | `/events?since=<event_id>` | Live stream of `task_events` rows |
+
+Every handler is a ~5-line wrapper around an existing `kanban_db` function or a `run_slash` invocation — the plugin adds no new business logic.
+
+### Live updates
+
+`task_events` is an append-only SQLite table with a monotonic `id`. The WebSocket endpoint keeps the last-seen event id per client and pushes new rows as they land. The frontend patches its local state in place, so a card moves between columns the instant any profile — CLI, gateway, or another GUI tab — acts on it. WAL mode means the read loop never blocks the dispatcher's `BEGIN IMMEDIATE` claim.
+
+### Installing it
+
+The plugin is shipped in the repo at `plugins/kanban/` and enabled by default when `hermes dashboard` finds a `kanban.db`:
+
+```bash
+hermes dashboard
+# browser opens → "Kanban" tab appears in the nav
+```
+
+To disable: remove or rename `plugins/kanban/` (or set `dashboard.plugins.kanban.enabled: false` in `config.yaml`). To extend it — extra columns, custom card chrome, tenant filters — follow the plugin shape documented in [Extending the Dashboard](./extending-the-dashboard) (`tab`, shell slots, page-scoped slots, and custom CSS all apply).
+
+### Scope boundary
+
+The GUI is deliberately thin. Everything the plugin does is reachable from the CLI; the plugin just makes it comfortable for humans. Auto-assignment, budgets, governance gates, and org-chart views remain user-space — a router profile, a plugin, or a reuse of `tools/approval.py` — exactly as listed in the out-of-scope section of the design spec.
+
 ## CLI command reference
 
 ```
