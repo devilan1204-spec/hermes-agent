@@ -1,0 +1,219 @@
+:root {
+  color-scheme: dark;
+  background: #070707;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(214, 168, 79, 0.18), transparent 34rem),
+    radial-gradient(circle at 82% 18%, rgba(90, 130, 255, 0.14), transparent 30rem), #050505;
+}
+
+#showroom {
+  min-height: 100vh;
+  padding: 48px;
+}
+
+.showroom-shell {
+  display: grid;
+  gap: 18px;
+  width: max-content;
+}
+
+.showroom-title {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  color: #f5e8c7;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+
+.showroom-meta {
+  color: #8f856f;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+}
+
+.showroom-stage {
+  position: relative;
+  width: var(--stage-w);
+  height: var(--stage-h);
+  overflow: hidden;
+  border: 1px solid rgba(245, 232, 199, 0.18);
+  border-radius: 28px;
+  background: #080808;
+  box-shadow:
+    0 48px 160px rgba(0, 0, 0, 0.56),
+    0 0 0 1px rgba(255, 255, 255, 0.035) inset;
+}
+
+.showroom-terminal {
+  position: absolute;
+  inset: 0 auto auto 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: var(--term-w);
+  height: var(--term-h);
+  transform: scale(var(--scale));
+  transform-origin: top left;
+  overflow: hidden;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18%), #0a0a0a;
+  color: #d8d0bd;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.showroom-status,
+.showroom-composer {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  color: #8f856f;
+  white-space: nowrap;
+}
+
+.showroom-status {
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(245, 232, 199, 0.1);
+  padding-bottom: 7px;
+}
+
+.showroom-composer {
+  border-top: 1px solid rgba(245, 232, 199, 0.1);
+  padding-top: 7px;
+}
+
+.showroom-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow: hidden;
+  padding: 12px 0;
+}
+
+.showroom-line,
+.showroom-tool {
+  transition:
+    opacity 420ms ease,
+    filter 420ms ease,
+    transform 420ms ease,
+    background 420ms ease;
+}
+
+.showroom-line {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 6px;
+}
+
+.showroom-glyph {
+  color: var(--role);
+  font-weight: 700;
+}
+
+.showroom-copy {
+  color: var(--role);
+  white-space: pre-wrap;
+}
+
+.showroom-line-assistant .showroom-copy {
+  color: #d8d0bd;
+}
+
+.showroom-tool {
+  margin-left: 32px;
+  border: 1px solid rgba(214, 168, 79, 0.18);
+  border-radius: 11px;
+  padding: 8px 10px;
+  background: rgba(214, 168, 79, 0.055);
+  color: #c7b891;
+}
+
+.showroom-tool-title {
+  color: #f1cb78;
+  font-weight: 700;
+}
+
+.showroom-tool-items {
+  display: grid;
+  gap: 2px;
+  margin-top: 5px;
+  color: #908872;
+}
+
+.is-highlighted {
+  filter: brightness(1.45);
+  background: rgba(214, 168, 79, 0.12);
+  transform: translateX(4px);
+}
+
+.showroom-overlays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.showroom-caption,
+.showroom-spotlight {
+  position: absolute;
+  opacity: 0;
+  transition:
+    opacity 360ms ease,
+    transform 360ms ease;
+}
+
+.showroom-caption {
+  max-width: 420px;
+  border: 1px solid rgba(245, 232, 199, 0.2);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(12, 12, 12, 0.82);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+  color: #f5e8c7;
+  font-size: 18px;
+  line-height: 1.35;
+  transform: translateY(8px);
+}
+
+.showroom-spotlight {
+  border: 2px solid rgba(241, 203, 120, 0.7);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.34),
+    0 0 40px rgba(241, 203, 120, 0.22);
+}
+
+.showroom-caption.is-visible,
+.showroom-spotlight.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.showroom-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.showroom-controls button {
+  border: 1px solid rgba(245, 232, 199, 0.18);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(245, 232, 199, 0.06);
+  color: #f5e8c7;
+  cursor: pointer;
+}
+
+.showroom-controls button:hover {
+  background: rgba(245, 232, 199, 0.12);
+}

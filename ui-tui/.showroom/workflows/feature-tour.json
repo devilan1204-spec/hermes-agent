@@ -1,0 +1,101 @@
+{
+  "title": "Hermes TUI Feature Tour",
+  "composer": "› ask hermes anything",
+  "viewport": {
+    "cellWidth": 9,
+    "cols": 96,
+    "lineHeight": 18,
+    "rows": 30,
+    "scale": 4
+  },
+  "timeline": [
+    {
+      "at": 0,
+      "detail": "showroom mode",
+      "text": "summoning hermes...",
+      "type": "status"
+    },
+    {
+      "at": 250,
+      "duration": 650,
+      "id": "prompt",
+      "role": "user",
+      "text": "Build a focused plan for a safer gateway approval flow.",
+      "type": "message"
+    },
+    {
+      "at": 1050,
+      "duration": 950,
+      "id": "assistant-plan",
+      "role": "assistant",
+      "text": "I’ll trace the gateway guards first, then patch the smallest boundary that keeps approval commands live while an agent is blocked.",
+      "type": "message"
+    },
+    {
+      "at": 2180,
+      "id": "tool-trail",
+      "items": [
+        "rg \"approval.request\" gateway/ tui_gateway/",
+        "ReadFile gateway/run.py",
+        "ReadFile gateway/platforms/base.py"
+      ],
+      "title": "tool trail",
+      "type": "tool"
+    },
+    {
+      "at": 2500,
+      "duration": 1500,
+      "target": "tool-trail",
+      "type": "spotlight"
+    },
+    {
+      "at": 2680,
+      "duration": 1600,
+      "position": "right",
+      "target": "tool-trail",
+      "text": "Tool activity is scripted as named targets, so captions and fades can follow the exact beat.",
+      "type": "caption"
+    },
+    {
+      "at": 4450,
+      "duration": 500,
+      "target": "tool-trail",
+      "to": 0.22,
+      "type": "fade"
+    },
+    {
+      "at": 5050,
+      "duration": 700,
+      "id": "assistant-result",
+      "role": "assistant",
+      "text": "Found the split guard. The fix is to bypass both queues only for approval/control commands and leave normal chat ordering untouched.",
+      "type": "message"
+    },
+    {
+      "at": 6050,
+      "duration": 1300,
+      "target": "assistant-result",
+      "type": "highlight"
+    },
+    {
+      "at": 6300,
+      "duration": 1700,
+      "position": "right",
+      "target": "assistant-result",
+      "text": "Highlights, captions, opacity fades, and spotlight boxes are all timeline actions.",
+      "type": "caption"
+    },
+    {
+      "at": 8300,
+      "duration": 700,
+      "text": "› /approve",
+      "type": "compose"
+    },
+    {
+      "at": 9400,
+      "detail": "record-ready at 4x",
+      "text": "session complete",
+      "type": "status"
+    }
+  ]
+}
