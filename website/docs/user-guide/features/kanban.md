@@ -118,13 +118,15 @@ hermes dashboard        # "Kanban" tab appears in the nav, after "Skills"
 
 ### What the plugin gives you
 
-- A **Kanban** tab showing one column per status: `todo`, `ready`, `running`, `blocked`, `done` (plus `archived` when the toggle is on).
-- Cards show the task id, title, priority badge, tenant tag, assigned profile, comment/link counts, and "created N ago".
-- **Live updates via WebSocket** — the plugin tails the append-only `task_events` table on a short poll interval; the board reflects changes the instant any profile (CLI, gateway, or another dashboard tab) acts.
-- **Drag-drop** cards between columns to change status. The drop sends a `PATCH /api/plugins/kanban/tasks/:id` which routes through the same `kanban_db` code the CLI uses — the three surfaces can never drift.
-- **Inline create** — click `+` on any column header to type a title, assignee, and priority without leaving the board.
-- **Click a card** to open a side drawer with the full description, status actions (→ ready / → running / block / unblock / complete / archive), dependency links, comment thread with Enter-to-submit, and the last 20 events.
-- **Toolbar filters** — free-text search, tenant dropdown, assignee dropdown, "show archived" toggle, and a **Nudge dispatcher** button so you don't have to wait for the next 60 s tick.
+- A **Kanban** tab showing one column per status: `triage`, `todo`, `ready`, `running`, `blocked`, `done` (plus `archived` when the toggle is on).
+  - `triage` is the parking column for rough ideas a specifier is expected to flesh out. Tasks created with `hermes kanban create --triage` (or via the Triage column's inline create) land here and the dispatcher leaves them alone until a human or specifier promotes them to `todo` / `ready`.
+- Cards show the task id, title, priority badge, tenant tag, assigned profile, comment/link counts, a **progress pill** (`N/M` children done when the task has dependents), and "created N ago".
+- **Per-profile lanes inside Running** — toggled by the toolbar checkbox, the Running column sub-groups by assignee so you see at a glance which specialist is busy on what.
+- **Live updates via WebSocket** — the plugin tails the append-only `task_events` table on a short poll interval; the board reflects changes the instant any profile (CLI, gateway, or another dashboard tab) acts. Reloads are debounced so a burst of events triggers a single refetch.
+- **Drag-drop** cards between columns to change status. The drop sends a `PATCH /api/plugins/kanban/tasks/:id` which routes through the same `kanban_db` code the CLI uses — the three surfaces can never drift. Moves into destructive statuses (`done`, `archived`, `blocked`) prompt for confirmation.
+- **Inline create** — click `+` on any column header to type a title, assignee, and priority without leaving the board. Creating from the Triage column automatically parks the new task in triage.
+- **Click a card** to open a side drawer (Escape or click-outside closes) with the full description, status actions (→ triage / → ready / → running / block / unblock / complete / archive), dependency link chips, comment thread with Enter-to-submit, and the last 20 events.
+- **Toolbar filters** — free-text search, tenant dropdown, assignee dropdown, "show archived" toggle, "lanes by profile" toggle, and a **Nudge dispatcher** button so you don't have to wait for the next 60 s tick.
 
 Visually the target is the familiar Linear / Fusion layout: dark theme, column headers with counts, coloured status dots, pill chips for priority and tenant. The plugin reads only theme CSS vars (`--color-*`, `--radius`, `--font-mono`, ...), so it reskins automatically with whichever dashboard theme is active.
 
@@ -168,7 +170,17 @@ All routes are mounted under `/api/plugins/kanban/` and protected by the dashboa
 | `POST` | `/dispatch?max=…&dry_run=…` | Nudge the dispatcher — skip the 60 s wait |
 | `WS` | `/events?since=<event_id>` | Live stream of `task_events` rows |
 
-Every handler is a thin wrapper — the plugin is ~500 lines of Python (including the WebSocket tail loop) and adds no new business logic.
+Every handler is a thin wrapper — the plugin is ~500 lines of Python (including the WebSocket tail loop) and adds no new business logic. GET `/board` auto-initializes `kanban.db` on first read, so opening the tab on a fresh install just works even if `hermes kanban init` was skipped.
+
+### Security model
+
+The dashboard's HTTP auth middleware [explicitly skips `/api/plugins/`](./extending-the-dashboard#backend-api-routes) — plugin routes are unauthenticated by design because the dashboard binds to localhost by default. That means the kanban REST surface is reachable from any process on the host.
+
+The WebSocket takes one additional step: it requires the dashboard's ephemeral session token as a `?token=…` query parameter (browsers can't set `Authorization` on an upgrade request), matching the pattern used by the in-browser PTY bridge.
+
+If you run `hermes dashboard --host 0.0.0.0`, every plugin route — kanban included — becomes reachable from the network. **Don't do that on a shared host.** The board contains task bodies, comments, and workspace paths; an attacker reaching these routes gets read access to your entire collaboration surface and can also create / reassign / archive tasks.
+
+Tasks in `~/.hermes/kanban.db` are profile-agnostic on purpose (that's the coordination primitive). If you open the dashboard with `hermes -p <profile> dashboard`, the board still shows tasks created by any other profile on the host. Same user owns all profiles, but this is worth knowing if multiple personas coexist.
 
 ### Live updates
 
@@ -191,7 +203,7 @@ hermes kanban init                                     # create kanban.db
 hermes kanban create "<title>" [--body ...] [--assignee <profile>]
                                 [--parent <id>]... [--tenant <name>]
                                 [--workspace scratch|worktree|dir:<path>]
-                                [--priority N] [--json]
+                                [--priority N] [--triage] [--json]
 hermes kanban list [--mine] [--assignee P] [--status S] [--tenant T] [--archived] [--json]
 hermes kanban show <id> [--json]
 hermes kanban assign <id> <profile>                    # or 'none' to unassign
@@ -225,6 +237,7 @@ The board supports these eight patterns without any new primitives:
 | **P6 `@mention`** | inline routing from prose | `@reviewer look at this` |
 | **P7 Thread-scoped workspace** | `/kanban here` in a thread | per-project gateway threads |
 | **P8 Fleet farming** | one profile, N subjects | 50 social accounts |
+| **P9 Triage specifier** | rough idea → `triage` → specifier expands body → `todo` | "turn this one-liner into a spec' task" |
 
 For worked examples of each, see `docs/hermes-kanban-v1-spec.pdf`.
 

@@ -10,11 +10,24 @@ cannot drift.
 Live updates arrive via the ``/events`` WebSocket, which tails the
 append-only ``task_events`` table on a short poll interval (WAL mode lets
 reads run alongside the dispatcher's IMMEDIATE write transactions).
+
+Security note
+-------------
+The dashboard's HTTP auth middleware (``web_server.auth_middleware``)
+explicitly skips ``/api/plugins/`` — plugin routes are unauthenticated by
+design because the dashboard binds to localhost by default. For the
+WebSocket we still require the session token as a ``?token=`` query
+parameter (browsers cannot set the ``Authorization`` header on an upgrade
+request), matching the established pattern used by the in-browser PTY
+bridge in ``hermes_cli/web_server.py``. If you run the dashboard with
+``--host 0.0.0.0``, every plugin route — kanban included — becomes
+reachable from the network. Don't do that on a shared host.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import sqlite3
@@ -22,7 +35,7 @@ import time
 from dataclasses import asdict
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, status as http_status
 from pydantic import BaseModel, Field
 
 from hermes_cli import kanban_db
@@ -33,12 +46,41 @@ router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
+# Auth helper — WebSocket only (HTTP routes live behind the dashboard's
+# existing plugin-bypass; this is documented above).
+# ---------------------------------------------------------------------------
+
+def _check_ws_token(provided: Optional[str]) -> bool:
+    """Constant-time compare against the dashboard session token.
+
+    Imported lazily so the plugin still loads in test contexts where the
+    dashboard web_server module isn't importable (e.g. the bare-FastAPI
+    test harness).
+    """
+    if not provided:
+        return False
+    try:
+        from hermes_cli import web_server as _ws
+    except Exception:
+        # No dashboard context (tests). Accept so the tail loop is still
+        # testable; in production the dashboard module always imports
+        # cleanly because it's the caller.
+        return True
+    expected = getattr(_ws, "_SESSION_TOKEN", None)
+    if not expected:
+        return True
+    return hmac.compare_digest(str(provided), str(expected))
+
+
+# ---------------------------------------------------------------------------
 # Serialization helpers
 # ---------------------------------------------------------------------------
 
 # Columns shown by the dashboard, in left-to-right order. "archived" is
 # available via a filter toggle rather than a visible column.
-BOARD_COLUMNS: list[str] = ["todo", "ready", "running", "blocked", "done"]
+BOARD_COLUMNS: list[str] = [
+    "triage", "todo", "ready", "running", "blocked", "done",
+]
 
 
 def _task_dict(task: kanban_db.Task) -> dict[str, Any]:
@@ -95,7 +137,18 @@ def get_board(
     tenant: Optional[str] = Query(None, description="Filter to a single tenant"),
     include_archived: bool = Query(False),
 ):
-    """Return the full board grouped by status column."""
+    """Return the full board grouped by status column.
+
+    Auto-initializes ``kanban.db`` on first call so a fresh install
+    doesn't surface a "failed to load" error on the plugin tab.
+    """
+    # Idempotent; handles the "user opened the tab before running
+    # `hermes kanban init`" case. No-op on established DBs.
+    try:
+        kanban_db.init_db()
+    except Exception as exc:
+        log.warning("kanban init_db failed: %s", exc)
+
     conn = kanban_db.connect()
     try:
         tasks = kanban_db.list_tasks(
@@ -121,6 +174,19 @@ def get_board(
             )
         }
 
+        # Progress rollup: for each parent, how many children are done / total.
+        # One pass over task_links joined with child status — cheaper than
+        # N per-task queries and the plugin uses it to render "N/M".
+        progress: dict[str, dict[str, int]] = {}
+        for row in conn.execute(
+            "SELECT l.parent_id AS pid, t.status AS cstatus "
+            "FROM task_links l JOIN tasks t ON t.id = l.child_id"
+        ).fetchall():
+            p = progress.setdefault(row["pid"], {"done": 0, "total": 0})
+            p["total"] += 1
+            if row["cstatus"] == "done":
+                p["done"] += 1
+
         latest_event_id = conn.execute(
             "SELECT COALESCE(MAX(id), 0) AS m FROM task_events"
         ).fetchone()["m"]
@@ -133,6 +199,7 @@ def get_board(
             d = _task_dict(t)
             d["link_counts"] = link_counts.get(t.id, {"parents": 0, "children": 0})
             d["comment_count"] = comment_counts.get(t.id, 0)
+            d["progress"] = progress.get(t.id)  # None when the task has no children
             col = t.status if t.status in columns else "todo"
             columns[col].append(d)
 
@@ -202,6 +269,7 @@ class CreateTaskBody(BaseModel):
     workspace_kind: str = "scratch"
     workspace_path: Optional[str] = None
     parents: list[str] = Field(default_factory=list)
+    triage: bool = False
 
 
 @router.post("/tasks")
@@ -219,6 +287,7 @@ def create_task(payload: CreateTaskBody):
             tenant=payload.tenant,
             priority=payload.priority,
             parents=payload.parents,
+            triage=payload.triage,
         )
         task = kanban_db.get_task(conn, task_id)
         return {"task": _task_dict(task) if task else None}
@@ -279,7 +348,7 @@ def update_task(task_id: str, payload: UpdateTaskBody):
                     ok = _set_status_direct(conn, task_id, "ready")
             elif s == "archived":
                 ok = kanban_db.archive_task(conn, task_id)
-            elif s in ("todo", "running"):
+            elif s in ("todo", "running", "triage"):
                 ok = _set_status_direct(conn, task_id, s)
             else:
                 raise HTTPException(status_code=400, detail=f"unknown status: {s}")
@@ -446,6 +515,13 @@ _EVENT_POLL_SECONDS = 0.3
 
 @router.websocket("/events")
 async def stream_events(ws: WebSocket):
+    # Enforce the dashboard session token as a query param — browsers can't
+    # set Authorization on a WS upgrade. This matches how the PTY bridge
+    # authenticates in hermes_cli/web_server.py.
+    token = ws.query_params.get("token")
+    if not _check_ws_token(token):
+        await ws.close(code=http_status.WS_1008_POLICY_VIOLATION)
+        return
     await ws.accept()
     try:
         since_raw = ws.query_params.get("since", "0")

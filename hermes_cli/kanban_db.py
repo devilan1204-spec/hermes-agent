@@ -34,7 +34,7 @@ from typing import Any, Iterable, Optional
 # Constants
 # ---------------------------------------------------------------------------
 
-VALID_STATUSES = {"todo", "ready", "running", "blocked", "done", "archived"}
+VALID_STATUSES = {"triage", "todo", "ready", "running", "blocked", "done", "archived"}
 VALID_WORKSPACE_KINDS = {"scratch", "worktree", "dir"}
 
 # A running task's claim is valid for 15 minutes; after that the next
@@ -279,11 +279,15 @@ def create_task(
     tenant: Optional[str] = None,
     priority: int = 0,
     parents: Iterable[str] = (),
+    triage: bool = False,
 ) -> str:
     """Create a new task and optionally link it under parent tasks.
 
     Returns the new task id.  Status is ``ready`` when there are no
     parents (or all parents already ``done``), otherwise ``todo``.
+    If ``triage=True``, status is forced to ``triage`` regardless of
+    parents — a specifier/triager is expected to promote the task to
+    ``todo`` once the spec is fleshed out.
     """
     if not title or not title.strip():
         raise ValueError("title is required")
@@ -301,20 +305,30 @@ def create_task(
         task_id = _new_task_id()
         try:
             with write_txn(conn):
-                # Determine initial status from parent status.
-                initial_status = "ready"
-                if parents:
+                # Determine initial status from parent status, unless the
+                # caller is parking this task in triage for a specifier.
+                if triage:
+                    initial_status = "triage"
+                else:
+                    initial_status = "ready"
+                    if parents:
+                        missing = _find_missing_parents(conn, parents)
+                        if missing:
+                            raise ValueError(f"unknown parent task(s): {', '.join(missing)}")
+                        # If any parent is not yet done, we're todo.
+                        rows = conn.execute(
+                            "SELECT status FROM tasks WHERE id IN "
+                            "(" + ",".join("?" * len(parents)) + ")",
+                            parents,
+                        ).fetchall()
+                        if any(r["status"] != "done" for r in rows):
+                            initial_status = "todo"
+                # Even in triage mode we still need to validate parent ids
+                # so the eventual link rows don't dangle.
+                if triage and parents:
                     missing = _find_missing_parents(conn, parents)
                     if missing:
                         raise ValueError(f"unknown parent task(s): {', '.join(missing)}")
-                    # If any parent is not yet done, we're todo.
-                    rows = conn.execute(
-                        "SELECT status FROM tasks WHERE id IN "
-                        "(" + ",".join("?" * len(parents)) + ")",
-                        parents,
-                    ).fetchall()
-                    if any(r["status"] != "done" for r in rows):
-                        initial_status = "todo"
 
                 conn.execute(
                     """

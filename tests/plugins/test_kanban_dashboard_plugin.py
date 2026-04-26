@@ -67,9 +67,9 @@ def test_board_empty(client):
     r = client.get("/api/plugins/kanban/board")
     assert r.status_code == 200
     data = r.json()
-    # All canonical columns present, each empty.
+    # All canonical columns present (triage + the rest), each empty.
     names = [c["name"] for c in data["columns"]]
-    for expected in ("todo", "ready", "running", "blocked", "done"):
+    for expected in ("triage", "todo", "ready", "running", "blocked", "done"):
         assert expected in names, f"missing column {expected}: {names}"
     assert all(len(c["tasks"]) == 0 for c in data["columns"])
     assert data["tenants"] == []
@@ -331,3 +331,175 @@ def test_dispatch_dry_run(client):
     body = r.json()
     # DispatchResult is serialized as a dataclass dict.
     assert isinstance(body, dict)
+
+
+# ---------------------------------------------------------------------------
+# Triage column (new v1 status)
+# ---------------------------------------------------------------------------
+
+
+def test_create_triage_lands_in_triage_column(client):
+    r = client.post(
+        "/api/plugins/kanban/tasks",
+        json={"title": "rough idea, spec me", "triage": True},
+    )
+    assert r.status_code == 200
+    task = r.json()["task"]
+    assert task["status"] == "triage"
+
+    r = client.get("/api/plugins/kanban/board")
+    triage = next(c for c in r.json()["columns"] if c["name"] == "triage")
+    assert len(triage["tasks"]) == 1
+    assert triage["tasks"][0]["title"] == "rough idea, spec me"
+
+
+def test_triage_task_not_promoted_to_ready(client):
+    """Triage tasks must stay in triage even when they have no parents."""
+    client.post(
+        "/api/plugins/kanban/tasks",
+        json={"title": "must stay put", "triage": True},
+    )
+    # Run the dispatcher — it should NOT promote the triage task.
+    client.post("/api/plugins/kanban/dispatch?dry_run=false&max=4")
+    r = client.get("/api/plugins/kanban/board")
+    triage = next(c for c in r.json()["columns"] if c["name"] == "triage")
+    ready = next(c for c in r.json()["columns"] if c["name"] == "ready")
+    assert len(triage["tasks"]) == 1
+    assert len(ready["tasks"]) == 0
+
+
+def test_patch_status_triage_works(client):
+    """A user (or specifier) can push a task back into triage, and out of it."""
+    t = client.post(
+        "/api/plugins/kanban/tasks", json={"title": "x"},
+    ).json()["task"]
+    # Normal creation is 'ready'; push to triage.
+    r = client.patch(
+        f"/api/plugins/kanban/tasks/{t['id']}", json={"status": "triage"},
+    )
+    assert r.status_code == 200
+    assert r.json()["task"]["status"] == "triage"
+
+    # Now promote to todo.
+    r = client.patch(
+        f"/api/plugins/kanban/tasks/{t['id']}", json={"status": "todo"},
+    )
+    assert r.status_code == 200
+    assert r.json()["task"]["status"] == "todo"
+
+
+# ---------------------------------------------------------------------------
+# Progress rollup (done children / total children)
+# ---------------------------------------------------------------------------
+
+
+def test_board_progress_rollup(client):
+    parent = client.post(
+        "/api/plugins/kanban/tasks", json={"title": "parent"},
+    ).json()["task"]
+    child_a = client.post(
+        "/api/plugins/kanban/tasks",
+        json={"title": "a", "parents": [parent["id"]]},
+    ).json()["task"]
+    child_b = client.post(
+        "/api/plugins/kanban/tasks",
+        json={"title": "b", "parents": [parent["id"]]},
+    ).json()["task"]
+    # Children start as "todo" because the parent isn't done yet; promote
+    # them to "ready" so complete_task will accept the transition.
+    for cid in (child_a["id"], child_b["id"]):
+        r = client.patch(
+            f"/api/plugins/kanban/tasks/{cid}", json={"status": "ready"},
+        )
+        assert r.status_code == 200
+
+    # 0/2 done.
+    r = client.get("/api/plugins/kanban/board")
+    parent_row = next(
+        t for col in r.json()["columns"] for t in col["tasks"]
+        if t["id"] == parent["id"]
+    )
+    assert parent_row["progress"] == {"done": 0, "total": 2}
+
+    # Complete one child. 1/2.
+    r = client.patch(
+        f"/api/plugins/kanban/tasks/{child_a['id']}",
+        json={"status": "done"},
+    )
+    assert r.status_code == 200
+    r = client.get("/api/plugins/kanban/board")
+    parent_row = next(
+        t for col in r.json()["columns"] for t in col["tasks"]
+        if t["id"] == parent["id"]
+    )
+    assert parent_row["progress"] == {"done": 1, "total": 2}
+
+    # Childless tasks report progress=None, not {0/0}.
+    assert next(
+        t for col in r.json()["columns"] for t in col["tasks"]
+        if t["id"] == child_b["id"]
+    )["progress"] is None
+
+
+# ---------------------------------------------------------------------------
+# Auto-init on first board read
+# ---------------------------------------------------------------------------
+
+
+def test_board_auto_initializes_missing_db(tmp_path, monkeypatch):
+    """If kanban.db doesn't exist yet, GET /board must create it, not 500."""
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    # Deliberately DO NOT call kb.init_db().
+
+    app = FastAPI()
+    app.include_router(_load_plugin_router(), prefix="/api/plugins/kanban")
+    c = TestClient(app)
+    r = c.get("/api/plugins/kanban/board")
+    assert r.status_code == 200
+    assert (home / "kanban.db").exists(), "init_db wasn't invoked by /board"
+
+
+# ---------------------------------------------------------------------------
+# WebSocket auth (query-param token)
+# ---------------------------------------------------------------------------
+
+
+def test_ws_events_rejects_when_token_required(tmp_path, monkeypatch):
+    """When _SESSION_TOKEN is set (normal dashboard context), a missing or
+    wrong ?token= query param must be rejected with policy-violation."""
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    kb.init_db()
+
+    # Stub web_server so _check_ws_token has a token to compare against.
+    import types
+    stub = types.SimpleNamespace(_SESSION_TOKEN="secret-xyz")
+    monkeypatch.setitem(sys.modules, "hermes_cli.web_server", stub)
+
+    app = FastAPI()
+    app.include_router(_load_plugin_router(), prefix="/api/plugins/kanban")
+    c = TestClient(app)
+
+    # No token → policy violation close.
+    from starlette.websockets import WebSocketDisconnect
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with c.websocket_connect("/api/plugins/kanban/events"):
+            pass
+    assert exc.value.code == 1008
+
+    # Wrong token → policy violation close.
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with c.websocket_connect("/api/plugins/kanban/events?token=nope"):
+            pass
+    assert exc.value.code == 1008
+
+    # Correct token → accepted (connect then close cleanly from our side).
+    with c.websocket_connect(
+        "/api/plugins/kanban/events?token=secret-xyz"
+    ) as ws:
+        assert ws is not None  # handshake succeeded

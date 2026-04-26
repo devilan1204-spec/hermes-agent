@@ -130,6 +130,8 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
                           help="scratch | worktree | dir:<path> (default: scratch)")
     p_create.add_argument("--tenant", default=None, help="Tenant namespace")
     p_create.add_argument("--priority", type=int, default=0, help="Priority tiebreaker")
+    p_create.add_argument("--triage", action="store_true",
+                          help="Park in triage — a specifier will flesh out the spec and promote to todo")
     p_create.add_argument("--created-by", default="user",
                           help="Author name recorded on the task (default: user)")
     p_create.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -318,6 +320,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
             tenant=args.tenant,
             priority=args.priority,
             parents=tuple(args.parent or ()),
+            triage=bool(getattr(args, "triage", False)),
         )
         task = kb.get_task(conn, task_id)
     if getattr(args, "json", False):
