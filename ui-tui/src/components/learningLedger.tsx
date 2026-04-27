@@ -15,9 +15,16 @@ const typeIcon: Record<string, string> = {
   integration: '◇',
   memory: '◆',
   recall: '↺',
-  skill: '✦',
-  'skill-use': '↻',
+  'skill-use': '✦',
   user: '●'
+}
+
+const typeVerb: Record<string, string> = {
+  integration: 'connected',
+  memory: 'remembered',
+  recall: 'recalled',
+  'skill-use': 'reused skill',
+  user: 'remembered'
 }
 
 const fmtTime = (ts?: null | number) => {
@@ -112,9 +119,12 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
     return (
       <Box flexDirection="column" width={width}>
         <Text bold color={t.color.amber}>
-          Learning Ledger
+          Recent Learning
         </Text>
-        <Text color={t.color.dim}>no memories, skills, recalls, or integrations found yet</Text>
+        <Text color={t.color.dim}>no memories, recalls, used skills, or integrations found yet</Text>
+        {ledger?.inventory?.skills ? (
+          <Text color={t.color.dim}>available knowledge: {ledger.inventory.skills} installed skills</Text>
+        ) : null}
         <OverlayHint t={t}>Esc/q close</OverlayHint>
       </Box>
     )
@@ -125,11 +135,14 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
   return (
     <Box flexDirection="column" width={width}>
       <Text bold color={t.color.amber}>
-        Learning Ledger
+        Recent Learning
       </Text>
       <Text color={t.color.dim}>
-        {ledger?.total ?? items.length} traces · {counts}
+        {ledger?.total ?? items.length} traces{counts ? ` · ${counts}` : ''}
       </Text>
+      {ledger?.inventory?.skills ? (
+        <Text color={t.color.dim}>available knowledge: {ledger.inventory.skills} installed skills</Text>
+      ) : null}
       {offset > 0 && <Text color={t.color.dim}> ↑ {offset} more</Text>}
 
       {visible.map((item, i) => {
@@ -138,6 +151,8 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
         const when = fmtTime(item.last_used_at ?? item.learned_at)
         const count = item.count ? ` ×${item.count}` : ''
         const icon = typeIcon[item.type] ?? '•'
+        const verb = typeVerb[item.type] ?? item.type
+        const title = item.type === 'memory' || item.type === 'user' ? item.summary : item.name
 
         return (
           <Text
@@ -148,10 +163,9 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
             wrap="truncate-end"
           >
             {active ? '▸ ' : '  '}
-            {i + 1}. {icon} {item.name}
+            {i + 1}. {icon} {verb}: {title}
             <Text color={active ? t.color.amber : t.color.dim}>
               {' '}
-              · {item.type}
               {count}
               {when ? ` · ${when}` : ''}
             </Text>
@@ -163,7 +177,8 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
 
       {selected && expanded ? (
         <Box borderColor={t.color.dim} borderStyle="single" flexDirection="column" marginTop={1} paddingX={1}>
-          <Text color={t.color.gold}>{selected.summary}</Text>
+          <Text color={t.color.gold}>{selected.type === 'memory' || selected.type === 'user' ? selected.name : selected.summary}</Text>
+          {selected.type === 'memory' || selected.type === 'user' ? <Text color={t.color.cornsilk}>{selected.summary}</Text> : null}
           <Text color={t.color.dim}>source: {selected.source}</Text>
         </Box>
       ) : null}
@@ -187,6 +202,7 @@ interface LearningLedgerResponse {
   counts?: Record<string, number>
   generated_at?: number
   home?: string
+  inventory?: { skills?: number }
   items?: LearningLedgerItem[]
   total?: number
 }

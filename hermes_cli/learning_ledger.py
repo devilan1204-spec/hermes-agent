@@ -24,9 +24,9 @@ class LedgerItem:
 
 def build_learning_ledger(db: Any = None, *, limit: int = 80) -> dict[str, Any]:
     """Build a compact, read-only ledger from existing Hermes artifacts."""
+    skill_inventory = _skill_inventory()
     items = [
         *_memory_items(),
-        *_skill_items(),
         *_tool_usage_items(db),
         *_integration_items(),
     ]
@@ -44,6 +44,7 @@ def build_learning_ledger(db: Any = None, *, limit: int = 80) -> dict[str, Any]:
         "home": str(get_hermes_home()),
         "counts": counts,
         "items": [asdict(item) for item in items[: max(1, limit)]],
+        "inventory": {"skills": skill_inventory},
         "total": len(items),
     }
 
@@ -75,21 +76,13 @@ def _memory_items() -> list[LedgerItem]:
         return []
 
 
-def _skill_items() -> list[LedgerItem]:
+def _skill_inventory() -> int:
     try:
         from tools.skills_tool import _find_all_skills
 
-        return [
-            LedgerItem(
-                type="skill",
-                name=str(skill.get("name") or "unnamed"),
-                summary=str(skill.get("description") or "No description."),
-                source=str(skill.get("category") or "general"),
-            )
-            for skill in _find_all_skills()
-        ]
+        return len(_find_all_skills())
     except Exception:
-        return []
+        return 0
 
 
 def _tool_usage_items(db: Any) -> list[LedgerItem]:
@@ -138,22 +131,37 @@ def _tool_usage_items(db: Any) -> list[LedgerItem]:
         elif tool_name in {"skill_view", "skill_manage"}:
             data = _json(content)
             name = str(data.get("name") or data.get("skill") or tool_name)
-            bump("skill-use", name, "Skill loaded or managed", ts)
+            bump("skill-use", name, _skill_summary(tool_name, data), ts)
 
         for call in _tool_calls(row["tool_calls"]):
             name, args = call
             if name == "session_search":
-                bump("recall", "session_search", "Past conversations recalled", ts)
+                query = str(args.get("query") or "").strip()
+                bump(
+                    "recall",
+                    query or "session_search",
+                    "Past conversations recalled",
+                    ts,
+                )
             elif name in {"skill_view", "skill_manage"}:
                 skill_name = str(
                     args.get("name") or args.get("skill") or args.get("query") or name
                 )
-                bump("skill-use", skill_name, "Skill requested by the agent", ts)
+                bump("skill-use", skill_name, _skill_summary(name, args), ts)
             elif name == "memory":
                 target = str(args.get("target") or "memory")
                 bump(target, f"{target} writes", "Durable memory updates", ts)
 
     return list(usage.values())
+
+
+def _skill_summary(tool_name: str, data: dict[str, Any]) -> str:
+    action = str(data.get("action") or "").strip().lower()
+    if tool_name == "skill_manage" and action:
+        return f"Skill {action.replace('_', ' ')}"
+    if tool_name == "skill_manage":
+        return "Skill managed"
+    return "Skill reused"
 
 
 def _integration_items() -> list[LedgerItem]:
@@ -172,7 +180,7 @@ def _integration_items() -> list[LedgerItem]:
         items.append(
             LedgerItem(
                 type="integration",
-                name=f"memory:{provider}",
+                name=f"{provider} memory provider",
                 summary="External memory provider is configured",
                 source="config.yaml",
             )
@@ -186,7 +194,7 @@ def _integration_items() -> list[LedgerItem]:
         items.append(
             LedgerItem(
                 type="integration",
-                name=f"mcp:{server}",
+                name=f"{server} MCP server",
                 summary="MCP server is configured",
                 source="config.yaml",
             )
