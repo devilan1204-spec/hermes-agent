@@ -603,11 +603,21 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
         return
       case 'message.complete': {
         const { finalMessages, finalText, wasInterrupted } = turnController.recordMessageComplete(ev.payload ?? {})
+        const completedLearning = (ev.payload?.learning_events ?? [])
+          .map(e => {
+            const title = String(e?.title ?? '').trim()
+            const verb = String(e?.verb ?? e?.type ?? 'learned').trim()
+
+            return title ? `${verb}: ${title}` : ''
+          })
+          .filter(Boolean)
 
         if (!wasInterrupted) {
           const msgs: Msg[] = finalMessages.length ? finalMessages : [{ role: 'assistant', text: finalText }]
+          const learningLines = [...completedLearning, ...pendingLearning].filter((text, i, xs) => xs.indexOf(text) === i)
+
           msgs.forEach(appendMessage)
-          pendingLearning.forEach(text => appendMessage({ kind: 'learning', role: 'system', text }))
+          learningLines.forEach(text => appendMessage({ kind: 'learning', role: 'system', text }))
           pendingLearning = []
 
           if (bellOnComplete && stdout?.isTTY) {

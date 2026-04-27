@@ -468,7 +468,13 @@ export type GatewayEvent =
   | { payload: SubagentEventPayload; session_id?: string; type: 'subagent.complete' }
   | { payload: { rendered?: string; text?: string }; session_id?: string; type: 'message.delta' }
   | {
-      payload?: { reasoning?: string; rendered?: string; text?: string; usage?: Usage }
+      payload?: {
+        learning_events?: { source?: string; summary?: string; title?: string; type?: string; verb?: string; via?: string }[]
+        reasoning?: string
+        rendered?: string
+        text?: string
+        usage?: Usage
+      }
       session_id?: string
       type: 'message.complete'
     }

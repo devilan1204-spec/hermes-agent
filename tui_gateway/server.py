@@ -1161,6 +1161,8 @@ def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result
 
         event = learning_event_from_tool(name, args, result)
         if event:
+            if session is not None:
+                session.setdefault("learning_events", []).append(event)
             _emit("learning.event", sid, event)
     except Exception:
         pass
@@ -2440,6 +2442,7 @@ def _(rid, params: dict) -> dict:
         if session.get("running"):
             return _err(rid, 4009, "session busy")
         session["running"] = True
+        session["learning_events"] = []
         history = list(session["history"])
         history_version = int(session.get("history_version", 0))
         images = list(session.get("attached_images", []))
@@ -2603,6 +2606,9 @@ def _(rid, params: dict) -> dict:
                 payload["reasoning"] = last_reasoning
             if status_note:
                 payload["warning"] = status_note
+            learning_events = list(session.get("learning_events") or [])
+            if learning_events:
+                payload["learning_events"] = learning_events
             rendered = render_message(raw, cols)
             if rendered:
                 payload["rendered"] = rendered
