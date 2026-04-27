@@ -1,6 +1,6 @@
 import { Box, type ScrollBoxHandle, Text } from '@hermes/ink'
 import { useStore } from '@nanostores/react'
-import { type ReactNode, type RefObject, useEffect, useMemo, useState } from 'react'
+import { type RefObject, useEffect, useMemo, useState } from 'react'
 
 import { $delegationState } from '../app/delegationStore.js'
 import { useTurnSelector } from '../app/turnStore.js'
@@ -256,23 +256,6 @@ export function StatusRule({
 
       <Text color={t.color.border}> ─ </Text>
       <Text color={t.color.label}>{cwdLabel}</Text>
-    </Box>
-  )
-}
-
-export function FloatBox({ children, color, width }: { children: ReactNode; color: string; width?: number }) {
-  return (
-    <Box
-      alignSelf="flex-start"
-      borderColor={color}
-      borderStyle="double"
-      flexDirection="column"
-      marginTop={1}
-      opaque
-      paddingX={1}
-      width={width}
-    >
-      {children}
     </Box>
   )
 }

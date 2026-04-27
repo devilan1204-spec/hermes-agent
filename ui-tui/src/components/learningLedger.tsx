@@ -5,6 +5,7 @@ import type { GatewayClient } from '../gatewayClient.js'
 import { rpcErrorMessage } from '../lib/rpc.js'
 import type { Theme } from '../theme.js'
 
+import { OverlayGrid } from './overlayGrid.js'
 import { OverlayHint, windowItems, windowOffset } from './overlayControls.js'
 
 const EDGE_GUTTER = 10
@@ -39,7 +40,7 @@ const fmtTime = (ts?: null | number) => {
   return days <= 0 ? 'today' : `${days}d ago`
 }
 
-export function LearningLedger({ gw, onClose, t, width: fixedWidth }: LearningLedgerProps) {
+export function LearningLedger({ borderColor, gw, onClose, t, width: fixedWidth }: LearningLedgerProps) {
   const [ledger, setLedger] = useState<LearningLedgerResponse | null>(null)
   const [idx, setIdx] = useState(0)
   const [expanded, setExpanded] = useState(false)
@@ -61,10 +62,6 @@ export function LearningLedger({ gw, onClose, t, width: fixedWidth }: LearningLe
   const items = ledger?.items ?? []
   const selected = items[idx]
   const detailOpen = expanded && !!selected
-  const gridGap = detailOpen ? GRID_GAP : 0
-  const listPaneWidth = detailOpen ? Math.floor((width - gridGap) * 0.7) : width
-  const detailPaneWidth = detailOpen ? width - gridGap - listPaneWidth : 0
-  const listContentWidth = Math.max(20, listPaneWidth - 4)
   const counts = useMemo(
     () =>
       Object.entries(ledger?.counts ?? {})
@@ -138,57 +135,81 @@ export function LearningLedger({ gw, onClose, t, width: fixedWidth }: LearningLe
   }
 
   const { items: visible, offset } = windowItems(items, idx, VISIBLE_ROWS)
+  const listPanel = (
+    <LearningList
+      counts={counts}
+      items={visible}
+      ledger={ledger}
+      offset={offset}
+      selectedIndex={idx}
+      t={t}
+    />
+  )
 
   return (
-    <Box flexDirection="row" width={width}>
-      <Box flexDirection="column" flexShrink={0} width={listPaneWidth}>
-        <Text bold color={t.color.accent}>
-          Recent Learning
-        </Text>
-        <Text color={t.color.muted}>
-          {ledger?.total ?? items.length} traces{counts ? ` · ${counts}` : ''}
-        </Text>
-        {ledger?.inventory?.skills ? (
-          <Text color={t.color.muted}>available knowledge: {ledger.inventory.skills} installed skills</Text>
-        ) : null}
-        {offset > 0 && <Text color={t.color.muted}> ↑ {offset} more</Text>}
+    <OverlayGrid
+      borderColor={borderColor}
+      panels={[
+        {
+          content: listPanel,
+          grow: 7,
+          id: 'learning-list',
+          title: 'Recent Learning'
+        },
+        ...(detailOpen && selected
+          ? [
+              {
+                content: <LedgerDetails item={selected} t={t} />,
+                grow: 3,
+                id: 'learning-details',
+                title: 'Details'
+              }
+            ]
+          : [])
+      ]}
+      t={t}
+      width={width}
+    />
+  )
+}
 
-        <Box flexDirection="column" width={listContentWidth}>
-          {visible.map((item, i) => {
-            const absolute = offset + i
-            const active = absolute === idx
+function LearningList({ counts, items, ledger, offset, selectedIndex, t }: LearningListProps) {
+  return (
+    <Box flexDirection="column">
+      <Text color={t.color.muted}>
+        {ledger?.total ?? items.length} traces{counts ? ` · ${counts}` : ''}
+      </Text>
+      {ledger?.inventory?.skills ? (
+        <Text color={t.color.muted}>available knowledge: {ledger.inventory.skills} installed skills</Text>
+      ) : null}
+      {offset > 0 && <Text color={t.color.muted}> ↑ {offset} more</Text>}
 
-            return (
-              <LedgerRow
-                active={active}
-                index={i + 1}
-                item={item}
-                key={`${item.type}:${item.name}:${i}`}
-                t={t}
-                width={listContentWidth}
-              />
-            )
-          })}
-        </Box>
+      <Box flexDirection="column">
+        {items.map((item, i) => {
+          const absolute = offset + i
 
-        {offset + VISIBLE_ROWS < items.length && (
-          <Text color={t.color.muted}> ↓ {items.length - offset - VISIBLE_ROWS} more</Text>
-        )}
-
-        <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>
+          return (
+            <LedgerRow
+              active={absolute === selectedIndex}
+              index={i + 1}
+              item={item}
+              key={`${item.type}:${item.name}:${i}`}
+              t={t}
+            />
+          )
+        })}
       </Box>
 
-      {detailOpen && selected ? (
-        <>
-          <Box flexShrink={0} width={gridGap} />
-          <LedgerDetails item={selected} t={t} width={detailPaneWidth} />
-        </>
-      ) : null}
+      {offset + VISIBLE_ROWS < (ledger?.items?.length ?? items.length) && (
+        <Text color={t.color.muted}> ↓ {(ledger?.items?.length ?? items.length) - offset - VISIBLE_ROWS} more</Text>
+      )}
+
+      <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>
     </Box>
   )
 }
 
-function LedgerRow({ active, index, item, t, width }: LedgerRowProps) {
+function LedgerRow({ active, index, item, t }: LedgerRowProps) {
   const when = fmtTime(item.last_used_at ?? item.learned_at)
   const count = item.count ? ` ×${item.count}` : ''
   const icon = typeIcon[item.type] ?? '•'
@@ -196,7 +217,7 @@ function LedgerRow({ active, index, item, t, width }: LedgerRowProps) {
   const title = item.type === 'memory' || item.type === 'user' ? item.summary : item.name
 
   return (
-    <Box flexShrink={0} width={width}>
+    <Box flexShrink={0} width="100%">
       <Text bold={active} color={active ? t.color.accent : t.color.muted} inverse={active} wrap="truncate-end">
         {active ? '▸ ' : '  '}
         {index}. {icon} {verb}: {title}
@@ -210,14 +231,11 @@ function LedgerRow({ active, index, item, t, width }: LedgerRowProps) {
   )
 }
 
-function LedgerDetails({ item, t, width }: LedgerDetailsProps) {
+function LedgerDetails({ item, t }: LedgerDetailsProps) {
   const memoryLike = item.type === 'memory' || item.type === 'user'
 
   return (
-    <Box flexDirection="column" flexShrink={0} width={width}>
-      <Text bold color={t.color.accent}>
-        Details
-      </Text>
+    <Box flexDirection="column">
       <Text color={t.color.primary} wrap="truncate-end">
         {memoryLike ? item.name : item.summary}
       </Text>
@@ -252,21 +270,29 @@ interface LearningLedgerResponse {
   total?: number
 }
 
+interface LearningListProps {
+  counts: string
+  items: LearningLedgerItem[]
+  ledger: LearningLedgerResponse | null
+  offset: number
+  selectedIndex: number
+  t: Theme
+}
+
 interface LedgerRowProps {
   active: boolean
   index: number
   item: LearningLedgerItem
   t: Theme
-  width: number
 }
 
 interface LedgerDetailsProps {
   item: LearningLedgerItem
   t: Theme
-  width: number
 }
 
 interface LearningLedgerProps {
+  borderColor: string
   gw: GatewayClient
   onClose: () => void
   t: Theme

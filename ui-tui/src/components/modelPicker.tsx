@@ -25,10 +25,8 @@ export function ModelPicker({ gw, onCancel, onSelect, sessionId, t }: ModelPicke
   const [stage, setStage] = useState<'model' | 'provider'>('provider')
 
   const { stdout } = useStdout()
-  // Pin the picker to a stable width so the FloatBox parent (which shrinks-
-  // to-fit with alignSelf="flex-start") doesn't resize as long provider /
-  // model names scroll into view, and so `wrap="truncate-end"` on each row
-  // has an actual constraint to truncate against.
+  // Pin the picker to a stable width so long provider / model names scroll
+  // into view without changing the overlay grid's measured layout.
   const width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, (stdout?.columns ?? 80) - 6))
 
   useEffect(() => {

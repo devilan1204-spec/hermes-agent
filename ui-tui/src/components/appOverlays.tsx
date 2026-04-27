@@ -6,11 +6,11 @@ import type { AppOverlaysProps } from '../app/interfaces.js'
 import { $overlayState, patchOverlayState } from '../app/overlayStore.js'
 import { $uiState } from '../app/uiStore.js'
 
-import { FloatBox } from './appChrome.js'
 import { LearningLedger } from './learningLedger.js'
 import { MaskedPrompt } from './maskedPrompt.js'
 import { ModelPicker } from './modelPicker.js'
 import { OverlayHint } from './overlayControls.js'
+import { OverlayGrid } from './overlayGrid.js'
 import { ApprovalPrompt, ClarifyPrompt, ConfirmPrompt } from './prompts.js'
 import { SessionPicker } from './sessionPicker.js'
 import { SkillsHub } from './skillsHub.js'
@@ -125,112 +125,161 @@ export function FloatingOverlays({
 
   const start = Math.max(0, Math.min(compIdx - Math.floor(COMPLETION_WINDOW / 2), completions.length - viewportSize))
   const overlayWidth = Math.max(OVERLAY_MIN_WIDTH, cols - OVERLAY_GUTTER)
-  const completionInnerWidth = Math.max(28, overlayWidth - 4)
-  const completionNameWidth = Math.max(18, Math.floor(completionInnerWidth * 0.42))
-  const completionMetaWidth = Math.max(12, completionInnerWidth - completionNameWidth - 2)
 
   return (
     <Box alignItems="flex-start" bottom="100%" flexDirection="column" left={0} position="absolute" right={0}>
       {overlay.picker && (
-        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
-          <SessionPicker
-            gw={gw}
-            onCancel={() => patchOverlayState({ picker: false })}
-            onSelect={onPickerSelect}
-            t={ui.theme}
-          />
-        </FloatBox>
+        <OverlayGrid
+          borderColor={ui.theme.color.border}
+          panels={[
+            {
+              content: (
+                <SessionPicker
+                  gw={gw}
+                  onCancel={() => patchOverlayState({ picker: false })}
+                  onSelect={onPickerSelect}
+                  t={ui.theme}
+                />
+              ),
+              id: 'sessions'
+            }
+          ]}
+          t={ui.theme}
+          width={overlayWidth}
+        />
       )}
 
       {overlay.modelPicker && (
-        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
-          <ModelPicker
-            gw={gw}
-            onCancel={() => patchOverlayState({ modelPicker: false })}
-            onSelect={onModelSelect}
-            sessionId={ui.sid}
-            t={ui.theme}
-          />
-        </FloatBox>
+        <OverlayGrid
+          borderColor={ui.theme.color.border}
+          panels={[
+            {
+              content: (
+                <ModelPicker
+                  gw={gw}
+                  onCancel={() => patchOverlayState({ modelPicker: false })}
+                  onSelect={onModelSelect}
+                  sessionId={ui.sid}
+                  t={ui.theme}
+                />
+              ),
+              id: 'models'
+            }
+          ]}
+          t={ui.theme}
+          width={overlayWidth}
+        />
       )}
 
       {overlay.skillsHub && (
-        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
-          <SkillsHub gw={gw} onClose={() => patchOverlayState({ skillsHub: false })} t={ui.theme} />
-        </FloatBox>
+        <OverlayGrid
+          borderColor={ui.theme.color.border}
+          panels={[
+            {
+              content: <SkillsHub gw={gw} onClose={() => patchOverlayState({ skillsHub: false })} t={ui.theme} />,
+              id: 'skills'
+            }
+          ]}
+          t={ui.theme}
+          width={overlayWidth}
+        />
       )}
 
       {overlay.learningLedger && (
-        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
-          <LearningLedger
-            gw={gw}
-            onClose={() => patchOverlayState({ learningLedger: false })}
-            t={ui.theme}
-            width={overlayWidth}
-          />
-        </FloatBox>
+        <LearningLedger
+          borderColor={ui.theme.color.border}
+          gw={gw}
+          onClose={() => patchOverlayState({ learningLedger: false })}
+          t={ui.theme}
+          width={overlayWidth}
+        />
       )}
 
       {overlay.pager && (
-        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
-          <Box flexDirection="column" paddingX={1} paddingY={1} width="100%">
-            {overlay.pager.title && (
-              <Box justifyContent="center" marginBottom={1}>
-                <Text bold color={ui.theme.color.primary}>
-                  {overlay.pager.title}
-                </Text>
-              </Box>
-            )}
+        <OverlayGrid
+          borderColor={ui.theme.color.border}
+          panels={[
+            {
+              content: (
+                <Box flexDirection="column">
+                  {overlay.pager.lines
+                    .slice(overlay.pager.offset, overlay.pager.offset + pagerPageSize)
+                    .map((line, i) => (
+                      <Text key={i}>{line}</Text>
+                    ))}
 
-            {overlay.pager.lines.slice(overlay.pager.offset, overlay.pager.offset + pagerPageSize).map((line, i) => (
-              <Text key={i}>{line}</Text>
-            ))}
-
-            <Box marginTop={1}>
-              <OverlayHint t={ui.theme}>
-                {overlay.pager.offset + pagerPageSize < overlay.pager.lines.length
-                  ? `↑↓/jk line · Enter/Space/PgDn page · b/PgUp back · g/G top/bottom · Esc/q close (${Math.min(overlay.pager.offset + pagerPageSize, overlay.pager.lines.length)}/${overlay.pager.lines.length})`
-                  : `end · ↑↓/jk · b/PgUp back · g top · Esc/q close (${overlay.pager.lines.length} lines)`}
-              </OverlayHint>
-            </Box>
-          </Box>
-        </FloatBox>
+                  <Box marginTop={1}>
+                    <OverlayHint t={ui.theme}>
+                      {overlay.pager.offset + pagerPageSize < overlay.pager.lines.length
+                        ? `↑↓/jk line · Enter/Space/PgDn page · b/PgUp back · g/G top/bottom · Esc/q close (${Math.min(overlay.pager.offset + pagerPageSize, overlay.pager.lines.length)}/${overlay.pager.lines.length})`
+                        : `end · ↑↓/jk · b/PgUp back · g top · Esc/q close (${overlay.pager.lines.length} lines)`}
+                    </OverlayHint>
+                  </Box>
+                </Box>
+              ),
+              id: 'pager',
+              title: overlay.pager.title
+            }
+          ]}
+          t={ui.theme}
+          width={overlayWidth}
+        />
       )}
 
       {!!completions.length && (
-        <FloatBox color={ui.theme.color.primary} width={overlayWidth}>
-          <Box flexDirection="column" width={completionInnerWidth}>
-            {completions.slice(start, start + viewportSize).map((item, i) => {
-              const active = start + i === compIdx
+        <OverlayGrid
+          borderColor={ui.theme.color.primary}
+          panels={[
+            {
+              content: (
+                <Box flexDirection="column">
+                  {completions.slice(start, start + viewportSize).map((item, i) => {
+                    const active = start + i === compIdx
 
-              return (
-                <Box
-                  backgroundColor={active ? ui.theme.color.completionCurrentBg : undefined}
-                  flexDirection="row"
-                  key={`${start + i}:${item.text}:${item.display}:${item.meta ?? ''}`}
-                  width="100%"
-                >
-                  <Box width={completionNameWidth}>
-                    <Text bold color={ui.theme.color.label} wrap="truncate-end">
-                      {item.display}
-                    </Text>
-                  </Box>
-                  {item.meta ? (
-                    <Box marginLeft={2} width={completionMetaWidth}>
-                      <Text color={ui.theme.color.muted} wrap="truncate-end">
-                        {item.meta}
-                      </Text>
-                    </Box>
-                  ) : (
-                    <Box marginLeft={2} width={completionMetaWidth}>
-                      <Text> </Text>
-                    </Box>
-                  )}
+                    return (
+                      <Box
+                        backgroundColor={active ? ui.theme.color.completionCurrentBg : undefined}
+                        key={`${start + i}:${item.text}`}
+                        width="100%"
+                      >
+                        <Text bold color={ui.theme.color.label} wrap="truncate-end">
+                          {item.display}
+                        </Text>
+                      </Box>
+                    )
+                  })}
                 </Box>
-              )
-            })}
-          </Box>
-        </FloatBox>
+              ),
+              grow: 4,
+              id: 'completion-list'
+            },
+            {
+              content: (
+                <Box flexDirection="column">
+                  {completions.slice(start, start + viewportSize).map((item, i) => {
+                    const active = start + i === compIdx
+
+                    return (
+                      <Box
+                        backgroundColor={active ? ui.theme.color.completionCurrentBg : undefined}
+                        key={`${start + i}:${item.text}:meta`}
+                        width="100%"
+                      >
+                        <Text color={ui.theme.color.muted} wrap="truncate-end">
+                          {item.meta ?? ' '}
+                        </Text>
+                      </Box>
+                    )
+                  })}
+                </Box>
+              ),
+              grow: 6,
+              id: 'completion-meta'
+            }
+          ]}
+          t={ui.theme}
+          width={overlayWidth}
+        />
       )}
     </Box>
   )
