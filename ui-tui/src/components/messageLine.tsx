@@ -97,7 +97,7 @@ export const MessageLine = memo(function MessageLine({
   if (msg.kind === 'learning') {
     return (
       <Box marginLeft={3} marginTop={1}>
-        <Text color={t.color.cornsilk} dimColor italic>
+        <Text color={t.color.dim} italic>
           {msg.text}
         </Text>
       </Box>
