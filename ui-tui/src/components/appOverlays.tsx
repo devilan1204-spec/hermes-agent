@@ -16,6 +16,9 @@ import { SessionPicker } from './sessionPicker.js'
 import { SkillsHub } from './skillsHub.js'
 
 const COMPLETION_WINDOW = 16
+const OVERLAY_GUTTER = 4
+const OVERLAY_MAX_WIDTH = 132
+const OVERLAY_MIN_WIDTH = 44
 
 export function PromptZone({
   cols,
@@ -122,11 +125,15 @@ export function FloatingOverlays({
   const viewportSize = Math.min(COMPLETION_WINDOW, completions.length)
 
   const start = Math.max(0, Math.min(compIdx - Math.floor(COMPLETION_WINDOW / 2), completions.length - viewportSize))
+  const overlayWidth = Math.max(OVERLAY_MIN_WIDTH, Math.min(OVERLAY_MAX_WIDTH, cols - OVERLAY_GUTTER))
+  const completionInnerWidth = Math.max(28, overlayWidth - 4)
+  const completionNameWidth = Math.max(18, Math.floor(completionInnerWidth * 0.42))
+  const completionMetaWidth = Math.max(12, completionInnerWidth - completionNameWidth - 2)
 
   return (
     <Box alignItems="flex-start" bottom="100%" flexDirection="column" left={0} position="absolute" right={0}>
       {overlay.picker && (
-        <FloatBox color={ui.theme.color.border}>
+        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
           <SessionPicker
             gw={gw}
             onCancel={() => patchOverlayState({ picker: false })}
@@ -137,7 +144,7 @@ export function FloatingOverlays({
       )}
 
       {overlay.modelPicker && (
-        <FloatBox color={ui.theme.color.border}>
+        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
           <ModelPicker
             gw={gw}
             onCancel={() => patchOverlayState({ modelPicker: false })}
@@ -149,20 +156,20 @@ export function FloatingOverlays({
       )}
 
       {overlay.skillsHub && (
-        <FloatBox color={ui.theme.color.border}>
+        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
           <SkillsHub gw={gw} onClose={() => patchOverlayState({ skillsHub: false })} t={ui.theme} />
         </FloatBox>
       )}
 
       {overlay.learningLedger && (
-        <FloatBox color={ui.theme.color.border}>
+        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
           <LearningLedger gw={gw} onClose={() => patchOverlayState({ learningLedger: false })} t={ui.theme} />
         </FloatBox>
       )}
 
       {overlay.pager && (
-        <FloatBox color={ui.theme.color.border}>
-          <Box flexDirection="column" paddingX={1} paddingY={1}>
+        <FloatBox color={ui.theme.color.border} width={overlayWidth}>
+          <Box flexDirection="column" paddingX={1} paddingY={1} width="100%">
             {overlay.pager.title && (
               <Box justifyContent="center" marginBottom={1}>
                 <Text bold color={ui.theme.color.primary}>
@@ -187,8 +194,8 @@ export function FloatingOverlays({
       )}
 
       {!!completions.length && (
-        <FloatBox color={ui.theme.color.primary}>
-          <Box flexDirection="column" width={Math.max(28, cols - 6)}>
+        <FloatBox color={ui.theme.color.primary} width={overlayWidth}>
+          <Box flexDirection="column" width={completionInnerWidth}>
             {completions.slice(start, start + viewportSize).map((item, i) => {
               const active = start + i === compIdx
 
@@ -199,11 +206,22 @@ export function FloatingOverlays({
                   key={`${start + i}:${item.text}:${item.display}:${item.meta ?? ''}`}
                   width="100%"
                 >
-                  <Text bold color={ui.theme.color.label}>
-                    {' '}
-                    {item.display}
-                  </Text>
-                  {item.meta ? <Text color={ui.theme.color.muted}> {item.meta}</Text> : null}
+                  <Box width={completionNameWidth}>
+                    <Text bold color={ui.theme.color.label} wrap="truncate-end">
+                      {item.display}
+                    </Text>
+                  </Box>
+                  {item.meta ? (
+                    <Box marginLeft={2} width={completionMetaWidth}>
+                      <Text color={ui.theme.color.muted} wrap="truncate-end">
+                        {item.meta}
+                      </Text>
+                    </Box>
+                  ) : (
+                    <Box marginLeft={2} width={completionMetaWidth}>
+                      <Text> </Text>
+                    </Box>
+                  )}
                 </Box>
               )
             })}

@@ -260,7 +260,7 @@ export function StatusRule({
   )
 }
 
-export function FloatBox({ children, color }: { children: ReactNode; color: string }) {
+export function FloatBox({ children, color, width }: { children: ReactNode; color: string; width?: number }) {
   return (
     <Box
       alignSelf="flex-start"
@@ -270,6 +270,7 @@ export function FloatBox({ children, color }: { children: ReactNode; color: stri
       marginTop={1}
       opaque
       paddingX={1}
+      width={width}
     >
       {children}
     </Box>
