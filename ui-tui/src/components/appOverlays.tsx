@@ -17,7 +17,6 @@ import { SkillsHub } from './skillsHub.js'
 
 const COMPLETION_WINDOW = 16
 const OVERLAY_GUTTER = 4
-const OVERLAY_MAX_WIDTH = 132
 const OVERLAY_MIN_WIDTH = 44
 
 export function PromptZone({
@@ -125,7 +124,7 @@ export function FloatingOverlays({
   const viewportSize = Math.min(COMPLETION_WINDOW, completions.length)
 
   const start = Math.max(0, Math.min(compIdx - Math.floor(COMPLETION_WINDOW / 2), completions.length - viewportSize))
-  const overlayWidth = Math.max(OVERLAY_MIN_WIDTH, Math.min(OVERLAY_MAX_WIDTH, cols - OVERLAY_GUTTER))
+  const overlayWidth = Math.max(OVERLAY_MIN_WIDTH, cols - OVERLAY_GUTTER)
   const completionInnerWidth = Math.max(28, overlayWidth - 4)
   const completionNameWidth = Math.max(18, Math.floor(completionInnerWidth * 0.42))
   const completionMetaWidth = Math.max(12, completionInnerWidth - completionNameWidth - 2)
@@ -167,7 +166,7 @@ export function FloatingOverlays({
             gw={gw}
             onClose={() => patchOverlayState({ learningLedger: false })}
             t={ui.theme}
-            width={completionInnerWidth}
+            width={overlayWidth}
           />
         </FloatBox>
       )}
