@@ -682,3 +682,70 @@
   font-size: 0.7rem;
   line-height: 1.45;
 }
+
+
+/* ---- Run history (per-attempt log in the drawer) ------------------- */
+
+.hermes-kanban-run {
+  border-left: 2px solid var(--color-border);
+  padding: 0.35rem 0.5rem;
+  margin-bottom: 0.4rem;
+  background: color-mix(in srgb, var(--color-foreground) 3%, transparent);
+  border-radius: var(--radius-sm, 0.25rem);
+}
+.hermes-kanban-run--active  { border-left-color: #3fb97d; }
+.hermes-kanban-run--completed { border-left-color: #4a8cd1; }
+.hermes-kanban-run--blocked { border-left-color: var(--color-destructive, #d14a4a); }
+.hermes-kanban-run--crashed,
+.hermes-kanban-run--timed_out,
+.hermes-kanban-run--gave_up,
+.hermes-kanban-run--spawn_failed {
+  border-left-color: var(--color-destructive, #d14a4a);
+  background: color-mix(in srgb, var(--color-destructive, #d14a4a) 6%, transparent);
+}
+.hermes-kanban-run--reclaimed { border-left-color: #d4b348; }
+
+.hermes-kanban-run-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.7rem;
+}
+.hermes-kanban-run-outcome {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-foreground);
+}
+.hermes-kanban-run-profile {
+  color: var(--color-muted-foreground);
+}
+.hermes-kanban-run-elapsed {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted-foreground);
+}
+.hermes-kanban-run-ago {
+  margin-left: auto;
+  color: var(--color-muted-foreground);
+}
+.hermes-kanban-run-summary {
+  font-size: 0.75rem;
+  padding: 0.2rem 0 0;
+  color: var(--color-foreground);
+}
+.hermes-kanban-run-error {
+  font-size: 0.7rem;
+  color: var(--color-destructive, #d14a4a);
+  padding: 0.15rem 0 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.hermes-kanban-run-meta {
+  display: block;
+  font-size: 0.65rem;
+  padding: 0.15rem 0 0;
+  color: var(--color-muted-foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}

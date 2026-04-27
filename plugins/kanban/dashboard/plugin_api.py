@@ -127,6 +127,28 @@ def _comment_dict(c: kanban_db.Comment) -> dict[str, Any]:
     }
 
 
+def _run_dict(r: kanban_db.Run) -> dict[str, Any]:
+    """Serialise a Run for the drawer's Run history section."""
+    return {
+        "id": r.id,
+        "task_id": r.task_id,
+        "profile": r.profile,
+        "step_key": r.step_key,
+        "status": r.status,
+        "claim_lock": r.claim_lock,
+        "claim_expires": r.claim_expires,
+        "worker_pid": r.worker_pid,
+        "max_runtime_seconds": r.max_runtime_seconds,
+        "last_heartbeat_at": r.last_heartbeat_at,
+        "started_at": r.started_at,
+        "ended_at": r.ended_at,
+        "outcome": r.outcome,
+        "summary": r.summary,
+        "metadata": r.metadata,
+        "error": r.error,
+    }
+
+
 def _links_for(conn: sqlite3.Connection, task_id: str) -> dict[str, list[str]]:
     """Return {'parents': [...], 'children': [...]} for a task."""
     parents = [
@@ -262,6 +284,7 @@ def get_task(task_id: str):
             "comments": [_comment_dict(c) for c in kanban_db.list_comments(conn, task_id)],
             "events": [_event_dict(e) for e in kanban_db.list_events(conn, task_id)],
             "links": _links_for(conn, task_id),
+            "runs": [_run_dict(r) for r in kanban_db.list_runs(conn, task_id)],
         }
     finally:
         conn.close()

@@ -194,6 +194,12 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
     p_complete.add_argument("task_ids", nargs="+",
                             help="One or more task ids (only --result applies to all of them)")
     p_complete.add_argument("--result", default=None, help="Result summary")
+    p_complete.add_argument("--summary", default=None,
+                            help="Structured handoff summary for downstream tasks. "
+                                 "Falls back to --result if omitted.")
+    p_complete.add_argument("--metadata", default=None,
+                            help='JSON dict of structured facts (e.g. \'{"changed_files": [...], '
+                                 '"tests_run": 12}\'). Stored on the closing run.')
 
     p_block = sub.add_parser("block", help="Mark one or more tasks blocked")
     p_block.add_argument("task_id")
@@ -301,6 +307,15 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
     p_log.add_argument("--tail", type=int, default=None,
                        help="Only print the last N bytes")
 
+    # --- runs (per-attempt history for a task) ---
+    p_runs = sub.add_parser(
+        "runs",
+        help="Show attempt history for a task (one row per run: profile, "
+             "outcome, elapsed, summary)",
+    )
+    p_runs.add_argument("task_id")
+    p_runs.add_argument("--json", action="store_true")
+
     # --- heartbeat (worker liveness signal) ---
     p_hb = sub.add_parser(
         "heartbeat",
@@ -383,6 +398,7 @@ def kanban_command(args: argparse.Namespace) -> int:
         "watch":    _cmd_watch,
         "stats":    _cmd_stats,
         "log":      _cmd_log,
+        "runs":     _cmd_runs,
         "heartbeat": _cmd_heartbeat,
         "assignees": _cmd_assignees,
         "notify-subscribe":   _cmd_notify_subscribe,
@@ -694,10 +710,25 @@ def _cmd_complete(args: argparse.Namespace) -> int:
     if not ids:
         print("at least one task_id is required", file=sys.stderr)
         return 1
+    metadata = None
+    raw_meta = getattr(args, "metadata", None)
+    if raw_meta:
+        try:
+            metadata = json.loads(raw_meta)
+            if not isinstance(metadata, dict):
+                raise ValueError("must be a JSON object")
+        except (ValueError, json.JSONDecodeError) as exc:
+            print(f"kanban: --metadata: {exc}", file=sys.stderr)
+            return 2
     failed: list[str] = []
     with kb.connect() as conn:
         for tid in ids:
-            if not kb.complete_task(conn, tid, result=args.result):
+            if not kb.complete_task(
+                conn, tid,
+                result=args.result,
+                summary=getattr(args, "summary", None),
+                metadata=metadata,
+            ):
                 failed.append(tid)
                 print(f"cannot complete {tid} (unknown id or terminal state)", file=sys.stderr)
             else:
@@ -990,6 +1021,45 @@ def _cmd_log(args: argparse.Namespace) -> int:
     sys.stdout.write(content)
     if not content.endswith("\n"):
         sys.stdout.write("\n")
+    return 0
+
+
+def _cmd_runs(args: argparse.Namespace) -> int:
+    """Show attempt history for a task."""
+    with kb.connect() as conn:
+        runs = kb.list_runs(conn, args.task_id)
+    if getattr(args, "json", False):
+        print(json.dumps([
+            {
+                "id": r.id, "profile": r.profile, "status": r.status,
+                "outcome": r.outcome, "started_at": r.started_at,
+                "ended_at": r.ended_at, "summary": r.summary,
+                "error": r.error, "metadata": r.metadata,
+                "worker_pid": r.worker_pid, "step_key": r.step_key,
+            } for r in runs
+        ], indent=2, ensure_ascii=False))
+        return 0
+    if not runs:
+        print(f"(no runs yet for {args.task_id})")
+        return 0
+    print(f"{'#':3s}  {'OUTCOME':12s}  {'PROFILE':16s}  {'ELAPSED':>8s}  STARTED")
+    for i, r in enumerate(runs, 1):
+        end = r.ended_at or int(time.time())
+        elapsed = end - r.started_at
+        if elapsed < 60:
+            el = f"{elapsed}s"
+        elif elapsed < 3600:
+            el = f"{elapsed // 60}m"
+        else:
+            el = f"{elapsed / 3600:.1f}h"
+        outcome = r.outcome or ("(running)" if not r.ended_at else r.status)
+        print(f"{i:3d}  {outcome:12s}  {(r.profile or '-'):16s}  {el:>8s}  {_fmt_ts(r.started_at)}")
+        if r.summary:
+            # Indent and truncate long summaries to keep the table readable.
+            summary = r.summary.splitlines()[0][:100]
+            print(f"     → {summary}")
+        if r.error:
+            print(f"     ✖ {r.error[:100]}")
     return 0
 
 

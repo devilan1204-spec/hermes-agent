@@ -627,3 +627,48 @@ def test_config_reads_dashboard_kanban_section(tmp_path, monkeypatch, client):
     assert data["lane_by_profile"] is False
     assert data["include_archived_by_default"] is True
     assert data["render_markdown"] is False
+
+
+# ---------------------------------------------------------------------------
+# Runs surfacing (vulcan-artivus RFC feedback)
+# ---------------------------------------------------------------------------
+
+def test_task_detail_includes_runs(client):
+    """GET /tasks/:id carries a runs[] array with the attempt history."""
+    r = client.post("/api/plugins/kanban/tasks",
+                    json={"title": "port x", "assignee": "worker"}).json()
+    tid = r["task"]["id"]
+
+    # Drive status running to force a run creation: PATCH to running
+    # doesn't call claim_task (the PATCH path uses _set_status_direct),
+    # so use the bulk/claim indirection via the kernel.
+    import hermes_cli.kanban_db as _kb
+    conn = _kb.connect()
+    try:
+        _kb.claim_task(conn, tid)
+        _kb.complete_task(
+            conn, tid,
+            result="done",
+            summary="tested on rate limiter",
+            metadata={"changed_files": ["limiter.py"]},
+        )
+    finally:
+        conn.close()
+
+    d = client.get(f"/api/plugins/kanban/tasks/{tid}").json()
+    assert "runs" in d
+    assert len(d["runs"]) == 1
+    run = d["runs"][0]
+    assert run["outcome"] == "completed"
+    assert run["profile"] == "worker"
+    assert run["summary"] == "tested on rate limiter"
+    assert run["metadata"] == {"changed_files": ["limiter.py"]}
+    assert run["ended_at"] is not None
+
+
+def test_task_detail_runs_empty_before_claim(client):
+    """A task that's never been claimed has an empty runs[] list, not
+    a missing key."""
+    r = client.post("/api/plugins/kanban/tasks", json={"title": "fresh"}).json()
+    d = client.get(f"/api/plugins/kanban/tasks/{r['task']['id']}").json()
+    assert d["runs"] == []

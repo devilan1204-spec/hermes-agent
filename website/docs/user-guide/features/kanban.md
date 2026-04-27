@@ -283,6 +283,7 @@ hermes kanban tail <id>                                # follow a single task's 
 hermes kanban watch [--assignee P] [--tenant T]        # live stream ALL events to the terminal
         [--kinds completed,blocked,…] [--interval SECS]
 hermes kanban heartbeat <id> [--note "..."]            # worker liveness signal for long ops
+hermes kanban runs <id> [--json]                       # attempt history (one row per run)
 hermes kanban assignees [--json]                       # profiles on disk + per-assignee task counts
 hermes kanban dispatch [--dry-run] [--max N]           # one-shot pass
         [--failure-limit N] [--json]
@@ -349,9 +350,45 @@ hermes kanban notify-unsubscribe t_abcd \
 
 A subscription removes itself automatically once the task reaches `done` or `archived`; no cleanup needed.
 
+## Runs — one row per attempt
+
+A task is a logical unit of work; a **run** is one attempt to execute it. When the dispatcher claims a ready task it creates a row in `task_runs` and points `tasks.current_run_id` at it. When that attempt ends — completed, blocked, crashed, timed out, spawn-failed, reclaimed — the run row closes with an `outcome` and the task's pointer clears. A task that's been attempted three times has three `task_runs` rows.
+
+Why two tables instead of just mutating the task: you need **full attempt history** for real-world postmortems ("the second reviewer attempt got to approve, the third merged"), and you need a clean place to hang per-attempt metadata — which files changed, which tests ran, which findings a reviewer noted. Those are run facts, not task facts.
+
+Runs are also where **structured handoff** lives. When a worker completes a task it can pass:
+
+- `--result "<short log line>"` — goes on the task row as before (for back-compat).
+- `--summary "<human handoff>"` — goes on the run; downstream children see it in their `build_worker_context`.
+- `--metadata '{"changed_files": [...], "tests_run": 12}'` — JSON dict on the run; children see it serialized alongside the summary.
+
+Downstream children read the most recent completed run's summary + metadata for each parent. Retrying workers read the prior attempts on their own task (outcome, summary, error) so they don't repeat a path that already failed.
+
+```bash
+# Worker completes with a structured handoff:
+hermes kanban complete t_abcd \
+    --result "rate limiter shipped" \
+    --summary "implemented token bucket, keys on user_id with IP fallback, all tests pass" \
+    --metadata '{"changed_files": ["limiter.py", "tests/test_limiter.py"], "tests_run": 14}'
+
+# Review the attempt history on a retried task:
+hermes kanban runs t_abcd
+#   #  OUTCOME       PROFILE           ELAPSED  STARTED
+#   1  blocked       worker               12s  2026-04-27 14:02
+#        → BLOCKED: need decision on rate-limit key
+#   2  completed     worker                8m   2026-04-27 15:18
+#        → implemented token bucket, keys on user_id with IP fallback
+```
+
+Runs are exposed on the dashboard (Run History section in the drawer, one coloured row per attempt) and on the REST API (`GET /api/plugins/kanban/tasks/:id` returns a `runs[]` array). Task_events rows carry the run_id they belong to so the UI can group them by attempt.
+
+### Forward compatibility
+
+Two nullable columns on `tasks` are reserved for v2 workflow routing: `workflow_template_id` (which template this task belongs to) and `current_step_key` (which step in that template is active). The v1 kernel ignores them for routing but lets clients write them, so a v2 release can add the routing machinery without another schema migration.
+
 ## Event reference
 
-Every transition appends a row to `task_events`. The kinds group into three clusters so filtering is easy (`hermes kanban watch --kinds completed,gave_up,timed_out`):
+Every transition appends a row to `task_events`. Each row carries an optional `run_id` so UIs can group events by attempt. Kinds group into three clusters so filtering is easy (`hermes kanban watch --kinds completed,gave_up,timed_out`):
 
 **Lifecycle** (what changed about the task as a logical unit):
 

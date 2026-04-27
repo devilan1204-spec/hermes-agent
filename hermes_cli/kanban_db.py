@@ -90,6 +90,9 @@ class Task:
     last_spawn_error: Optional[str] = None
     max_runtime_seconds: Optional[int] = None
     last_heartbeat_at: Optional[int] = None
+    current_run_id: Optional[int] = None
+    workflow_template_id: Optional[str] = None
+    current_step_key: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "Task":
@@ -121,6 +124,69 @@ class Task:
             last_heartbeat_at=(
                 row["last_heartbeat_at"] if "last_heartbeat_at" in keys else None
             ),
+            current_run_id=(
+                row["current_run_id"] if "current_run_id" in keys else None
+            ),
+            workflow_template_id=(
+                row["workflow_template_id"] if "workflow_template_id" in keys else None
+            ),
+            current_step_key=(
+                row["current_step_key"] if "current_step_key" in keys else None
+            ),
+        )
+
+
+@dataclass
+class Run:
+    """In-memory view of a ``task_runs`` row.
+
+    A run is one attempt to execute a task — created on claim, closed
+    on complete/block/crash/timeout/spawn_failure/reclaim. Multiple runs
+    per task when retries happen. Carries the claim machinery, PID,
+    heartbeat, and the structured handoff summary that downstream workers
+    read via ``build_worker_context``.
+    """
+
+    id: int
+    task_id: str
+    profile: Optional[str]
+    step_key: Optional[str]
+    status: str
+    claim_lock: Optional[str]
+    claim_expires: Optional[int]
+    worker_pid: Optional[int]
+    max_runtime_seconds: Optional[int]
+    last_heartbeat_at: Optional[int]
+    started_at: int
+    ended_at: Optional[int]
+    outcome: Optional[str]
+    summary: Optional[str]
+    metadata: Optional[dict]
+    error: Optional[str]
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> "Run":
+        try:
+            meta = json.loads(row["metadata"]) if row["metadata"] else None
+        except Exception:
+            meta = None
+        return cls(
+            id=int(row["id"]),
+            task_id=row["task_id"],
+            profile=row["profile"],
+            step_key=row["step_key"],
+            status=row["status"],
+            claim_lock=row["claim_lock"],
+            claim_expires=row["claim_expires"],
+            worker_pid=row["worker_pid"],
+            max_runtime_seconds=row["max_runtime_seconds"],
+            last_heartbeat_at=row["last_heartbeat_at"],
+            started_at=int(row["started_at"]),
+            ended_at=(int(row["ended_at"]) if row["ended_at"] is not None else None),
+            outcome=row["outcome"],
+            summary=row["summary"],
+            metadata=meta,
+            error=row["error"],
         )
 
 
@@ -148,28 +214,36 @@ class Event:
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS tasks (
-    id                  TEXT PRIMARY KEY,
-    title               TEXT NOT NULL,
-    body                TEXT,
-    assignee            TEXT,
-    status              TEXT NOT NULL,
-    priority            INTEGER DEFAULT 0,
-    created_by          TEXT,
-    created_at          INTEGER NOT NULL,
-    started_at          INTEGER,
-    completed_at        INTEGER,
-    workspace_kind      TEXT NOT NULL DEFAULT 'scratch',
-    workspace_path      TEXT,
-    claim_lock          TEXT,
-    claim_expires       INTEGER,
-    tenant              TEXT,
-    result              TEXT,
-    idempotency_key     TEXT,
-    spawn_failures      INTEGER NOT NULL DEFAULT 0,
-    worker_pid          INTEGER,
-    last_spawn_error    TEXT,
-    max_runtime_seconds INTEGER,
-    last_heartbeat_at   INTEGER
+    id                   TEXT PRIMARY KEY,
+    title                TEXT NOT NULL,
+    body                 TEXT,
+    assignee             TEXT,
+    status               TEXT NOT NULL,
+    priority             INTEGER DEFAULT 0,
+    created_by           TEXT,
+    created_at           INTEGER NOT NULL,
+    started_at           INTEGER,
+    completed_at         INTEGER,
+    workspace_kind       TEXT NOT NULL DEFAULT 'scratch',
+    workspace_path       TEXT,
+    claim_lock           TEXT,
+    claim_expires        INTEGER,
+    tenant               TEXT,
+    result               TEXT,
+    idempotency_key      TEXT,
+    spawn_failures       INTEGER NOT NULL DEFAULT 0,
+    worker_pid           INTEGER,
+    last_spawn_error     TEXT,
+    max_runtime_seconds  INTEGER,
+    last_heartbeat_at    INTEGER,
+    -- Pointer into task_runs for the currently-active run (NULL if no
+    -- run is in-flight). Denormalised for cheap reads.
+    current_run_id       INTEGER,
+    -- Forward-compat for v2 workflow routing. In v1 the kernel writes
+    -- these when the task is opted into a template but otherwise ignores
+    -- them; the dispatcher doesn't consult them for routing yet.
+    workflow_template_id TEXT,
+    current_step_key     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS task_links (
@@ -189,9 +263,39 @@ CREATE TABLE IF NOT EXISTS task_comments (
 CREATE TABLE IF NOT EXISTS task_events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id    TEXT NOT NULL,
+    run_id     INTEGER,
     kind       TEXT NOT NULL,
     payload    TEXT,
     created_at INTEGER NOT NULL
+);
+
+-- Historical attempt record. Each time the dispatcher claims a task, a
+-- new row is created here; claim state, PID, heartbeat, runtime cap,
+-- and structured summary all live on the run, not the task. Multiple
+-- rows per task id when the task was retried after crash/timeout/block.
+-- v2 of the kanban schema will use ``step_key`` to drive per-stage
+-- workflow routing; in v1 the column is nullable and unused (kernel
+-- ignores it).
+CREATE TABLE IF NOT EXISTS task_runs (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id             TEXT NOT NULL,
+    profile             TEXT,
+    step_key            TEXT,
+    status              TEXT NOT NULL,
+    -- status: running | done | blocked | crashed | timed_out | failed | released
+    claim_lock          TEXT,
+    claim_expires       INTEGER,
+    worker_pid          INTEGER,
+    max_runtime_seconds INTEGER,
+    last_heartbeat_at   INTEGER,
+    started_at          INTEGER NOT NULL,
+    ended_at            INTEGER,
+    outcome             TEXT,
+    -- outcome: completed | blocked | crashed | timed_out | spawn_failed |
+    --          gave_up | reclaimed | (null while still running)
+    summary             TEXT,
+    metadata            TEXT,
+    error               TEXT
 );
 
 -- Subscription from a gateway source (platform + chat + thread) to a
@@ -217,6 +321,9 @@ CREATE INDEX IF NOT EXISTS idx_links_child           ON task_links(child_id);
 CREATE INDEX IF NOT EXISTS idx_links_parent          ON task_links(parent_id);
 CREATE INDEX IF NOT EXISTS idx_comments_task         ON task_comments(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_events_task           ON task_events(task_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_events_run            ON task_events(run_id, id);
+CREATE INDEX IF NOT EXISTS idx_runs_task             ON task_runs(task_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_runs_status           ON task_runs(status);
 CREATE INDEX IF NOT EXISTS idx_notify_task           ON kanban_notify_subs(task_id);
 """
 
@@ -278,6 +385,60 @@ def _migrate_add_optional_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE tasks ADD COLUMN max_runtime_seconds INTEGER")
     if "last_heartbeat_at" not in cols:
         conn.execute("ALTER TABLE tasks ADD COLUMN last_heartbeat_at INTEGER")
+    if "current_run_id" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN current_run_id INTEGER")
+    if "workflow_template_id" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN workflow_template_id TEXT")
+    if "current_step_key" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN current_step_key TEXT")
+
+    # task_events gained a run_id column; back-fill it as NULL for
+    # historical events (they predate runs and can't be attributed).
+    ev_cols = {row["name"] for row in conn.execute("PRAGMA table_info(task_events)")}
+    if "run_id" not in ev_cols:
+        conn.execute("ALTER TABLE task_events ADD COLUMN run_id INTEGER")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_run "
+            "ON task_events(run_id, id)"
+        )
+
+    # One-shot backfill: any task that is 'running' before runs existed
+    # had its claim_lock / claim_expires / worker_pid on the task row.
+    # Synthesize a matching task_runs row so subsequent end-run / heartbeat
+    # calls have something to write to. Safe to re-run: the check below
+    # skips tasks that already have a current_run_id.
+    runs_exist = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='task_runs'"
+    ).fetchone() is not None
+    if runs_exist:
+        inflight = conn.execute(
+            "SELECT id, assignee, claim_lock, claim_expires, worker_pid, "
+            "       max_runtime_seconds, last_heartbeat_at, started_at "
+            "FROM tasks "
+            "WHERE status = 'running' AND (current_run_id IS NULL)"
+        ).fetchall()
+        for row in inflight:
+            started = row["started_at"] or int(time.time())
+            cur = conn.execute(
+                """
+                INSERT INTO task_runs (
+                    task_id, profile, status,
+                    claim_lock, claim_expires, worker_pid,
+                    max_runtime_seconds, last_heartbeat_at,
+                    started_at
+                ) VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"], row["assignee"], row["claim_lock"],
+                    row["claim_expires"], row["worker_pid"],
+                    row["max_runtime_seconds"], row["last_heartbeat_at"],
+                    started,
+                ),
+            )
+            conn.execute(
+                "UPDATE tasks SET current_run_id = ? WHERE id = ?",
+                (cur.lastrowid, row["id"]),
+            )
 
     # One-shot event-kind rename pass. The old names ("ready", "priority",
     # "spawn_auto_blocked") still worked but were awkward on the wire;
@@ -723,15 +884,87 @@ def _append_event(
     task_id: str,
     kind: str,
     payload: Optional[dict] = None,
+    *,
+    run_id: Optional[int] = None,
 ) -> None:
-    """Record an event row.  Called from within an already-open txn."""
+    """Record an event row.  Called from within an already-open txn.
+
+    ``run_id`` is optional: pass the current run id so UIs can group
+    events by attempt. For events that aren't scoped to a single run
+    (task created/edited/archived, dependency promotion) leave it None
+    and the row carries NULL.
+    """
     now = int(time.time())
     pl = json.dumps(payload, ensure_ascii=False) if payload else None
     conn.execute(
-        "INSERT INTO task_events (task_id, kind, payload, created_at) "
-        "VALUES (?, ?, ?, ?)",
-        (task_id, kind, pl, now),
+        "INSERT INTO task_events (task_id, run_id, kind, payload, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (task_id, run_id, kind, pl, now),
     )
+
+
+def _end_run(
+    conn: sqlite3.Connection,
+    task_id: str,
+    *,
+    outcome: str,
+    summary: Optional[str] = None,
+    error: Optional[str] = None,
+    metadata: Optional[dict] = None,
+    status: Optional[str] = None,
+) -> Optional[int]:
+    """Close the currently-active run for ``task_id`` and clear the pointer.
+
+    ``outcome`` is the semantic result (completed / blocked / crashed /
+    timed_out / spawn_failed / gave_up / reclaimed). ``status`` is the
+    run-row status (usually just ``outcome``, but callers can pass it
+    explicitly). Returns the closed run_id or ``None`` if no active run
+    existed (e.g. a CLI user calling ``hermes kanban complete`` on a
+    task that was never claimed).
+    """
+    now = int(time.time())
+    row = conn.execute(
+        "SELECT current_run_id FROM tasks WHERE id = ?", (task_id,),
+    ).fetchone()
+    if not row or not row["current_run_id"]:
+        return None
+    run_id = int(row["current_run_id"])
+    conn.execute(
+        """
+        UPDATE task_runs
+           SET status        = ?,
+               outcome       = ?,
+               summary       = ?,
+               error         = ?,
+               metadata      = ?,
+               ended_at      = ?,
+               claim_lock    = NULL,
+               claim_expires = NULL,
+               worker_pid    = NULL
+         WHERE id = ?
+           AND ended_at IS NULL
+        """,
+        (
+            status or outcome,
+            outcome,
+            summary,
+            error,
+            json.dumps(metadata, ensure_ascii=False) if metadata else None,
+            now,
+            run_id,
+        ),
+    )
+    conn.execute(
+        "UPDATE tasks SET current_run_id = NULL WHERE id = ?", (task_id,),
+    )
+    return run_id
+
+
+def _current_run_id(conn: sqlite3.Connection, task_id: str) -> Optional[int]:
+    row = conn.execute(
+        "SELECT current_run_id FROM tasks WHERE id = ?", (task_id,),
+    ).fetchone()
+    return int(row["current_run_id"]) if row and row["current_run_id"] else None
 
 
 # ---------------------------------------------------------------------------
@@ -802,7 +1035,41 @@ def claim_task(
         )
         if cur.rowcount != 1:
             return None
-        _append_event(conn, task_id, "claimed", {"lock": lock, "expires": expires})
+        # Look up the current task row so we can populate the run with
+        # its assignee / step / runtime cap.
+        trow = conn.execute(
+            "SELECT assignee, max_runtime_seconds, current_step_key "
+            "FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+        run_cur = conn.execute(
+            """
+            INSERT INTO task_runs (
+                task_id, profile, step_key, status,
+                claim_lock, claim_expires, max_runtime_seconds,
+                started_at
+            ) VALUES (?, ?, ?, 'running', ?, ?, ?, ?)
+            """,
+            (
+                task_id,
+                trow["assignee"] if trow else None,
+                trow["current_step_key"] if trow else None,
+                lock,
+                expires,
+                trow["max_runtime_seconds"] if trow else None,
+                now,
+            ),
+        )
+        run_id = run_cur.lastrowid
+        conn.execute(
+            "UPDATE tasks SET current_run_id = ? WHERE id = ?",
+            (run_id, task_id),
+        )
+        _append_event(
+            conn, task_id, "claimed",
+            {"lock": lock, "expires": expires, "run_id": run_id},
+            run_id=run_id,
+        )
         return get_task(conn, task_id)
 
 
@@ -826,7 +1093,15 @@ def heartbeat_claim(
             "WHERE id = ? AND status = 'running' AND claim_lock = ?",
             (expires, task_id, lock),
         )
-        return cur.rowcount == 1
+        if cur.rowcount == 1:
+            run_id = _current_run_id(conn, task_id)
+            if run_id is not None:
+                conn.execute(
+                    "UPDATE task_runs SET claim_expires = ? WHERE id = ?",
+                    (expires, run_id),
+                )
+            return True
+        return False
 
 
 def release_stale_claims(conn: sqlite3.Connection) -> int:
@@ -849,9 +1124,15 @@ def release_stale_claims(conn: sqlite3.Connection) -> int:
                 "WHERE id = ? AND status = 'running'",
                 (row["id"],),
             )
+            run_id = _end_run(
+                conn, row["id"],
+                outcome="reclaimed", status="reclaimed",
+                error=f"stale_lock={row['claim_lock']}",
+            )
             _append_event(
                 conn, row["id"], "reclaimed",
                 {"stale_lock": row["claim_lock"]},
+                run_id=run_id,
             )
             reclaimed += 1
     return reclaimed
@@ -862,12 +1143,21 @@ def complete_task(
     task_id: str,
     *,
     result: Optional[str] = None,
+    summary: Optional[str] = None,
+    metadata: Optional[dict] = None,
 ) -> bool:
     """Transition ``running|ready -> done`` and record ``result``.
 
     Accepts a task that's merely ``ready`` too, so a manual CLI
     completion (``hermes kanban complete <id>``) works without requiring
     a claim/start/complete sequence.
+
+    ``summary`` and ``metadata`` are stored on the closing run (if any)
+    and surfaced to downstream children via :func:`build_worker_context`.
+    When ``summary`` is omitted we fall back to ``result`` so single-run
+    callers don't have to pass both. ``metadata`` is a free-form dict
+    (e.g. ``{"changed_files": [...], "tests_run": [...]}``) — workers
+    are encouraged to use it for structured handoff facts.
     """
     now = int(time.time())
     with write_txn(conn):
@@ -887,9 +1177,16 @@ def complete_task(
         )
         if cur.rowcount != 1:
             return False
+        run_id = _end_run(
+            conn, task_id,
+            outcome="completed", status="done",
+            summary=summary if summary is not None else result,
+            metadata=metadata,
+        )
         _append_event(
             conn, task_id, "completed",
             {"result_len": len(result) if result else 0},
+            run_id=run_id,
         )
     # Recompute ready status for dependents (separate txn so children see done).
     recompute_ready(conn)
@@ -918,7 +1215,12 @@ def block_task(
         )
         if cur.rowcount != 1:
             return False
-        _append_event(conn, task_id, "blocked", {"reason": reason})
+        run_id = _end_run(
+            conn, task_id,
+            outcome="blocked", status="blocked",
+            summary=reason,
+        )
+        _append_event(conn, task_id, "blocked", {"reason": reason}, run_id=run_id)
         return True
 
 
@@ -1076,9 +1378,16 @@ def heartbeat_worker(
         )
         if cur.rowcount != 1:
             return False
+        run_id = _current_run_id(conn, task_id)
+        if run_id is not None:
+            conn.execute(
+                "UPDATE task_runs SET last_heartbeat_at = ? WHERE id = ?",
+                (now, run_id),
+            )
         _append_event(
             conn, task_id, "heartbeat",
             {"note": note} if note else None,
+            run_id=run_id,
         )
     return True
 
@@ -1154,14 +1463,20 @@ def enforce_max_runtime(
                 (tid,),
             )
             if cur.rowcount == 1:
+                payload = {
+                    "pid": pid,
+                    "elapsed_seconds": int(elapsed),
+                    "limit_seconds": int(row["max_runtime_seconds"]),
+                    "sigkill": killed,
+                }
+                run_id = _end_run(
+                    conn, tid,
+                    outcome="timed_out", status="timed_out",
+                    error=f"elapsed {int(elapsed)}s > limit {int(row['max_runtime_seconds'])}s",
+                    metadata=payload,
+                )
                 _append_event(
-                    conn, tid, "timed_out",
-                    {
-                        "pid": pid,
-                        "elapsed_seconds": int(elapsed),
-                        "limit_seconds": int(row["max_runtime_seconds"]),
-                        "sigkill": killed,
-                    },
+                    conn, tid, "timed_out", payload, run_id=run_id,
                 )
                 timed_out.append(tid)
     return timed_out
@@ -1215,9 +1530,19 @@ def detect_crashed_workers(conn: sqlite3.Connection) -> list[str]:
                 (row["id"],),
             )
             if cur.rowcount == 1:
+                run_id = _end_run(
+                    conn, row["id"],
+                    outcome="crashed", status="crashed",
+                    error=f"pid {int(row['worker_pid'])} not alive",
+                    metadata={
+                        "pid": int(row["worker_pid"]),
+                        "claimer": row["claim_lock"],
+                    },
+                )
                 _append_event(
                     conn, row["id"], "crashed",
                     {"pid": int(row["worker_pid"]), "claimer": row["claim_lock"]},
+                    run_id=run_id,
                 )
                 crashed.append(row["id"])
     return crashed
@@ -1249,9 +1574,16 @@ def _record_spawn_failure(
                 "WHERE id = ? AND status IN ('running', 'ready')",
                 (failures, error[:500], task_id),
             )
+            run_id = _end_run(
+                conn, task_id,
+                outcome="gave_up", status="gave_up",
+                error=error[:500],
+                metadata={"failures": failures},
+            )
             _append_event(
                 conn, task_id, "gave_up",
                 {"failures": failures, "error": error[:500]},
+                run_id=run_id,
             )
             blocked = True
         else:
@@ -1262,9 +1594,16 @@ def _record_spawn_failure(
                 "WHERE id = ? AND status = 'running'",
                 (failures, error[:500], task_id),
             )
+            run_id = _end_run(
+                conn, task_id,
+                outcome="spawn_failed", status="spawn_failed",
+                error=error[:500],
+                metadata={"failures": failures},
+            )
             _append_event(
                 conn, task_id, "spawn_failed",
                 {"error": error[:500], "failures": failures},
+                run_id=run_id,
             )
     return blocked
 
@@ -1281,7 +1620,13 @@ def _set_worker_pid(conn: sqlite3.Connection, task_id: str, pid: int) -> None:
             "UPDATE tasks SET worker_pid = ? WHERE id = ?",
             (int(pid), task_id),
         )
-        _append_event(conn, task_id, "spawned", {"pid": int(pid)})
+        run_id = _current_run_id(conn, task_id)
+        if run_id is not None:
+            conn.execute(
+                "UPDATE task_runs SET worker_pid = ? WHERE id = ?",
+                (int(pid), run_id),
+            )
+        _append_event(conn, task_id, "spawned", {"pid": int(pid)}, run_id=run_id)
 
 
 def _clear_spawn_failures(conn: sqlite3.Connection, task_id: str) -> None:
@@ -1521,11 +1866,16 @@ def run_daemon(
 def build_worker_context(conn: sqlite3.Connection, task_id: str) -> str:
     """Return the full text a worker should read to understand its task.
 
-    Order (per design spec §8):
+    Order:
       1. Task title (mandatory).
       2. Task body (optional opening post).
-      3. Every comment on the task, chronologically, with authors.
-      4. Completion results of every done parent task.
+      3. Prior attempts on THIS task (if any) — their outcome + summary
+         + error. Lets a retrying worker see why earlier attempts failed
+         and skip that path.
+      4. Structured handoff results of every done parent task. Prefers
+         ``run.summary`` / ``run.metadata`` when the parent was executed
+         via a run; falls back to ``task.result`` for older data.
+      5. Every comment on the task, chronologically, with authors.
     """
     task = get_task(conn, task_id)
     if not task:
@@ -1546,12 +1896,67 @@ def build_worker_context(conn: sqlite3.Connection, task_id: str) -> str:
         lines.append(task.body.strip())
         lines.append("")
 
-    parents = parent_results(conn, task_id)
-    if parents:
-        lines.append("## Parent task results")
-        for pid, result in parents:
+    # Prior attempts — show closed runs so a retrying worker sees the
+    # history. Skip the currently-active run (that's this worker).
+    prior = [r for r in list_runs(conn, task_id) if r.ended_at is not None]
+    if prior:
+        lines.append("## Prior attempts on this task")
+        for idx, run in enumerate(prior, start=1):
+            ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(run.started_at))
+            profile = run.profile or "(unknown)"
+            outcome = run.outcome or run.status
+            lines.append(f"### Attempt {idx} — {outcome} ({profile}, {ts})")
+            if run.summary and run.summary.strip():
+                lines.append(run.summary.strip())
+            if run.error and run.error.strip():
+                lines.append(f"_error_: {run.error.strip()}")
+            if run.metadata:
+                try:
+                    meta_str = json.dumps(run.metadata, ensure_ascii=False, sort_keys=True)
+                    lines.append(f"_metadata_: `{meta_str}`")
+                except Exception:
+                    pass
+            lines.append("")
+
+    # Parents: prefer the most-recent 'completed' run's summary + metadata,
+    # fall back to ``task.result`` when no run rows exist (legacy DBs,
+    # or tasks completed before the runs table landed).
+    parent_rows = conn.execute(
+        "SELECT parent_id FROM task_links WHERE child_id = ? ORDER BY parent_id",
+        (task_id,),
+    ).fetchall()
+    parent_ids = [r["parent_id"] for r in parent_rows]
+
+    if parent_ids:
+        wrote_header = False
+        for pid in parent_ids:
+            pt = get_task(conn, pid)
+            if not pt or pt.status != "done":
+                continue
+            runs = [r for r in list_runs(conn, pid) if r.outcome == "completed"]
+            runs.sort(key=lambda r: r.started_at, reverse=True)
+            run = runs[0] if runs else None
+
+            if not wrote_header:
+                lines.append("## Parent task results")
+                wrote_header = True
             lines.append(f"### {pid}")
-            lines.append((result or "(no result recorded)").strip())
+
+            body_lines: list[str] = []
+            if run is not None and run.summary and run.summary.strip():
+                body_lines.append(run.summary.strip())
+            elif pt.result:
+                body_lines.append(pt.result.strip())
+            else:
+                body_lines.append("(no result recorded)")
+
+            if run is not None and run.metadata:
+                try:
+                    meta_str = json.dumps(run.metadata, ensure_ascii=False, sort_keys=True)
+                    body_lines.append(f"_metadata_: `{meta_str}`")
+                except Exception:
+                    pass
+            lines.extend(body_lines)
             lines.append("")
 
     comments = list_comments(conn, task_id)
@@ -1892,3 +2297,55 @@ def known_assignees(conn: sqlite3.Connection) -> list[dict]:
         }
         for name in names
     ]
+
+
+# ---------------------------------------------------------------------------
+# Runs (attempt history on a task)
+# ---------------------------------------------------------------------------
+
+def list_runs(
+    conn: sqlite3.Connection,
+    task_id: str,
+    *,
+    include_active: bool = True,
+) -> list[Run]:
+    """Return all runs for ``task_id`` in start order.
+
+    ``include_active=True`` (default) includes the currently-running
+    attempt if any. Set False to return only closed runs (useful for
+    "how many prior attempts have there been?" checks).
+    """
+    q = "SELECT * FROM task_runs WHERE task_id = ?"
+    params: list[Any] = [task_id]
+    if not include_active:
+        q += " AND ended_at IS NOT NULL"
+    q += " ORDER BY started_at ASC, id ASC"
+    rows = conn.execute(q, params).fetchall()
+    return [Run.from_row(r) for r in rows]
+
+
+def get_run(conn: sqlite3.Connection, run_id: int) -> Optional[Run]:
+    row = conn.execute(
+        "SELECT * FROM task_runs WHERE id = ?", (int(run_id),),
+    ).fetchone()
+    return Run.from_row(row) if row else None
+
+
+def active_run(conn: sqlite3.Connection, task_id: str) -> Optional[Run]:
+    """Return the currently-open run for ``task_id`` (``ended_at IS NULL``)."""
+    row = conn.execute(
+        "SELECT * FROM task_runs WHERE task_id = ? AND ended_at IS NULL "
+        "ORDER BY started_at DESC LIMIT 1",
+        (task_id,),
+    ).fetchone()
+    return Run.from_row(row) if row else None
+
+
+def latest_run(conn: sqlite3.Connection, task_id: str) -> Optional[Run]:
+    """Return the most recent run regardless of outcome (active or closed)."""
+    row = conn.execute(
+        "SELECT * FROM task_runs WHERE task_id = ? "
+        "ORDER BY started_at DESC, id DESC LIMIT 1",
+        (task_id,),
+    ).fetchone()
+    return Run.from_row(row) if row else None

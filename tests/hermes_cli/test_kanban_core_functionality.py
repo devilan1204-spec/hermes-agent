@@ -1000,3 +1000,367 @@ def test_cli_create_max_runtime_via_duration(kanban_home):
 def test_cli_create_max_runtime_bad_format_exits_nonzero(kanban_home):
     out = run_slash("create 'bad' --max-runtime fish")
     assert "max-runtime" in out.lower() or "malformed" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# Runs as first-class (vulcan-artivus RFC feedback)
+# ---------------------------------------------------------------------------
+
+def test_run_created_on_claim(kanban_home):
+    """claim_task opens a new task_runs row and points current_run_id at it."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        assert kb.get_task(conn, tid).current_run_id is None
+
+        claimed = kb.claim_task(conn, tid)
+        assert claimed is not None
+
+        task = kb.get_task(conn, tid)
+        assert task.current_run_id is not None
+
+        runs = kb.list_runs(conn, tid)
+        assert len(runs) == 1
+        r = runs[0]
+        assert r.id == task.current_run_id
+        assert r.profile == "worker"
+        assert r.status == "running"
+        assert r.outcome is None
+        assert r.ended_at is None
+        assert r.claim_lock is not None and r.claim_expires is not None
+    finally:
+        conn.close()
+
+
+def test_run_closed_on_complete_with_summary(kanban_home):
+    """complete_task ends the active run with outcome='completed' and
+    persists summary + metadata."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        kb.claim_task(conn, tid)
+        ok = kb.complete_task(
+            conn, tid,
+            result="shipped",
+            summary="implemented rate limiter, tests pass",
+            metadata={"changed_files": ["limiter.py"], "tests_run": 12},
+        )
+        assert ok is True
+
+        task = kb.get_task(conn, tid)
+        assert task.current_run_id is None
+        assert task.result == "shipped"
+
+        runs = kb.list_runs(conn, tid)
+        assert len(runs) == 1
+        r = runs[0]
+        assert r.status == "done"
+        assert r.outcome == "completed"
+        assert r.summary == "implemented rate limiter, tests pass"
+        assert r.metadata == {"changed_files": ["limiter.py"], "tests_run": 12}
+        assert r.ended_at is not None
+    finally:
+        conn.close()
+
+
+def test_run_summary_falls_back_to_result(kanban_home):
+    """If the caller doesn't pass summary, we fall back to result so
+    single-run workflows don't need to pass the same string twice."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        kb.claim_task(conn, tid)
+        kb.complete_task(conn, tid, result="only-arg")
+        r = kb.latest_run(conn, tid)
+        assert r.summary == "only-arg"
+    finally:
+        conn.close()
+
+
+def test_multiple_attempts_preserved_as_runs(kanban_home):
+    """Crash / retry / complete flow produces one run per attempt, all
+    visible in list_runs in chronological order."""
+    import hermes_cli.kanban_db as _kb
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+
+        # Attempt 1: claim then force the claim to be stale by backdating
+        # claim_expires, then let release_stale_claims reclaim it.
+        kb.claim_task(conn, tid)
+        with kb.write_txn(conn):
+            conn.execute(
+                "UPDATE tasks SET claim_expires = ? WHERE id = ?",
+                (int(time.time()) - 10, tid),
+            )
+            conn.execute(
+                "UPDATE task_runs SET claim_expires = ? WHERE task_id = ?",
+                (int(time.time()) - 10, tid),
+            )
+        kb.release_stale_claims(conn)
+
+        # Attempt 2: claim then crash (simulated: pid dead).
+        kb.claim_task(conn, tid)
+        kb._set_worker_pid(conn, tid, 98765)
+        original_alive = _kb._pid_alive
+        _kb._pid_alive = lambda pid: False
+        try:
+            kb.detect_crashed_workers(conn)
+        finally:
+            _kb._pid_alive = original_alive
+
+        # Attempt 3: claim then complete.
+        kb.claim_task(conn, tid)
+        kb.complete_task(conn, tid, result="finally")
+
+        runs = kb.list_runs(conn, tid)
+        assert len(runs) == 3
+        assert [r.outcome for r in runs] == ["reclaimed", "crashed", "completed"]
+        assert runs[-1].summary == "finally"
+        assert kb.get_task(conn, tid).current_run_id is None
+    finally:
+        conn.close()
+
+
+def test_run_on_block_with_reason(kanban_home):
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        kb.claim_task(conn, tid)
+        kb.block_task(conn, tid, reason="needs API key")
+
+        r = kb.latest_run(conn, tid)
+        assert r.outcome == "blocked"
+        assert r.summary == "needs API key"
+        assert r.ended_at is not None
+        assert kb.get_task(conn, tid).current_run_id is None
+    finally:
+        conn.close()
+
+
+def test_run_on_spawn_failure_records_failed_runs(kanban_home):
+    """Each spawn_failed event closes a run with outcome='spawn_failed',
+    and the Nth failure closes a run with outcome='gave_up'."""
+    def _bad(task, ws):
+        raise RuntimeError("no PATH")
+
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        for _ in range(5):
+            kb.dispatch_once(conn, spawn_fn=_bad, failure_limit=5)
+
+        runs = kb.list_runs(conn, tid)
+        # 5 claim attempts → 5 runs. Final one is gave_up, earlier ones
+        # are spawn_failed.
+        assert len(runs) == 5
+        assert runs[-1].outcome == "gave_up"
+        assert all(r.outcome == "spawn_failed" for r in runs[:-1])
+        assert runs[-1].error and "no PATH" in runs[-1].error
+    finally:
+        conn.close()
+
+
+def test_event_rows_carry_run_id(kanban_home):
+    """task_events.run_id is populated for run-scoped kinds and NULL for
+    task-scoped ones."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        # task-scoped: 'created' — no run yet
+        # run-scoped: 'claimed' + 'completed'
+        kb.claim_task(conn, tid)
+        kb.complete_task(conn, tid, result="ok")
+
+        rows = conn.execute(
+            "SELECT kind, run_id FROM task_events WHERE task_id = ? ORDER BY id",
+            (tid,),
+        ).fetchall()
+        by_kind = {r["kind"]: r["run_id"] for r in rows}
+        assert by_kind["created"] is None
+        assert by_kind["claimed"] is not None
+        assert by_kind["completed"] is not None
+        # Both belong to the same run.
+        assert by_kind["claimed"] == by_kind["completed"]
+    finally:
+        conn.close()
+
+
+def test_build_worker_context_includes_prior_attempts(kanban_home):
+    """A worker spawned after a prior attempt sees that attempt's outcome
+    + summary in its context so it can skip the failed path."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="port x", assignee="worker")
+
+        # Attempt 1: blocked with a reason.
+        kb.claim_task(conn, tid)
+        kb.block_task(conn, tid, reason="needs clarification on IP vs user_id")
+        kb.unblock_task(conn, tid)
+
+        # Attempt 2: claim (but don't complete yet) and read the context
+        # as this worker would see it.
+        kb.claim_task(conn, tid)
+        ctx = kb.build_worker_context(conn, tid)
+
+        assert "Prior attempts on this task" in ctx
+        assert "blocked" in ctx
+        assert "needs clarification on IP vs user_id" in ctx
+    finally:
+        conn.close()
+
+
+def test_build_worker_context_uses_parent_run_summary(kanban_home):
+    """Downstream children read the parent's run.summary + metadata, not
+    just task.result."""
+    conn = kb.connect()
+    try:
+        parent = kb.create_task(conn, title="research", assignee="researcher")
+        child = kb.create_task(
+            conn, title="write", assignee="writer", parents=[parent],
+        )
+
+        kb.claim_task(conn, parent)
+        kb.complete_task(
+            conn, parent,
+            result="done",
+            summary="three angles explored; B looks strongest",
+            metadata={"sources": ["paper A", "paper B", "paper C"]},
+        )
+
+        # child becomes ready via recompute_ready (runs inside complete_task)
+        ctx = kb.build_worker_context(conn, child)
+        assert "Parent task results" in ctx
+        assert "three angles explored; B looks strongest" in ctx
+        assert '"sources"' in ctx  # metadata JSON serialized
+    finally:
+        conn.close()
+
+
+def test_migration_backfills_inflight_run_for_legacy_db(kanban_home):
+    """An existing 'running' task from before task_runs existed should
+    get a synthesized run row so subsequent operations (complete,
+    heartbeat) have something to write to."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="pre-migration", assignee="worker")
+        # Simulate legacy: set running + claim_lock directly, leave
+        # current_run_id NULL and delete the run row the claim created.
+        kb.claim_task(conn, tid)
+        with kb.write_txn(conn):
+            conn.execute("DELETE FROM task_runs WHERE task_id = ?", (tid,))
+            conn.execute(
+                "UPDATE tasks SET current_run_id = NULL WHERE id = ?",
+                (tid,),
+            )
+
+        # Sanity: no runs, no pointer.
+        assert kb.list_runs(conn, tid) == []
+        assert kb.get_task(conn, tid).current_run_id is None
+
+        # Re-run init_db — migration backfill should kick in.
+        kb.init_db()
+        conn2 = kb.connect()
+        try:
+            runs = kb.list_runs(conn2, tid)
+            assert len(runs) == 1
+            assert runs[0].status == "running"
+            assert runs[0].profile == "worker"
+            task = kb.get_task(conn2, tid)
+            assert task.current_run_id == runs[0].id
+
+            # Subsequent complete closes the backfilled run cleanly.
+            kb.complete_task(conn2, tid, result="done", summary="ok")
+            r = kb.latest_run(conn2, tid)
+            assert r.outcome == "completed"
+            assert r.summary == "ok"
+        finally:
+            conn2.close()
+    finally:
+        conn.close()
+
+
+def test_forward_compat_columns_writable(kanban_home):
+    """v2 will route by workflow_template_id + current_step_key. In v1
+    these are nullable, kernel doesn't consult them for routing, but
+    they must be writable so a v2 client can populate them without
+    schema changes."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x")
+        with kb.write_txn(conn):
+            conn.execute(
+                "UPDATE tasks SET workflow_template_id = ?, current_step_key = ? "
+                "WHERE id = ?",
+                ("code-review-v1", "implement", tid),
+            )
+        task = kb.get_task(conn, tid)
+        assert task.workflow_template_id == "code-review-v1"
+        assert task.current_step_key == "implement"
+    finally:
+        conn.close()
+
+
+def test_cli_runs_verb(kanban_home):
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        kb.claim_task(conn, tid)
+        kb.complete_task(conn, tid, result="ok", summary="shipped")
+    finally:
+        conn.close()
+    out = run_slash(f"runs {tid}")
+    assert "completed" in out
+    assert "shipped" in out
+    assert "worker" in out
+
+
+def test_cli_runs_json(kanban_home):
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        kb.claim_task(conn, tid)
+        kb.complete_task(
+            conn, tid, result="ok", summary="shipped",
+            metadata={"files": 1},
+        )
+    finally:
+        conn.close()
+    out = run_slash(f"runs {tid} --json")
+    data = json.loads(out)
+    assert len(data) == 1
+    assert data[0]["outcome"] == "completed"
+    assert data[0]["metadata"] == {"files": 1}
+
+
+def test_cli_complete_with_summary_and_metadata(kanban_home):
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        kb.claim_task(conn, tid)
+    finally:
+        conn.close()
+    # JSON metadata must round-trip through shlex + argparse.
+    meta = '{"files": 3}'
+    out = run_slash(
+        "complete " + tid + " --summary \"done it\" --metadata '" + meta + "'"
+    )
+    assert "Completed" in out
+    conn = kb.connect()
+    try:
+        r = kb.latest_run(conn, tid)
+    finally:
+        conn.close()
+    assert r.summary == "done it"
+    assert r.metadata == {"files": 3}
+
+
+def test_cli_complete_bad_metadata_exits_nonzero(kanban_home):
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x", assignee="worker")
+        kb.claim_task(conn, tid)
+    finally:
+        conn.close()
+    out = run_slash(f"complete {tid} --metadata not-json")
+    assert "metadata" in out.lower()

@@ -1171,6 +1171,68 @@
         }),
       ),
       h(WorkerLogSection, { taskId: t.id }),
+      h(RunHistorySection, { runs: props.data.runs || [] }),
+    );
+  }
+
+  // Per-attempt history. Closed runs first (most recent last), then the
+  // active run if any. Each row shows profile / outcome / elapsed /
+  // summary. Collapsed by default when there are more than three runs.
+  function RunHistorySection(props) {
+    const runs = props.runs || [];
+    const [expanded, setExpanded] = useState(false);
+    if (runs.length === 0) return null;
+    const showAll = expanded || runs.length <= 3;
+    const visible = showAll ? runs : runs.slice(-3);
+
+    const fmtElapsed = function (run) {
+      if (!run || !run.started_at) return "";
+      const end = run.ended_at || Math.floor(Date.now() / 1000);
+      const secs = Math.max(0, end - run.started_at);
+      if (secs < 60) return `${secs}s`;
+      if (secs < 3600) return `${Math.round(secs / 60)}m`;
+      return `${(secs / 3600).toFixed(1)}h`;
+    };
+
+    return h("div", { className: "hermes-kanban-section" },
+      h("div", { className: "hermes-kanban-section-head-row" },
+        h("span", { className: "hermes-kanban-section-head" },
+          `Run history (${runs.length})`),
+        !showAll
+          ? h("button", {
+              type: "button",
+              onClick: function () { setExpanded(true); },
+              className: "hermes-kanban-edit-link",
+              title: "Show all attempts",
+            }, `+${runs.length - 3} earlier`)
+          : null,
+      ),
+      visible.map(function (r) {
+        const outcomeClass = r.ended_at
+          ? `hermes-kanban-run--${r.outcome || r.status || "ended"}`
+          : "hermes-kanban-run--active";
+        return h("div", { key: r.id, className: cn("hermes-kanban-run", outcomeClass) },
+          h("div", { className: "hermes-kanban-run-head" },
+            h("span", { className: "hermes-kanban-run-outcome" },
+              r.ended_at ? (r.outcome || r.status || "ended") : "active"),
+            h("span", { className: "hermes-kanban-run-profile" },
+              r.profile ? `@${r.profile}` : "(no profile)"),
+            h("span", { className: "hermes-kanban-run-elapsed" }, fmtElapsed(r)),
+            h("span", { className: "hermes-kanban-run-ago" },
+              timeAgo ? timeAgo(r.started_at) : ""),
+          ),
+          r.summary
+            ? h("div", { className: "hermes-kanban-run-summary" }, r.summary)
+            : null,
+          r.error
+            ? h("div", { className: "hermes-kanban-run-error" }, r.error)
+            : null,
+          r.metadata
+            ? h("code", { className: "hermes-kanban-run-meta" },
+                JSON.stringify(r.metadata))
+            : null,
+        );
+      }),
     );
   }
 
