@@ -1,4 +1,4 @@
-import { Box, Text } from '@hermes/ink'
+import { Box, Text, useStdout } from '@hermes/ink'
 import { useStore } from '@nanostores/react'
 
 import { useGateway } from '../app/gatewayContext.js'
@@ -105,6 +105,7 @@ export function FloatingOverlays({
   const { gw } = useGateway()
   const overlay = useStore($overlayState)
   const ui = useStore($uiState)
+  const { stdout } = useStdout()
 
   const hasAny =
     overlay.learningLedger ||
@@ -125,6 +126,7 @@ export function FloatingOverlays({
 
   const start = Math.max(0, Math.min(compIdx - Math.floor(COMPLETION_WINDOW / 2), completions.length - viewportSize))
   const overlayWidth = Math.max(OVERLAY_MIN_WIDTH, cols - OVERLAY_GUTTER)
+  const overlayMaxHeight = Math.max(6, Math.min(18, (stdout?.rows ?? 24) - 8))
 
   return (
     <Box alignItems="flex-start" bottom="100%" flexDirection="column" left={0} position="absolute" right={0}>
@@ -144,6 +146,7 @@ export function FloatingOverlays({
               id: 'sessions'
             }
           ]}
+          maxHeight={overlayMaxHeight}
           t={ui.theme}
           width={overlayWidth}
         />
@@ -166,6 +169,7 @@ export function FloatingOverlays({
               id: 'models'
             }
           ]}
+          maxHeight={overlayMaxHeight}
           t={ui.theme}
           width={overlayWidth}
         />
@@ -180,6 +184,7 @@ export function FloatingOverlays({
               id: 'skills'
             }
           ]}
+          maxHeight={overlayMaxHeight}
           t={ui.theme}
           width={overlayWidth}
         />
@@ -192,6 +197,7 @@ export function FloatingOverlays({
           onClose={() => patchOverlayState({ learningLedger: false })}
           t={ui.theme}
           width={overlayWidth}
+          maxHeight={overlayMaxHeight}
         />
       )}
 
@@ -221,6 +227,7 @@ export function FloatingOverlays({
               title: overlay.pager.title
             }
           ]}
+          maxHeight={overlayMaxHeight}
           t={ui.theme}
           width={overlayWidth}
         />
@@ -277,6 +284,7 @@ export function FloatingOverlays({
               id: 'completion-meta'
             }
           ]}
+          maxHeight={overlayMaxHeight}
           t={ui.theme}
           width={overlayWidth}
         />

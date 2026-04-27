@@ -40,7 +40,7 @@ const fmtTime = (ts?: null | number) => {
   return days <= 0 ? 'today' : `${days}d ago`
 }
 
-export function LearningLedger({ borderColor, gw, onClose, t, width: fixedWidth }: LearningLedgerProps) {
+export function LearningLedger({ borderColor, gw, maxHeight, onClose, t, width: fixedWidth }: LearningLedgerProps) {
   const [ledger, setLedger] = useState<LearningLedgerResponse | null>(null)
   const [idx, setIdx] = useState(0)
   const [expanded, setExpanded] = useState(false)
@@ -167,6 +167,7 @@ export function LearningLedger({ borderColor, gw, onClose, t, width: fixedWidth 
             ]
           : [])
       ]}
+      maxHeight={maxHeight}
       t={t}
       width={width}
     />
@@ -294,6 +295,7 @@ interface LedgerDetailsProps {
 interface LearningLedgerProps {
   borderColor: string
   gw: GatewayClient
+  maxHeight?: number
   onClose: () => void
   t: Theme
   width?: number

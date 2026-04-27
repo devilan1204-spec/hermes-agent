@@ -5,9 +5,10 @@ import type { Theme } from '../theme.js'
 
 const GAP = 2
 
-export function OverlayGrid({ borderColor, panels, t, width }: OverlayGridProps) {
+export function OverlayGrid({ borderColor, maxHeight, panels, t, width }: OverlayGridProps) {
   const visible = panels.filter(p => p.content)
   const innerWidth = Math.max(20, width - 4)
+  const innerHeight = maxHeight ? Math.max(1, maxHeight - 2) : undefined
   const gapTotal = Math.max(0, visible.length - 1) * GAP
   const usable = Math.max(1, innerWidth - gapTotal)
   const growTotal = visible.reduce((sum, p) => sum + (p.grow ?? 1), 0) || 1
@@ -39,7 +40,9 @@ export function OverlayGrid({ borderColor, panels, t, width }: OverlayGridProps)
                   {panel.title}
                 </Text>
               ) : null}
-              {panel.content}
+              <Box flexDirection="column" height={innerHeight ? Math.max(1, innerHeight - (panel.title ? 1 : 0)) : undefined} overflow="hidden">
+                {panel.content}
+              </Box>
             </Box>
             {!last ? <Box flexShrink={0} width={GAP} /> : null}
           </Box>
@@ -58,6 +61,7 @@ export interface OverlayGridPanel {
 
 interface OverlayGridProps {
   borderColor: string
+  maxHeight?: number
   panels: OverlayGridPanel[]
   t: Theme
   width: number
