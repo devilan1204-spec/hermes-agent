@@ -10,7 +10,7 @@ import { OverlayHint, windowItems, windowOffset } from './overlayControls.js'
 const EDGE_GUTTER = 10
 const MAX_WIDTH = 132
 const MIN_WIDTH = 64
-const VISIBLE_ROWS = 10
+const VISIBLE_ROWS = 12
 
 const typeIcon: Record<string, string> = {
   integration: '◇',
@@ -46,9 +46,6 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
   const [loading, setLoading] = useState(true)
   const { stdout } = useStdout()
   const width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, (stdout?.columns ?? 80) - EDGE_GUTTER))
-  const columns = width >= 92 ? 2 : 1
-  const pageSize = VISIBLE_ROWS * columns
-  const colWidth = columns === 2 ? Math.floor((width - 3) / 2) : width
 
   useEffect(() => {
     gw.request<LearningLedgerResponse>('learning.ledger', { limit: 120 })
@@ -62,6 +59,9 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
 
   const items = ledger?.items ?? []
   const selected = items[idx]
+  const detailOpen = expanded && !!selected
+  const listWidth = detailOpen ? Math.max(38, Math.floor(width * 0.48)) : width
+  const detailWidth = Math.max(28, width - listWidth - 3)
   const counts = useMemo(
     () =>
       Object.entries(ledger?.counts ?? {})
@@ -78,26 +78,14 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
       return
     }
 
-    if (key.leftArrow && columns === 2 && idx > 0) {
+    if (key.upArrow && idx > 0) {
       setIdx(v => v - 1)
 
       return
     }
 
-    if (key.rightArrow && columns === 2 && idx < items.length - 1) {
-      setIdx(v => v + 1)
-
-      return
-    }
-
-    if (key.upArrow && idx > 0) {
-      setIdx(v => Math.max(0, v - columns))
-
-      return
-    }
-
     if (key.downArrow && idx < items.length - 1) {
-      setIdx(v => Math.min(items.length - 1, v + columns))
+      setIdx(v => v + 1)
 
       return
     }
@@ -110,7 +98,7 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
 
     const n = ch === '0' ? 10 : parseInt(ch, 10)
     if (!Number.isNaN(n) && n >= 1 && n <= Math.min(10, items.length)) {
-      const next = windowOffset(items.length, idx, pageSize) + n - 1
+      const next = windowOffset(items.length, idx, VISIBLE_ROWS) + n - 1
 
       if (items[next]) {
         setIdx(next)
@@ -146,10 +134,7 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
     )
   }
 
-  const { items: visible, offset } = windowItems(items, idx, pageSize)
-  const rows = Array.from({ length: Math.ceil(visible.length / columns) }, (_, row) =>
-    visible.slice(row * columns, row * columns + columns)
-  )
+  const { items: visible, offset } = windowItems(items, idx, VISIBLE_ROWS)
 
   return (
     <Box flexDirection="column" width={width}>
@@ -164,43 +149,32 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
       ) : null}
       {offset > 0 && <Text color={t.color.dim}> ↑ {offset} more</Text>}
 
-      {rows.map((row, rowIdx) => (
-        <Box flexDirection="row" gap={1} key={rowIdx} width={width}>
-          {row.map((item, colIdx) => {
-            const visibleIdx = rowIdx * columns + colIdx
-            const absolute = offset + visibleIdx
+      <Box flexDirection="row" gap={1} width={width}>
+        <Box flexDirection="column" width={listWidth}>
+          {visible.map((item, i) => {
+            const absolute = offset + i
             const active = absolute === idx
 
             return (
               <LedgerRow
                 active={active}
-                index={visibleIdx + 1}
+                index={i + 1}
                 item={item}
-                key={`${item.type}:${item.name}:${visibleIdx}`}
+                key={`${item.type}:${item.name}:${i}`}
                 t={t}
-                width={colWidth}
+                width={listWidth}
               />
             )
           })}
         </Box>
-      ))}
 
-      {offset + pageSize < items.length && <Text color={t.color.dim}> ↓ {items.length - offset - pageSize} more</Text>}
+        {detailOpen && selected ? <LedgerDetails item={selected} t={t} width={detailWidth} /> : null}
+      </Box>
 
-      {selected && expanded ? (
-        <Box borderColor={t.color.dim} borderStyle="single" flexDirection="column" marginTop={1} paddingX={1}>
-          <Text color={t.color.gold}>
-            {selected.type === 'memory' || selected.type === 'user' ? selected.name : selected.summary}
-          </Text>
-          {selected.type === 'memory' || selected.type === 'user' ? (
-            <Text color={t.color.cornsilk}>{selected.summary}</Text>
-          ) : null}
-          <Text color={t.color.dim}>source: {selected.source}</Text>
-        </Box>
-      ) : null}
+      {offset + VISIBLE_ROWS < items.length && <Text color={t.color.dim}> ↓ {items.length - offset - VISIBLE_ROWS} more</Text>}
 
       <OverlayHint t={t}>
-        {`${columns === 2 ? '↑↓←→ select' : '↑/↓ select'} · Enter/Space details · 1-9,0 quick · Esc/q close`}
+        ↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close
       </OverlayHint>
     </Box>
   )
@@ -228,6 +202,24 @@ function LedgerRow({ active, index, item, t, width }: LedgerRowProps) {
   )
 }
 
+function LedgerDetails({ item, t, width }: LedgerDetailsProps) {
+  const memoryLike = item.type === 'memory' || item.type === 'user'
+
+  return (
+    <Box borderColor={t.color.dim} borderStyle="single" flexDirection="column" paddingX={1} width={width}>
+      <Text bold color={t.color.amber}>
+        Details
+      </Text>
+      <Text color={t.color.gold} wrap="truncate-end">
+        {memoryLike ? item.name : item.summary}
+      </Text>
+      {memoryLike ? <Text color={t.color.cornsilk}>{item.summary}</Text> : null}
+      {item.count ? <Text color={t.color.dim}>used: {item.count}×</Text> : null}
+      <Text color={t.color.dim}>source: {item.source}</Text>
+    </Box>
+  )
+}
+
 interface LearningLedgerItem {
   count?: number
   last_used_at?: null | number
@@ -250,6 +242,12 @@ interface LearningLedgerResponse {
 interface LedgerRowProps {
   active: boolean
   index: number
+  item: LearningLedgerItem
+  t: Theme
+  width: number
+}
+
+interface LedgerDetailsProps {
   item: LearningLedgerItem
   t: Theme
   width: number
