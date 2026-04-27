@@ -1,5 +1,5 @@
 import { Box, Text, useInput, useStdout } from '@hermes/ink'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { GatewayClient } from '../gatewayClient.js'
 import { rpcErrorMessage } from '../lib/rpc.js'
@@ -9,10 +9,16 @@ import { OverlayGrid } from './overlayGrid.js'
 import { OverlayHint, windowItems, windowOffset } from './overlayControls.js'
 
 const EDGE_GUTTER = 10
-const GRID_GAP = 2
 const MAX_WIDTH = 132
 const MIN_WIDTH = 64
 const VISIBLE_ROWS = 12
+
+const LISTS = [
+  { id: 'memories', title: 'Memories', types: ['user', 'memory'] },
+  { id: 'skills', title: 'Skills', types: ['skill-use'] },
+  { id: 'recalls', title: 'Recalls', types: ['recall'] },
+  { id: 'connected', title: 'Connected', types: ['integration'] }
+] as const
 
 const typeIcon: Record<string, string> = {
   integration: '◇',
@@ -42,7 +48,8 @@ const fmtTime = (ts?: null | number) => {
 
 export function LearningLedger({ borderColor, gw, maxHeight, onClose, t, width: fixedWidth }: LearningLedgerProps) {
   const [ledger, setLedger] = useState<LearningLedgerResponse | null>(null)
-  const [idx, setIdx] = useState(0)
+  const [activeList, setActiveList] = useState(0)
+  const [indices, setIndices] = useState<Record<string, number>>({})
   const [expanded, setExpanded] = useState(false)
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(true)
@@ -60,17 +67,14 @@ export function LearningLedger({ borderColor, gw, maxHeight, onClose, t, width: 
   }, [gw])
 
   const items = ledger?.items ?? []
-  const selected = items[idx]
+  const lists = LISTS.map(list => ({
+    ...list,
+    items: items.filter(item => list.types.includes(item.type as never))
+  }))
+  const active = lists[activeList] ?? lists[0]!
+  const activeIdx = Math.min(indices[active.id] ?? 0, Math.max(0, active.items.length - 1))
+  const selected = active.items[activeIdx]
   const detailOpen = expanded && !!selected
-  const counts = useMemo(
-    () =>
-      Object.entries(ledger?.counts ?? {})
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => `${k}:${v}`)
-        .join(' · '),
-    [ledger?.counts]
-  )
-
   useInput((ch, key) => {
     if (key.escape || ch.toLowerCase() === 'q') {
       onClose()
@@ -78,14 +82,26 @@ export function LearningLedger({ borderColor, gw, maxHeight, onClose, t, width: 
       return
     }
 
-    if (key.upArrow && idx > 0) {
-      setIdx(v => v - 1)
+    if (key.leftArrow && activeList > 0) {
+      setActiveList(v => v - 1)
 
       return
     }
 
-    if (key.downArrow && idx < items.length - 1) {
-      setIdx(v => v + 1)
+    if (key.rightArrow && activeList < lists.length - 1) {
+      setActiveList(v => v + 1)
+
+      return
+    }
+
+    if (key.upArrow && activeIdx > 0) {
+      setIndices(v => ({ ...v, [active.id]: activeIdx - 1 }))
+
+      return
+    }
+
+    if (key.downArrow && activeIdx < active.items.length - 1) {
+      setIndices(v => ({ ...v, [active.id]: activeIdx + 1 }))
 
       return
     }
@@ -97,11 +113,11 @@ export function LearningLedger({ borderColor, gw, maxHeight, onClose, t, width: 
     }
 
     const n = ch === '0' ? 10 : parseInt(ch, 10)
-    if (!Number.isNaN(n) && n >= 1 && n <= Math.min(10, items.length)) {
-      const next = windowOffset(items.length, idx, VISIBLE_ROWS) + n - 1
+    if (!Number.isNaN(n) && n >= 1 && n <= Math.min(10, active.items.length)) {
+      const next = windowOffset(active.items.length, activeIdx, VISIBLE_ROWS) + n - 1
 
-      if (items[next]) {
-        setIdx(next)
+      if (active.items[next]) {
+        setIndices(v => ({ ...v, [active.id]: next }))
       }
     }
   })
@@ -134,29 +150,33 @@ export function LearningLedger({ borderColor, gw, maxHeight, onClose, t, width: 
     )
   }
 
-  const { items: visible, offset } = windowItems(items, idx, VISIBLE_ROWS)
-  const listPanel = (
-    <LearningList
-      counts={counts}
-      items={visible}
-      ledger={ledger}
-      offset={offset}
-      selectedIndex={idx}
-      t={t}
-    />
-  )
+  const listPanels = lists.map((list, listIdx) => {
+    const selectedIndex = Math.min(indices[list.id] ?? 0, Math.max(0, list.items.length - 1))
+    const { items: visible, offset } = windowItems(list.items, selectedIndex, Math.max(3, Math.floor(VISIBLE_ROWS / 2)))
+
+    return {
+      content: (
+        <LearningList
+          active={activeList === listIdx}
+          items={visible}
+          offset={offset}
+          selectedIndex={selectedIndex}
+          t={t}
+          total={list.items.length}
+        />
+      ),
+      grow: 1,
+      id: `learning-${list.id}`,
+      title: list.title
+    }
+  })
 
   return (
     <OverlayGrid
       borderColor={borderColor}
+      footer={<OverlayHint t={t}>←/→ panel · ↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>}
       panels={[
-        {
-          content: listPanel,
-          footer: <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>,
-          grow: 7,
-          id: 'learning-list',
-          title: 'Recent Learning'
-        },
+        ...listPanels,
         ...(detailOpen && selected
           ? [
               {
@@ -175,16 +195,11 @@ export function LearningLedger({ borderColor, gw, maxHeight, onClose, t, width: 
   )
 }
 
-function LearningList({ counts, items, ledger, offset, selectedIndex, t }: LearningListProps) {
+function LearningList({ active, items, offset, selectedIndex, t, total }: LearningListProps) {
   return (
     <Box flexDirection="column">
-      <Text color={t.color.muted}>
-        {ledger?.total ?? items.length} traces{counts ? ` · ${counts}` : ''}
-      </Text>
-      {ledger?.inventory?.skills ? (
-        <Text color={t.color.muted}>available knowledge: {ledger.inventory.skills} installed skills</Text>
-      ) : null}
-      {offset > 0 && <Text color={t.color.muted}> ↑ {offset} more</Text>}
+      <Text color={active ? t.color.accent : t.color.muted}>{total} item{total === 1 ? '' : 's'}</Text>
+      {offset > 0 && <Text color={t.color.muted}>↑ {offset} more</Text>}
 
       <Box flexDirection="column">
         {items.map((item, i) => {
@@ -192,7 +207,7 @@ function LearningList({ counts, items, ledger, offset, selectedIndex, t }: Learn
 
           return (
             <LedgerRow
-              active={absolute === selectedIndex}
+              active={active && absolute === selectedIndex}
               index={i + 1}
               item={item}
               key={`${item.type}:${item.name}:${i}`}
@@ -202,8 +217,8 @@ function LearningList({ counts, items, ledger, offset, selectedIndex, t }: Learn
         })}
       </Box>
 
-      {offset + VISIBLE_ROWS < (ledger?.items?.length ?? items.length) && (
-        <Text color={t.color.muted}> ↓ {(ledger?.items?.length ?? items.length) - offset - VISIBLE_ROWS} more</Text>
+      {offset + items.length < total && (
+        <Text color={t.color.muted}>↓ {total - offset - items.length} more</Text>
       )}
 
     </Box>
@@ -272,12 +287,12 @@ interface LearningLedgerResponse {
 }
 
 interface LearningListProps {
-  counts: string
+  active: boolean
   items: LearningLedgerItem[]
-  ledger: LearningLedgerResponse | null
   offset: number
   selectedIndex: number
   t: Theme
+  total: number
 }
 
 interface LedgerRowProps {
