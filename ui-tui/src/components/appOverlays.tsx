@@ -214,14 +214,14 @@ export function FloatingOverlays({
                       <Text key={i}>{line}</Text>
                     ))}
 
-                  <Box marginTop={1}>
-                    <OverlayHint t={ui.theme}>
-                      {overlay.pager.offset + pagerPageSize < overlay.pager.lines.length
-                        ? `↑↓/jk line · Enter/Space/PgDn page · b/PgUp back · g/G top/bottom · Esc/q close (${Math.min(overlay.pager.offset + pagerPageSize, overlay.pager.lines.length)}/${overlay.pager.lines.length})`
-                        : `end · ↑↓/jk · b/PgUp back · g top · Esc/q close (${overlay.pager.lines.length} lines)`}
-                    </OverlayHint>
-                  </Box>
                 </Box>
+              ),
+              footer: (
+                <OverlayHint t={ui.theme}>
+                  {overlay.pager.offset + pagerPageSize < overlay.pager.lines.length
+                    ? `↑↓/jk line · Enter/Space/PgDn page · b/PgUp back · g/G top/bottom · Esc/q close (${Math.min(overlay.pager.offset + pagerPageSize, overlay.pager.lines.length)}/${overlay.pager.lines.length})`
+                    : `end · ↑↓/jk · b/PgUp back · g top · Esc/q close (${overlay.pager.lines.length} lines)`}
+                </OverlayHint>
               ),
               id: 'pager',
               title: overlay.pager.title

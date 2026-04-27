@@ -152,6 +152,7 @@ export function LearningLedger({ borderColor, gw, maxHeight, onClose, t, width: 
       panels={[
         {
           content: listPanel,
+          footer: <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>,
           grow: 7,
           id: 'learning-list',
           title: 'Recent Learning'
@@ -205,7 +206,6 @@ function LearningList({ counts, items, ledger, offset, selectedIndex, t }: Learn
         <Text color={t.color.muted}> ↓ {(ledger?.items?.length ?? items.length) - offset - VISIBLE_ROWS} more</Text>
       )}
 
-      <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>
     </Box>
   )
 }

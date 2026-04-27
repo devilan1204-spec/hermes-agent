@@ -40,9 +40,14 @@ export function OverlayGrid({ borderColor, maxHeight, panels, t, width }: Overla
                   {panel.title}
                 </Text>
               ) : null}
-              <Box flexDirection="column" height={innerHeight ? Math.max(1, innerHeight - (panel.title ? 1 : 0)) : undefined} overflow="hidden">
+              <Box
+                flexDirection="column"
+                height={innerHeight ? Math.max(1, innerHeight - (panel.title ? 1 : 0) - (panel.footer ? 1 : 0)) : undefined}
+                overflow="hidden"
+              >
                 {panel.content}
               </Box>
+              {panel.footer ? <Box flexDirection="column">{panel.footer}</Box> : null}
             </Box>
             {!last ? <Box flexShrink={0} width={GAP} /> : null}
           </Box>
@@ -54,6 +59,7 @@ export function OverlayGrid({ borderColor, maxHeight, panels, t, width }: Overla
 
 export interface OverlayGridPanel {
   content: ReactNode
+  footer?: ReactNode
   grow?: number
   id: string
   title?: string
