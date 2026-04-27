@@ -218,7 +218,7 @@ const ComposerPane = memo(function ComposerPane({
                   <Text color={ui.theme.color.dim}>{i === 0 ? `${ui.theme.brand.prompt} ` : '  '}</Text>
                 </Box>
 
-                <Text color={ui.theme.color.cornsilk}>{line || ' '}</Text>
+                <Text color={ui.theme.color.text}>{line || ' '}</Text>
               </Box>
             ))}
 
@@ -319,6 +319,7 @@ export const AppLayout = memo(function AppLayout({
   transcript
 }: AppLayoutProps) {
   const overlay = useStore($overlayState)
+  const ui = useStore($uiState)
 
   // Inline mode skips AlternateScreen so the host terminal's native
   // scrollback captures rows scrolled off the top; composer + progress
@@ -359,7 +360,7 @@ export const AppLayout = memo(function AppLayout({
 
             {SHOW_FPS && (
               <Box flexShrink={0} justifyContent="flex-end" paddingRight={1}>
-                <FpsOverlay />
+                <FpsOverlay t={ui.theme} />
               </Box>
             )}
           </>

@@ -283,7 +283,7 @@ export function SkillsHub({ gw, onClose, t }: SkillsHubProps) {
       </Text>
 
       <Text color={t.color.dim}>{info?.category ?? selectedCat}</Text>
-      {info?.description ? <Text color={t.color.cornsilk}>{info.description}</Text> : null}
+      {info?.description ? <Text color={t.color.text}>{info.description}</Text> : null}
       {info?.path ? <Text color={t.color.dim}>path: {info.path}</Text> : null}
       {!info && !err ? <Text color={t.color.dim}>loading…</Text> : null}
       {err ? <Text color={t.color.label}>error: {err}</Text> : null}

@@ -15,8 +15,6 @@ import type { Theme } from '../theme.js'
 import type { Msg, Usage } from '../types.js'
 
 const FACE_TICK_MS = 2500
-const HEART_COLORS = ['#ff5fa2', '#ff4d6d']
-
 function FaceTicker({ color, startedAt }: { color: string; startedAt?: null | number }) {
   const [tick, setTick] = useState(() => Math.floor(Math.random() * 1000))
   const [now, setNow] = useState(() => Date.now())
@@ -169,7 +167,7 @@ export function GoodVibesHeart({ tick, t }: { tick: number; t: Theme }) {
       return
     }
 
-    const palette = [...HEART_COLORS, t.color.amber]
+    const palette = [t.color.error, t.color.warn, t.color.amber]
     setColor(palette[Math.floor(Math.random() * palette.length)]!)
     setActive(true)
 

@@ -460,7 +460,7 @@ function SubagentAccordion({
           {item.tools.map((line, index) => (
             <TreeTextRow
               branch={index === item.tools.length - 1 ? 'last' : 'mid'}
-              color={t.color.cornsilk}
+              color={t.color.text}
               content={
                 <>
                   <Text color={t.color.amber}>● </Text>
@@ -792,7 +792,7 @@ export const ToolTrail = memo(function ToolTrail({
 
     if (parsed) {
       groups.push({
-        color: parsed.mark === '✗' ? t.color.error : t.color.cornsilk,
+        color: parsed.mark === '✗' ? t.color.error : t.color.text,
         content: parsed.call,
         details: [],
         key: `tr-${i}`,
@@ -815,7 +815,7 @@ export const ToolTrail = memo(function ToolTrail({
       const label = toolTrailLabel(line.slice(9).replace(/…$/, '').trim())
 
       groups.push({
-        color: t.color.cornsilk,
+        color: t.color.text,
         content: label,
         details: [{ color: t.color.dim, content: 'drafting...', dimColor: true, key: `tr-${i}-d` }],
         key: `tr-${i}`,
@@ -849,7 +849,7 @@ export const ToolTrail = memo(function ToolTrail({
     const label = formatToolCall(tool.name, tool.context || '')
 
     groups.push({
-      color: t.color.cornsilk,
+      color: t.color.text,
       key: tool.id,
       label,
       details: [],
@@ -1001,7 +1001,7 @@ export const ToolTrail = memo(function ToolTrail({
           <Text color={t.color.dim} dim={!thinkingLive}>
             <Text color={t.color.amber}>{openThinking ? '▾ ' : '▸ '}</Text>
             {thinkingLive ? (
-              <Text bold color={t.color.cornsilk}>
+              <Text bold color={t.color.text}>
                 Thinking
               </Text>
             ) : (

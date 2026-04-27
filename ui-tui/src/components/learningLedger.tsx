@@ -213,7 +213,7 @@ function LedgerDetails({ item, t, width }: LedgerDetailsProps) {
       <Text color={t.color.gold} wrap="truncate-end">
         {memoryLike ? item.name : item.summary}
       </Text>
-      {memoryLike ? <Text color={t.color.cornsilk}>{item.summary}</Text> : null}
+      {memoryLike ? <Text color={t.color.text}>{item.summary}</Text> : null}
       {item.count ? <Text color={t.color.dim}>used: {item.count}×</Text> : null}
       {item.learned_from ? <Text color={t.color.dim}>from: {item.learned_from}</Text> : null}
       {item.via ? <Text color={t.color.dim}>via: {item.via}</Text> : null}

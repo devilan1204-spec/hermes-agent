@@ -48,7 +48,7 @@ export function ApprovalPrompt({ onChoice, req, t }: ApprovalPromptProps) {
 
       <Box flexDirection="column" paddingLeft={1}>
         {shown.map((line, i) => (
-          <Text color={t.color.cornsilk} key={i} wrap="truncate-end">
+          <Text color={t.color.text} key={i} wrap="truncate-end">
             {line || ' '}
           </Text>
         ))}
@@ -85,7 +85,7 @@ export function ClarifyPrompt({ cols = 80, onAnswer, onCancel, req, t }: Clarify
   const heading = (
     <Text bold>
       <Text color={t.color.amber}>ask</Text>
-      <Text color={t.color.cornsilk}> {req.question}</Text>
+      <Text color={t.color.text}> {req.question}</Text>
     </Text>
   )
 
@@ -185,8 +185,8 @@ export function ConfirmPrompt({ onCancel, onConfirm, req, t }: ConfirmPromptProp
   const accent = req.danger ? t.color.error : t.color.warn
 
   const rows = [
-    { color: t.color.cornsilk, label: req.cancelLabel ?? 'No' },
-    { color: req.danger ? t.color.error : t.color.cornsilk, label: req.confirmLabel ?? 'Yes' }
+    { color: t.color.text, label: req.cancelLabel ?? 'No' },
+    { color: req.danger ? t.color.error : t.color.text, label: req.confirmLabel ?? 'Yes' }
   ]
 
   return (
@@ -197,7 +197,7 @@ export function ConfirmPrompt({ onCancel, onConfirm, req, t }: ConfirmPromptProp
 
       {req.detail ? (
         <Box paddingLeft={1}>
-          <Text color={t.color.cornsilk} wrap="truncate-end">
+          <Text color={t.color.text} wrap="truncate-end">
             {req.detail}
           </Text>
         </Box>

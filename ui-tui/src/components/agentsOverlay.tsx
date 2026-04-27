@@ -383,7 +383,7 @@ function Field({ name, t, value }: { name: string; t: Theme; value: ReactNode })
   return (
     <Text wrap="truncate-end">
       <Text color={t.color.label}>{name} · </Text>
-      <Text color={t.color.cornsilk}>{value}</Text>
+      <Text color={t.color.text}>{value}</Text>
     </Text>
   )
 }
@@ -411,7 +411,7 @@ function Detail({ id, node, t }: { id?: string; node: SubagentNode; t: Theme }) 
 
   return (
     <Box flexDirection="column">
-      <Text bold color={t.color.cornsilk} wrap="wrap">
+      <Text bold color={t.color.text} wrap="wrap">
         {id ? <Text color={t.color.amber}>#{id} </Text> : null}
         <Text color={color}>{glyph}</Text> {item.goal}
       </Text>
@@ -472,7 +472,7 @@ function Detail({ id, node, t }: { id?: string; node: SubagentNode; t: Theme }) 
           ))}
 
           {filesRead.slice(0, 8).map((p, i) => (
-            <Text color={t.color.cornsilk} key={`r-${i}`} wrap="truncate-end">
+            <Text color={t.color.text} key={`r-${i}`} wrap="truncate-end">
               <Text color={t.color.dim}>·</Text> {p}
             </Text>
           ))}
@@ -484,7 +484,7 @@ function Detail({ id, node, t }: { id?: string; node: SubagentNode; t: Theme }) 
       {toolLines.length > 0 ? (
         <OverlaySection count={toolLines.length} defaultOpen t={t} title="Tool calls">
           {toolLines.map((line, i) => (
-            <Text color={t.color.cornsilk} key={i} wrap="wrap">
+            <Text color={t.color.text} key={i} wrap="wrap">
               <Text color={t.color.dim}>·</Text> {line}
             </Text>
           ))}
@@ -494,7 +494,7 @@ function Detail({ id, node, t }: { id?: string; node: SubagentNode; t: Theme }) 
       {outputTail.length > 0 ? (
         <OverlaySection count={outputTail.length} defaultOpen t={t} title="Output">
           {outputTail.map((entry, i) => (
-            <Text color={entry.isError ? t.color.error : t.color.cornsilk} key={i} wrap="wrap">
+            <Text color={entry.isError ? t.color.error : t.color.text} key={i} wrap="wrap">
               <Text bold color={entry.isError ? t.color.error : t.color.amber}>
                 {entry.tool}
               </Text>{' '}
@@ -507,7 +507,7 @@ function Detail({ id, node, t }: { id?: string; node: SubagentNode; t: Theme }) 
       {item.notes.length ? (
         <OverlaySection count={item.notes.length} t={t} title="Progress">
           {item.notes.slice(-6).map((line, i) => (
-            <Text color={t.color.cornsilk} key={i} wrap="wrap">
+            <Text color={t.color.text} key={i} wrap="wrap">
               <Text color={t.color.label}>·</Text> {line}
             </Text>
           ))}
@@ -516,7 +516,7 @@ function Detail({ id, node, t }: { id?: string; node: SubagentNode; t: Theme }) 
 
       {item.summary ? (
         <OverlaySection defaultOpen t={t} title="Summary">
-          <Text color={t.color.cornsilk} wrap="wrap">
+          <Text color={t.color.text} wrap="wrap">
             {item.summary}
           </Text>
         </OverlaySection>
@@ -552,7 +552,7 @@ function ListRow({
   const paren = line ? line.indexOf('(') : -1
   const toolShort = line ? (paren > 0 ? line.slice(0, paren) : line).trim() : ''
   const trailing = toolShort ? ` · ${compactPreview(toolShort, 14)}` : ''
-  const fg = active ? t.color.amber : t.color.cornsilk
+  const fg = active ? t.color.amber : t.color.text
 
   return (
     <Text bold={active} color={fg} inverse={active} wrap="truncate-end">
@@ -585,7 +585,7 @@ function DiffPane({
 }) {
   return (
     <Box flexDirection="column" width={width}>
-      <Text bold color={t.color.cornsilk}>
+      <Text bold color={t.color.text}>
         {label}
       </Text>
 
@@ -661,20 +661,20 @@ function DiffView({
           Δ
         </Text>
 
-        <Text color={t.color.cornsilk}>
+        <Text color={t.color.text}>
           {diffMetricLine('agents', aTotals.descendantCount, bTotals.descendantCount, round)}
         </Text>
-        <Text color={t.color.cornsilk}>{diffMetricLine('tools', aTotals.totalTools, bTotals.totalTools, round)}</Text>
-        <Text color={t.color.cornsilk}>
+        <Text color={t.color.text}>{diffMetricLine('tools', aTotals.totalTools, bTotals.totalTools, round)}</Text>
+        <Text color={t.color.text}>
           {diffMetricLine('depth', aTotals.maxDepthFromHere, bTotals.maxDepthFromHere, round)}
         </Text>
-        <Text color={t.color.cornsilk}>
+        <Text color={t.color.text}>
           {diffMetricLine('duration', aTotals.totalDuration, bTotals.totalDuration, n => `${n.toFixed(1)}s`)}
         </Text>
-        <Text color={t.color.cornsilk}>
+        <Text color={t.color.text}>
           {diffMetricLine('tokens', sumTokens(aTotals), sumTokens(bTotals), fmtTokens)}
         </Text>
-        <Text color={t.color.cornsilk}>{diffMetricLine('cost', aTotals.costUsd, bTotals.costUsd, dollars)}</Text>
+        <Text color={t.color.text}>{diffMetricLine('cost', aTotals.costUsd, bTotals.costUsd, dollars)}</Text>
       </Box>
     </Box>
   )

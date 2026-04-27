@@ -9,7 +9,7 @@ import type { TodoItem } from '../types.js'
 const rowColor = (t: Theme, status: TodoItem['status']) => {
   const tone = todoTone(status)
 
-  return tone === 'active' ? t.color.cornsilk : tone === 'body' ? t.color.statusFg : t.color.dim
+  return tone === 'active' ? t.color.text : tone === 'body' ? t.color.statusFg : t.color.dim
 }
 
 export const TodoPanel = memo(function TodoPanel({
@@ -58,7 +58,7 @@ export const TodoPanel = memo(function TodoPanel({
       <Box onClick={handleToggle}>
         <Text color={t.color.dim}>
           <Text color={t.color.amber}>{effectiveCollapsed ? '▸ ' : '▾ '}</Text>
-          <Text bold color={t.color.cornsilk}>
+          <Text bold color={t.color.text}>
             Todo
           </Text>{' '}
           <Text color={t.color.statusFg} dim>

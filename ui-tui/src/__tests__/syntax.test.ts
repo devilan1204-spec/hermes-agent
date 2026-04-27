@@ -28,7 +28,7 @@ describe('syntax highlighter', () => {
 
     expect(colors).toContain(t.color.bronze) // const
     expect(colors).toContain(t.color.amber) // 'hi'
-    expect(colors).toContain(t.color.cornsilk) // 42
+    expect(colors).toContain(t.color.text) // 42
   })
 
   it('falls through unchanged for unknown langs', () => {

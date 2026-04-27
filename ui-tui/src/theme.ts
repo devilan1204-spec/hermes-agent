@@ -2,7 +2,7 @@ export interface ThemeColors {
   gold: string
   amber: string
   bronze: string
-  cornsilk: string
+  text: string
   dim: string
   completionBg: string
   completionCurrentBg: string
@@ -93,7 +93,7 @@ export const DARK_THEME: Theme = {
     gold: '#FFD700',
     amber: '#FFBF00',
     bronze: '#CD7F32',
-    cornsilk: '#FFF8DC',
+    text: '#FFF8DC',
     // Bumped from the old `#B8860B` darkgoldenrod (~53% luminance) which
     // read as barely-visible on dark terminals for long body text.  The
     // new value sits ~60% luminance — readable without losing the "muted /
@@ -144,7 +144,7 @@ export const LIGHT_THEME: Theme = {
     gold: '#8B6914',
     amber: '#A0651C',
     bronze: '#7A4F1F',
-    cornsilk: '#3D2F13',
+    text: '#3D2F13',
     dim: '#7A5A0F',
     completionBg: '#F5F5F5',
     completionCurrentBg: mix('#F5F5F5', '#A0651C', 0.25),
@@ -222,10 +222,10 @@ export function fromSkin(
       gold: c('banner_title') ?? d.color.gold,
       amber,
       bronze: c('banner_border') ?? d.color.bronze,
-      cornsilk: c('banner_text') ?? d.color.cornsilk,
+      text: c('ui_text') ?? c('banner_text') ?? d.color.text,
       dim,
-      completionBg: c('completion_menu_bg') ?? '#FFFFFF',
-      completionCurrentBg: c('completion_menu_current_bg') ?? mix('#FFFFFF', accent, 0.25),
+      completionBg: c('completion_menu_bg') ?? d.color.completionBg,
+      completionCurrentBg: c('completion_menu_current_bg') ?? mix(d.color.completionBg, accent, 0.25),
 
       label: c('ui_label') ?? d.color.label,
       ok: c('ui_ok') ?? d.color.ok,
