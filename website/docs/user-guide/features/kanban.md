@@ -380,7 +380,11 @@ hermes kanban runs t_abcd
 #        → implemented token bucket, keys on user_id with IP fallback
 ```
 
-Runs are exposed on the dashboard (Run History section in the drawer, one coloured row per attempt) and on the REST API (`GET /api/plugins/kanban/tasks/:id` returns a `runs[]` array). Task_events rows carry the run_id they belong to so the UI can group them by attempt.
+Runs are exposed on the dashboard (Run History section in the drawer, one coloured row per attempt) and on the REST API (`GET /api/plugins/kanban/tasks/:id` returns a `runs[]` array). `PATCH /api/plugins/kanban/tasks/:id` with `{status: "done", summary, metadata}` forwards both to the kernel, so the dashboard's "mark done" button is CLI-equivalent. `task_events` rows carry the `run_id` they belong to so the UI can group them by attempt, and the `completed` event embeds the first-line summary in its payload (capped at 400 chars) so gateway notifiers can render structured handoffs without a second SQL round-trip.
+
+**Bulk close caveat.** `hermes kanban complete a b c --summary X` is refused — structured handoff is per-run, so copy-pasting the same summary to N tasks is almost always wrong. Bulk close *without* `--summary` / `--metadata` still works for the common "I finished a pile of admin tasks" case.
+
+**Reclaimed runs from status changes.** If you drag a running task off `running` in the dashboard (back to `ready`, or straight to `todo`), or archive a task that was still running, the in-flight run closes with `outcome='reclaimed'` rather than being orphaned. The `task_runs` row is always in a terminal state when `tasks.current_run_id` is `NULL`, and vice versa — that invariant holds across CLI, dashboard, dispatcher, and notifier.
 
 ### Forward compatibility
 
@@ -392,24 +396,24 @@ Every transition appends a row to `task_events`. Each row carries an optional `r
 
 **Lifecycle** (what changed about the task as a logical unit):
 
-| Kind | When |
-|---|---|
-| `created` | Task inserted. |
-| `promoted` | `todo → ready` because all parents hit `done`. |
-| `claimed` | Dispatcher atomically claimed a `ready` task for spawn. |
-| `completed` | Worker wrote `--result` and task hit `done`. |
-| `blocked` | Worker or human flipped the task to `blocked`. |
-| `unblocked` | `blocked → ready`, either manually or via `/unblock`. |
-| `archived` | Hidden from the default board. |
+| Kind | Payload | When |
+|---|---|---|
+| `created` | `{assignee, status, parents, tenant}` | Task inserted. |
+| `promoted` | — | `todo → ready` because all parents hit `done`. |
+| `claimed` | `{lock, expires, run_id}` | Dispatcher atomically claimed a `ready` task for spawn. |
+| `completed` | `{result_len, summary?}` | Worker wrote `--result` / `--summary` and task hit `done`. `summary` is the first-line handoff (400-char cap); full version lives on the run row. |
+| `blocked` | `{reason}` | Worker or human flipped the task to `blocked`. |
+| `unblocked` | — | `blocked → ready`, either manually or via `/unblock`. |
+| `archived` | — | Hidden from the default board. If the task was still running, carries the `run_id` of the run that was reclaimed as a side effect. |
 
 **Edits** (human-driven changes that aren't transitions):
 
-| Kind | When |
-|---|---|
-| `assigned` | Assignee changed (including unassignment). |
-| `edited` | Title or body updated. |
-| `reprioritized` | Priority changed. |
-| `status` | Dashboard drag-drop wrote a status directly (e.g. `todo → ready`). |
+| Kind | Payload | When |
+|---|---|---|
+| `assigned` | `{assignee}` | Assignee changed (including unassignment). |
+| `edited` | `{fields}` | Title or body updated. |
+| `reprioritized` | `{priority}` | Priority changed. |
+| `status` | `{status}` | Dashboard drag-drop wrote a status directly (e.g. `todo → ready`). Carries the `run_id` of the run that was reclaimed when dragging off `running`; otherwise `run_id` is NULL. |
 
 **Worker telemetry** (about the execution process, not the logical task):
 
