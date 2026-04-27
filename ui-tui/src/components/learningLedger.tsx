@@ -8,6 +8,7 @@ import type { Theme } from '../theme.js'
 import { OverlayHint, windowItems, windowOffset } from './overlayControls.js'
 
 const EDGE_GUTTER = 10
+const GRID_GAP = 2
 const MAX_WIDTH = 132
 const MIN_WIDTH = 64
 const VISIBLE_ROWS = 12
@@ -60,9 +61,10 @@ export function LearningLedger({ gw, onClose, t, width: fixedWidth }: LearningLe
   const items = ledger?.items ?? []
   const selected = items[idx]
   const detailOpen = expanded && !!selected
-  const detailGap = detailOpen ? 2 : 0
-  const listWidth = detailOpen ? Math.max(36, Math.floor((width - detailGap) * 0.7)) : width
-  const detailWidth = detailOpen ? Math.max(24, width - listWidth - detailGap) : 0
+  const gridGap = detailOpen ? GRID_GAP : 0
+  const listPaneWidth = detailOpen ? Math.floor((width - gridGap) * 0.7) : width
+  const detailPaneWidth = detailOpen ? width - gridGap - listPaneWidth : 0
+  const listContentWidth = Math.max(20, listPaneWidth - 4)
   const counts = useMemo(
     () =>
       Object.entries(ledger?.counts ?? {})
@@ -138,20 +140,20 @@ export function LearningLedger({ gw, onClose, t, width: fixedWidth }: LearningLe
   const { items: visible, offset } = windowItems(items, idx, VISIBLE_ROWS)
 
   return (
-    <Box flexDirection="column" width={width}>
-      <Text bold color={t.color.accent}>
-        Recent Learning
-      </Text>
-      <Text color={t.color.muted}>
-        {ledger?.total ?? items.length} traces{counts ? ` · ${counts}` : ''}
-      </Text>
-      {ledger?.inventory?.skills ? (
-        <Text color={t.color.muted}>available knowledge: {ledger.inventory.skills} installed skills</Text>
-      ) : null}
-      {offset > 0 && <Text color={t.color.muted}> ↑ {offset} more</Text>}
+    <Box flexDirection="row" width={width}>
+      <Box borderColor={t.color.border} borderStyle="single" flexDirection="column" flexShrink={0} paddingX={1} width={listPaneWidth}>
+        <Text bold color={t.color.accent}>
+          Recent Learning
+        </Text>
+        <Text color={t.color.muted}>
+          {ledger?.total ?? items.length} traces{counts ? ` · ${counts}` : ''}
+        </Text>
+        {ledger?.inventory?.skills ? (
+          <Text color={t.color.muted}>available knowledge: {ledger.inventory.skills} installed skills</Text>
+        ) : null}
+        {offset > 0 && <Text color={t.color.muted}> ↑ {offset} more</Text>}
 
-      <Box flexDirection="row" width={width}>
-        <Box flexDirection="column" flexShrink={0} width={listWidth}>
+        <Box flexDirection="column" width={listContentWidth}>
           {visible.map((item, i) => {
             const absolute = offset + i
             const active = absolute === idx
@@ -163,25 +165,25 @@ export function LearningLedger({ gw, onClose, t, width: fixedWidth }: LearningLe
                 item={item}
                 key={`${item.type}:${item.name}:${i}`}
                 t={t}
-                width={listWidth}
+                width={listContentWidth}
               />
             )
           })}
         </Box>
 
-        {detailOpen && selected ? (
-          <>
-            <Box flexShrink={0} width={detailGap} />
-            <LedgerDetails item={selected} t={t} width={detailWidth} />
-          </>
-        ) : null}
+        {offset + VISIBLE_ROWS < items.length && (
+          <Text color={t.color.muted}> ↓ {items.length - offset - VISIBLE_ROWS} more</Text>
+        )}
+
+        <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>
       </Box>
 
-      {offset + VISIBLE_ROWS < items.length && (
-        <Text color={t.color.muted}> ↓ {items.length - offset - VISIBLE_ROWS} more</Text>
-      )}
-
-      <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>
+        {detailOpen && selected ? (
+          <>
+            <Box flexShrink={0} width={gridGap} />
+            <LedgerDetails item={selected} t={t} width={detailPaneWidth} />
+          </>
+        ) : null}
     </Box>
   )
 }
@@ -212,7 +214,7 @@ function LedgerDetails({ item, t, width }: LedgerDetailsProps) {
   const memoryLike = item.type === 'memory' || item.type === 'user'
 
   return (
-    <Box borderColor={t.color.muted} borderStyle="single" flexDirection="column" flexShrink={0} paddingX={1} width={width}>
+    <Box borderColor={t.color.border} borderStyle="single" flexDirection="column" flexShrink={0} paddingX={1} width={width}>
       <Text bold color={t.color.accent}>
         Details
       </Text>
