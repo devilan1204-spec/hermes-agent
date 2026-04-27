@@ -141,7 +141,7 @@ export function LearningLedger({ gw, onClose, t, width: fixedWidth }: LearningLe
 
   return (
     <Box flexDirection="row" width={width}>
-      <Box borderColor={t.color.border} borderStyle="single" flexDirection="column" flexShrink={0} paddingX={1} width={listPaneWidth}>
+      <Box flexDirection="column" flexShrink={0} width={listPaneWidth}>
         <Text bold color={t.color.accent}>
           Recent Learning
         </Text>
@@ -178,12 +178,12 @@ export function LearningLedger({ gw, onClose, t, width: fixedWidth }: LearningLe
         <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>
       </Box>
 
-        {detailOpen && selected ? (
-          <>
-            <Box flexShrink={0} width={gridGap} />
-            <LedgerDetails item={selected} t={t} width={detailPaneWidth} />
-          </>
-        ) : null}
+      {detailOpen && selected ? (
+        <>
+          <Box flexShrink={0} width={gridGap} />
+          <LedgerDetails item={selected} t={t} width={detailPaneWidth} />
+        </>
+      ) : null}
     </Box>
   )
 }
@@ -214,7 +214,7 @@ function LedgerDetails({ item, t, width }: LedgerDetailsProps) {
   const memoryLike = item.type === 'memory' || item.type === 'user'
 
   return (
-    <Box borderColor={t.color.border} borderStyle="single" flexDirection="column" flexShrink={0} paddingX={1} width={width}>
+    <Box flexDirection="column" flexShrink={0} width={width}>
       <Text bold color={t.color.accent}>
         Details
       </Text>
