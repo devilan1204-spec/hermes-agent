@@ -7,9 +7,10 @@ import type { Theme } from '../theme.js'
 
 import { OverlayHint, windowItems, windowOffset } from './overlayControls.js'
 
-const VISIBLE = 12
-const MIN_WIDTH = 52
-const MAX_WIDTH = 104
+const EDGE_GUTTER = 10
+const MAX_WIDTH = 132
+const MIN_WIDTH = 64
+const VISIBLE_ROWS = 10
 
 const typeIcon: Record<string, string> = {
   integration: '◇',
@@ -44,7 +45,10 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(true)
   const { stdout } = useStdout()
-  const width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, (stdout?.columns ?? 80) - 6))
+  const width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, (stdout?.columns ?? 80) - EDGE_GUTTER))
+  const columns = width >= 92 ? 2 : 1
+  const pageSize = VISIBLE_ROWS * columns
+  const colWidth = columns === 2 ? Math.floor((width - 3) / 2) : width
 
   useEffect(() => {
     gw.request<LearningLedgerResponse>('learning.ledger', { limit: 120 })
@@ -74,14 +78,26 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
       return
     }
 
-    if (key.upArrow && idx > 0) {
+    if (key.leftArrow && columns === 2 && idx > 0) {
       setIdx(v => v - 1)
 
       return
     }
 
-    if (key.downArrow && idx < items.length - 1) {
+    if (key.rightArrow && columns === 2 && idx < items.length - 1) {
       setIdx(v => v + 1)
+
+      return
+    }
+
+    if (key.upArrow && idx > 0) {
+      setIdx(v => Math.max(0, v - columns))
+
+      return
+    }
+
+    if (key.downArrow && idx < items.length - 1) {
+      setIdx(v => Math.min(items.length - 1, v + columns))
 
       return
     }
@@ -94,7 +110,7 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
 
     const n = ch === '0' ? 10 : parseInt(ch, 10)
     if (!Number.isNaN(n) && n >= 1 && n <= Math.min(10, items.length)) {
-      const next = windowOffset(items.length, idx, VISIBLE) + n - 1
+      const next = windowOffset(items.length, idx, pageSize) + n - 1
 
       if (items[next]) {
         setIdx(next)
@@ -130,7 +146,10 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
     )
   }
 
-  const { items: visible, offset } = windowItems(items, idx, VISIBLE)
+  const { items: visible, offset } = windowItems(items, idx, pageSize)
+  const rows = Array.from({ length: Math.ceil(visible.length / columns) }, (_, row) =>
+    visible.slice(row * columns, row * columns + columns)
+  )
 
   return (
     <Box flexDirection="column" width={width}>
@@ -145,45 +164,66 @@ export function LearningLedger({ gw, onClose, t }: LearningLedgerProps) {
       ) : null}
       {offset > 0 && <Text color={t.color.dim}> ↑ {offset} more</Text>}
 
-      {visible.map((item, i) => {
-        const absolute = offset + i
-        const active = absolute === idx
-        const when = fmtTime(item.last_used_at ?? item.learned_at)
-        const count = item.count ? ` ×${item.count}` : ''
-        const icon = typeIcon[item.type] ?? '•'
-        const verb = typeVerb[item.type] ?? item.type
-        const title = item.type === 'memory' || item.type === 'user' ? item.summary : item.name
+      {rows.map((row, rowIdx) => (
+        <Box flexDirection="row" gap={1} key={rowIdx} width={width}>
+          {row.map((item, colIdx) => {
+            const visibleIdx = rowIdx * columns + colIdx
+            const absolute = offset + visibleIdx
+            const active = absolute === idx
 
-        return (
-          <Text
-            bold={active}
-            color={active ? t.color.amber : t.color.dim}
-            inverse={active}
-            key={`${item.type}:${item.name}:${i}`}
-            wrap="truncate-end"
-          >
-            {active ? '▸ ' : '  '}
-            {i + 1}. {icon} {verb}: {title}
-            <Text color={active ? t.color.amber : t.color.dim}>
-              {' '}
-              {count}
-              {when ? ` · ${when}` : ''}
-            </Text>
-          </Text>
-        )
-      })}
+            return (
+              <LedgerRow
+                active={active}
+                index={visibleIdx + 1}
+                item={item}
+                key={`${item.type}:${item.name}:${visibleIdx}`}
+                t={t}
+                width={colWidth}
+              />
+            )
+          })}
+        </Box>
+      ))}
 
-      {offset + VISIBLE < items.length && <Text color={t.color.dim}> ↓ {items.length - offset - VISIBLE} more</Text>}
+      {offset + pageSize < items.length && <Text color={t.color.dim}> ↓ {items.length - offset - pageSize} more</Text>}
 
       {selected && expanded ? (
         <Box borderColor={t.color.dim} borderStyle="single" flexDirection="column" marginTop={1} paddingX={1}>
-          <Text color={t.color.gold}>{selected.type === 'memory' || selected.type === 'user' ? selected.name : selected.summary}</Text>
-          {selected.type === 'memory' || selected.type === 'user' ? <Text color={t.color.cornsilk}>{selected.summary}</Text> : null}
+          <Text color={t.color.gold}>
+            {selected.type === 'memory' || selected.type === 'user' ? selected.name : selected.summary}
+          </Text>
+          {selected.type === 'memory' || selected.type === 'user' ? (
+            <Text color={t.color.cornsilk}>{selected.summary}</Text>
+          ) : null}
           <Text color={t.color.dim}>source: {selected.source}</Text>
         </Box>
       ) : null}
 
-      <OverlayHint t={t}>↑/↓ select · Enter/Space details · 1-9,0 quick · Esc/q close</OverlayHint>
+      <OverlayHint t={t}>
+        {`${columns === 2 ? '↑↓←→ select' : '↑/↓ select'} · Enter/Space details · 1-9,0 quick · Esc/q close`}
+      </OverlayHint>
+    </Box>
+  )
+}
+
+function LedgerRow({ active, index, item, t, width }: LedgerRowProps) {
+  const when = fmtTime(item.last_used_at ?? item.learned_at)
+  const count = item.count ? ` ×${item.count}` : ''
+  const icon = typeIcon[item.type] ?? '•'
+  const verb = typeVerb[item.type] ?? item.type
+  const title = item.type === 'memory' || item.type === 'user' ? item.summary : item.name
+
+  return (
+    <Box width={width}>
+      <Text bold={active} color={active ? t.color.amber : t.color.dim} inverse={active} wrap="truncate-end">
+        {active ? '▸ ' : '  '}
+        {index}. {icon} {verb}: {title}
+        <Text color={active ? t.color.amber : t.color.dim}>
+          {' '}
+          {count}
+          {when ? ` · ${when}` : ''}
+        </Text>
+      </Text>
     </Box>
   )
 }
@@ -205,6 +245,14 @@ interface LearningLedgerResponse {
   inventory?: { skills?: number }
   items?: LearningLedgerItem[]
   total?: number
+}
+
+interface LedgerRowProps {
+  active: boolean
+  index: number
+  item: LearningLedgerItem
+  t: Theme
+  width: number
 }
 
 interface LearningLedgerProps {
