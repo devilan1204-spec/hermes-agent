@@ -94,20 +94,22 @@ export const MessageLine = memo(function MessageLine({
     )
   }
 
+  if (msg.kind === 'learning') {
+    return (
+      <Box marginLeft={3} marginTop={1}>
+        <Text color={t.color.cornsilk} dimColor italic>
+          {msg.text}
+        </Text>
+      </Box>
+    )
+  }
+
   const { body, glyph, prefix } = ROLE[msg.role](t)
 
   const showDetails =
     (toolsMode !== 'hidden' && Boolean(msg.tools?.length)) || (thinkingMode !== 'hidden' && Boolean(thinking))
 
   const content = (() => {
-    if (msg.kind === 'learning') {
-      return (
-        <Text color={t.color.cornsilk} dimColor italic>
-          {msg.text}
-        </Text>
-      )
-    }
-
     if (msg.kind === 'slash') {
       return <Text color={t.color.dim}>{msg.text}</Text>
     }
