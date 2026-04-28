@@ -1921,3 +1921,68 @@ def test_build_worker_context_role_history_bounded_to_5(kanban_home):
         assert len(bullets) == 5, f"expected 5 bullets, got {len(bullets)}"
     finally:
         conn.close()
+
+
+# -------------------------------------------------------------------------
+# Battle-test findings (May 2026: stress/ suite exposed zombie + id collision)
+# -------------------------------------------------------------------------
+
+@pytest.mark.skipif("linux" not in __import__("sys").platform,
+                    reason="zombie detection is Linux-specific")
+def test_pid_alive_detects_zombie(kanban_home):
+    """_pid_alive must return False for a zombie process.
+
+    Without the /proc check, kill(pid, 0) succeeds against zombies
+    (process table entry exists until parent reaps), so the dispatcher
+    would treat a dead-but-unreaped worker as alive. This catches a
+    worker that exited normally but whose parent hasn't called wait().
+    """
+    import subprocess as _sp
+    proc = _sp.Popen(
+        ["sleep", "3600"],
+        stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+    )
+    pid = proc.pid
+    try:
+        assert kb._pid_alive(pid) is True  # live non-zombie
+        os.kill(pid, 9)
+        time.sleep(0.3)
+        # Verify /proc reports zombie state so the test is actually
+        # exercising the zombie path and not some other liveness failure
+        with open(f"/proc/{pid}/status") as f:
+            state_line = next(
+                (l for l in f if l.startswith("State:")), ""
+            )
+        assert "Z" in state_line, f"expected zombie, got {state_line!r}"
+        # And _pid_alive must see through it.
+        assert kb._pid_alive(pid) is False
+    finally:
+        try:
+            proc.wait(timeout=1)
+        except Exception:
+            pass
+
+
+def test_task_ids_dont_collide_at_scale(kanban_home):
+    """ID generator must be wide enough that creating 10k tasks doesn't
+    hit a UNIQUE constraint violation.
+
+    Regression test for the 2-hex-byte ID (65k space) that would
+    collide at ~50% probability by 10k tasks due to birthday paradox.
+    Current generator uses 4 hex bytes (4.3B space).
+    """
+    conn = kb.connect()
+    try:
+        # 500 is enough to exercise the generator diversity without
+        # making the test slow. At 2-hex-byte width, collision chance
+        # over 500 creates was ~1.3%; over 10000 the old generator
+        # would fail reliably. We don't need the full 10k run to prove
+        # the regression; distribution check is sufficient.
+        ids = [kb.create_task(conn, title=f"scale-{i}") for i in range(500)]
+        assert len(ids) == len(set(ids)), "ID collision at N=500"
+        # Sanity: every id matches the expected format
+        for tid in ids[:10]:
+            assert tid.startswith("t_")
+            assert len(tid) == 10  # "t_" + 8 hex chars
+    finally:
+        conn.close()

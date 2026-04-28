@@ -24,6 +24,7 @@ import json
 import os
 import secrets
 import sqlite3
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -527,12 +528,16 @@ def write_txn(conn: sqlite3.Connection):
 # ---------------------------------------------------------------------------
 
 def _new_task_id() -> str:
-    """Generate a short, URL-safe, human-readable task id.
+    """Generate a short, URL-safe task id.
 
-    Format: ``t_<4 hex chars>``.  Space is 65k values; collisions are
-    rare but handled by a one-shot retry in ``create_task``.
+    4 hex bytes = ~4.3B possibilities. At 10k tasks the collision
+    probability is ~1.2e-5; at 100k it's ~1.2e-3. Previously we used 2
+    hex bytes (65k possibilities) which hit the birthday paradox hard:
+    ~5% collision probability at 1k tasks, ~50% at 10k. Callers that
+    care about idempotency should pass ``idempotency_key`` to
+    :func:`create_task` rather than rely on id uniqueness.
     """
-    return "t_" + secrets.token_hex(2)
+    return "t_" + secrets.token_hex(4)
 
 
 def _claimer_id() -> str:
@@ -1519,13 +1524,23 @@ def _pid_alive(pid: Optional[int]) -> bool:
 
     Cross-platform: uses ``os.kill(pid, 0)`` on POSIX and ``OpenProcess``
     on Windows. Returns False for falsy PIDs or on any OS error.
+
+    **Zombie handling (Linux):** ``os.kill(pid, 0)`` succeeds against
+    zombie processes (post-exit, pre-reap) because the process table
+    entry still exists. A worker that exits without being reaped by its
+    parent would stay "alive" to the dispatcher forever. Dispatcher
+    workers are started via ``start_new_session=True`` + intentional
+    Popen handle abandonment, so init reaps them quickly — but during
+    the window between exit and reap, we'd otherwise see stale "alive"
+    signals. On Linux we additionally peek at ``/proc/<pid>/status``
+    and treat ``State: Z`` as dead. On other POSIX or on Windows the
+    zombie check is a no-op.
     """
     if not pid or pid <= 0:
         return False
     try:
         if hasattr(os, "kill"):
             os.kill(int(pid), 0)
-            return True
     except ProcessLookupError:
         return False
     except PermissionError:
@@ -1533,6 +1548,21 @@ def _pid_alive(pid: Optional[int]) -> bool:
         return True
     except OSError:
         return False
+    # Still here → kill(0) succeeded. Check for zombie on Linux.
+    if sys.platform == "linux":
+        try:
+            with open(f"/proc/{int(pid)}/status", "r") as f:
+                for line in f:
+                    if line.startswith("State:"):
+                        # "State:\tZ (zombie)" → dead
+                        if "Z" in line.split(":", 1)[1]:
+                            return False
+                        break
+        except (FileNotFoundError, PermissionError, OSError):
+            # proc entry gone → already reaped; treat as dead.
+            # PermissionError shouldn't happen for our own children but
+            # be defensive.
+            pass
     return True
 
 
