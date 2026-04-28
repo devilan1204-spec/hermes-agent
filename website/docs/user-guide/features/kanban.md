@@ -154,6 +154,37 @@ Load it with:
 hermes skills install devops/kanban-worker
 ```
 
+The dispatcher also auto-passes `--skills kanban-worker` when spawning every worker, so the worker always has the pattern library available even if a profile's default skills config doesn't include it.
+
+### Pinning extra skills to a specific task
+
+Sometimes a single task needs specialist context the assignee profile doesn't carry by default — a translation job that needs the `translation` skill, a review task that needs `github-code-review`, a security audit that needs `security-pr-audit`. Rather than editing the assignee's profile every time, attach the skills directly to the task:
+
+```bash
+# CLI — repeat --skill for each extra skill
+hermes kanban create "translate README to Japanese" \
+    --assignee linguist \
+    --skill translation
+
+# Multiple skills
+hermes kanban create "audit auth flow" \
+    --assignee reviewer \
+    --skill security-pr-audit \
+    --skill github-code-review
+```
+
+From the dashboard's inline create form, type the skills comma-separated into the **skills** field. From another agent (orchestrator pattern), use `kanban_create(skills=[...])`:
+
+```
+kanban_create(
+    title="translate README to Japanese",
+    assignee="linguist",
+    skills=["translation"],
+)
+```
+
+These skills are **additive** to the built-in `kanban-worker` — the dispatcher emits one `--skills <name>` flag for each (and for the built-in), so the worker spawns with all of them loaded. The skill names must match skills that are actually installed on the assignee's profile (run `hermes skills list` to see what's available); there's no runtime install.
+
 ### The orchestrator skill
 
 A **well-behaved orchestrator does not do the work itself.** It decomposes the user's goal into tasks, links them, assigns each to a specialist, and steps back. The `kanban-orchestrator` skill encodes this: anti-temptation rules, a standard specialist roster (`researcher`, `writer`, `analyst`, `backend-eng`, `reviewer`, `ops`), and a decomposition playbook.
@@ -290,6 +321,7 @@ hermes kanban create "<title>" [--body ...] [--assignee <profile>]
                                 [--workspace scratch|worktree|dir:<path>]
                                 [--priority N] [--triage] [--idempotency-key KEY]
                                 [--max-runtime 30m|2h|1d|<seconds>]
+                                [--skill <name>]...
                                 [--json]
 hermes kanban list [--mine] [--assignee P] [--status S] [--tenant T] [--archived] [--json]
 hermes kanban show <id> [--json]

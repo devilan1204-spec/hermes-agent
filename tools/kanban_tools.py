@@ -285,6 +285,14 @@ def _handle_create(args: dict, **kw) -> str:
     triage = bool(args.get("triage"))
     idempotency_key = args.get("idempotency_key")
     max_runtime_seconds = args.get("max_runtime_seconds")
+    skills = args.get("skills")
+    if isinstance(skills, str):
+        # Accept a single skill name as a string for convenience.
+        skills = [skills]
+    if skills is not None and not isinstance(skills, (list, tuple)):
+        return tool_error(
+            f"skills must be a list of skill names, got {type(skills).__name__}"
+        )
     if isinstance(parents, str):
         parents = [parents]
     if not isinstance(parents, (list, tuple)):
@@ -310,6 +318,7 @@ def _handle_create(args: dict, **kw) -> str:
                     int(max_runtime_seconds)
                     if max_runtime_seconds is not None else None
                 ),
+                skills=skills,
                 created_by=os.environ.get("HERMES_PROFILE") or "worker",
             )
             new_task = kb.get_task(conn, new_tid)
@@ -611,6 +620,19 @@ KANBAN_CREATE_SCHEMA = {
                     "Per-task runtime cap. When exceeded, the "
                     "dispatcher SIGTERMs the worker and re-queues the "
                     "task with outcome='timed_out'."
+                ),
+            },
+            "skills": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Skill names to force-load into the dispatched "
+                    "worker (in addition to the built-in kanban-worker "
+                    "skill). Use this to pin a task to a specialist "
+                    "context — e.g. ['translation'] for a translation "
+                    "task, ['github-code-review'] for a reviewer task. "
+                    "The names must match skills installed on the "
+                    "assignee's profile."
                 ),
             },
         },

@@ -2214,3 +2214,243 @@ def test_default_spawn_auto_loads_kanban_worker_skill(kanban_home, monkeypatch):
     env = captured["env"]
     assert env.get("HERMES_KANBAN_TASK") == tid
     assert env.get("HERMES_PROFILE") == "some-profile"
+
+
+
+# ---------------------------------------------------------------------------
+# Per-task force-loaded skills
+# ---------------------------------------------------------------------------
+
+def test_create_task_persists_skills(kanban_home):
+    """Task.skills round-trips through create -> get_task."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(
+            conn,
+            title="skilled task",
+            assignee="linguist",
+            skills=["translation", "github-code-review"],
+        )
+        task = kb.get_task(conn, tid)
+        assert task is not None
+        assert task.skills == ["translation", "github-code-review"]
+    finally:
+        conn.close()
+
+
+def test_create_task_skills_none_stays_none(kanban_home):
+    """Default behavior: no skills arg means Task.skills is None."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="plain task", assignee="someone")
+        task = kb.get_task(conn, tid)
+        assert task is not None
+        assert task.skills is None
+    finally:
+        conn.close()
+
+
+def test_create_task_skills_deduplicates_and_strips(kanban_home):
+    """Dup names collapse; whitespace is stripped; empties dropped."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(
+            conn,
+            title="dedupe",
+            assignee="x",
+            skills=["  translation  ", "translation", "", None, "review"],
+        )
+        task = kb.get_task(conn, tid)
+        assert task.skills == ["translation", "review"]
+    finally:
+        conn.close()
+
+
+def test_create_task_skills_rejects_comma_embedded(kanban_home):
+    """Comma in a skill name is rejected — force caller to pass a list."""
+    conn = kb.connect()
+    try:
+        with pytest.raises(ValueError, match="cannot contain comma"):
+            kb.create_task(
+                conn,
+                title="bad",
+                assignee="x",
+                skills=["a,b"],
+            )
+    finally:
+        conn.close()
+
+
+def test_default_spawn_appends_per_task_skills(kanban_home, monkeypatch):
+    """Dispatcher argv must carry one `--skills X` pair per task skill,
+    in addition to the built-in kanban-worker."""
+    captured = {}
+
+    class FakeProc:
+        def __init__(self):
+            self.pid = 42
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProc()
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(
+            conn,
+            title="multi-skill worker",
+            assignee="linguist",
+            skills=["translation", "github-code-review"],
+        )
+        task = kb.get_task(conn, tid)
+        workspace = kb.resolve_workspace(task)
+        kb._default_spawn(task, str(workspace))
+    finally:
+        conn.close()
+
+    cmd = captured["cmd"]
+    # Count every --skills pair and gather the skill names.
+    skill_names = []
+    for i, tok in enumerate(cmd):
+        if tok == "--skills" and i + 1 < len(cmd):
+            skill_names.append(cmd[i + 1])
+    # kanban-worker first (built-in), then per-task extras in order.
+    assert skill_names[0] == "kanban-worker", skill_names
+    assert "translation" in skill_names
+    assert "github-code-review" in skill_names
+    # --skills must appear BEFORE the `chat` subcommand so argparse
+    # attaches them to the top-level parser, not the subcommand.
+    chat_idx = cmd.index("chat")
+    last_skills_idx = max(
+        i for i, tok in enumerate(cmd) if tok == "--skills"
+    )
+    assert last_skills_idx < chat_idx, (
+        f"--skills must come before 'chat' in argv: {cmd}"
+    )
+
+
+def test_default_spawn_dedupes_kanban_worker_from_task_skills(kanban_home, monkeypatch):
+    """If a task explicitly lists 'kanban-worker', we don't double-pass it."""
+    captured = {}
+
+    class FakeProc:
+        pid = 1
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProc()
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(
+            conn, title="dup", assignee="x",
+            skills=["kanban-worker", "translation"],
+        )
+        task = kb.get_task(conn, tid)
+        workspace = kb.resolve_workspace(task)
+        kb._default_spawn(task, str(workspace))
+    finally:
+        conn.close()
+
+    cmd = captured["cmd"]
+    worker_pairs = [
+        i for i, tok in enumerate(cmd)
+        if tok == "--skills" and i + 1 < len(cmd) and cmd[i + 1] == "kanban-worker"
+    ]
+    assert len(worker_pairs) == 1, (
+        f"kanban-worker appeared {len(worker_pairs)} times in argv: {cmd}"
+    )
+
+
+def test_cli_create_skill_flag_repeatable(kanban_home):
+    """`hermes kanban create --skill a --skill b` persists the list."""
+    out = run_slash(
+        "create 'multi-skill' --assignee linguist "
+        "--skill translation --skill github-code-review --json"
+    )
+    tid = json.loads(out)["id"]
+    with kb.connect() as conn:
+        task = kb.get_task(conn, tid)
+    assert task.skills == ["translation", "github-code-review"]
+
+
+def test_cli_create_without_skill_flag_leaves_none(kanban_home):
+    """No --skill on the CLI means Task.skills stays None (not []) —
+    we don't want to silently write [] when the user didn't opt in."""
+    out = run_slash("create 'no-skill' --assignee x --json")
+    tid = json.loads(out)["id"]
+    with kb.connect() as conn:
+        task = kb.get_task(conn, tid)
+    assert task.skills is None
+
+
+def test_cli_show_renders_skills(kanban_home):
+    """`hermes kanban show <id>` prints a skills row when present."""
+    out = run_slash(
+        "create 'show-test' --assignee x "
+        "--skill translation --json"
+    )
+    tid = json.loads(out)["id"]
+    shown = run_slash(f"show {tid}")
+    assert "skills:" in shown
+    assert "translation" in shown
+
+
+def test_legacy_db_without_skills_column_migrates(tmp_path):
+    """_migrate_add_optional_columns is idempotent and adds skills
+    when absent. Run it twice on a pared-down schema to confirm."""
+    import sqlite3
+    db_path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    # Build a pared-down legacy tasks table that lacks all the
+    # optional columns _migrate_add_optional_columns knows how to
+    # add. We deliberately omit `skills` so we can observe its
+    # introduction.
+    conn.execute("""
+        CREATE TABLE tasks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+    """)
+    # task_events is also touched by the migrator for run_id backfill.
+    conn.execute("""
+        CREATE TABLE task_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            payload TEXT,
+            created_at INTEGER NOT NULL
+        )
+    """)
+    conn.execute(
+        "INSERT INTO tasks (id, title, status, created_at) "
+        "VALUES ('legacy', 'old task', 'ready', 1)"
+    )
+    conn.commit()
+
+    before = {r[1] for r in conn.execute("PRAGMA table_info(tasks)")}
+    assert "skills" not in before
+
+    # Run the migrator directly — the same function connect() calls.
+    kb._migrate_add_optional_columns(conn)
+    after = {r[1] for r in conn.execute("PRAGMA table_info(tasks)")}
+    assert "skills" in after, f"migration did not add skills column: {after}"
+
+    # Idempotent: running again must not raise.
+    kb._migrate_add_optional_columns(conn)
+
+    # Legacy row has skills=NULL -> Task.skills=None.
+    row = conn.execute("SELECT * FROM tasks WHERE id = 'legacy'").fetchone()
+    # from_row needs additional columns; build a Task manually via the
+    # path from_row takes for a skills NULL/missing.
+    keys = set(row.keys())
+    assert "skills" in keys
+    assert row["skills"] is None
+    conn.close()

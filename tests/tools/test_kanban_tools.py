@@ -277,6 +277,47 @@ def test_create_accepts_string_parent(worker_env):
     assert json.loads(out)["ok"]
 
 
+def test_create_accepts_skills_list(worker_env):
+    """Tool writes the per-task skills through to the kernel."""
+    from tools import kanban_tools as kt
+    from hermes_cli import kanban_db as kb
+    out = kt._handle_create({
+        "title": "skilled",
+        "assignee": "linguist",
+        "skills": ["translation", "github-code-review"],
+    })
+    d = json.loads(out)
+    assert d["ok"] is True
+    with kb.connect() as conn:
+        task = kb.get_task(conn, d["task_id"])
+    assert task.skills == ["translation", "github-code-review"]
+
+
+def test_create_accepts_skills_string(worker_env):
+    """Convenience: a single skill name as string is coerced to [name]."""
+    from tools import kanban_tools as kt
+    from hermes_cli import kanban_db as kb
+    out = kt._handle_create({
+        "title": "one-skill",
+        "assignee": "a",
+        "skills": "translation",
+    })
+    d = json.loads(out)
+    assert d["ok"] is True
+    with kb.connect() as conn:
+        task = kb.get_task(conn, d["task_id"])
+    assert task.skills == ["translation"]
+
+
+def test_create_rejects_non_list_skills(worker_env):
+    """skills: 42 must be rejected, not silently dropped."""
+    from tools import kanban_tools as kt
+    out = kt._handle_create({
+        "title": "t", "assignee": "a", "skills": 42,
+    })
+    assert json.loads(out).get("error")
+
+
 def test_link_happy_path(worker_env):
     from hermes_cli import kanban_db as kb
     conn = kb.connect()

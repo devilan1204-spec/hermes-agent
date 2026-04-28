@@ -909,6 +909,7 @@
     const [assignee, setAssignee] = useState("");
     const [priority, setPriority] = useState(0);
     const [parent, setParent] = useState("");
+    const [skills, setSkills] = useState("");
 
     const submit = function () {
       const trimmed = title.trim();
@@ -920,8 +921,16 @@
         triage: props.columnName === "triage",
       };
       if (parent) body.parents = [parent];
+      // Parse comma-separated skills into a clean list. Blank = no
+      // extras (omit key so backend leaves it null). The dispatcher
+      // always auto-loads kanban-worker; these are extras on top.
+      const skillList = skills
+        .split(",")
+        .map(function (s) { return s.trim(); })
+        .filter(function (s) { return s.length > 0; });
+      if (skillList.length > 0) body.skills = skillList;
       props.onSubmit(body);
-      setTitle(""); setAssignee(""); setPriority(0); setParent("");
+      setTitle(""); setAssignee(""); setPriority(0); setParent(""); setSkills("");
     };
 
     return h("div", { className: "hermes-kanban-inline-create" },
@@ -953,6 +962,13 @@
           className: "h-7 text-xs w-16",
         }),
       ),
+      h(Input, {
+        value: skills,
+        onChange: function (e) { setSkills(e.target.value); },
+        placeholder: "skills (optional, comma-separated): translation, github-code-review",
+        title: "Force-load these skills into the worker (in addition to the built-in kanban-worker).",
+        className: "h-7 text-xs",
+      }),
       h(Select, {
         value: parent,
         onChange: function (e) { setParent(e.target.value); },
@@ -1138,6 +1154,10 @@
           label: "Workspace",
           value: `${t.workspace_kind}${t.workspace_path ? ": " + t.workspace_path : ""}`,
         }),
+        (t.skills && t.skills.length > 0) ? h(MetaRow, {
+          label: "Skills",
+          value: t.skills.join(", "),
+        }) : null,
         t.created_by ? h(MetaRow, { label: "Created by", value: t.created_by }) : null,
       ),
       h(StatusActions, { task: t, onPatch: props.onPatch }),

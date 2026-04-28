@@ -106,10 +106,24 @@ class Task:
     current_run_id: Optional[int] = None
     workflow_template_id: Optional[str] = None
     current_step_key: Optional[str] = None
+    # Force-loaded skills for the worker on this task (appended to the
+    # dispatcher's built-in `kanban-worker` via --skills). Stored as a
+    # JSON array of skill names. None = use only the defaults; empty
+    # list = explicitly no extra skills.
+    skills: Optional[list] = None
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "Task":
         keys = set(row.keys())
+        # Parse skills JSON blob if present
+        skills_value: Optional[list] = None
+        if "skills" in keys and row["skills"]:
+            try:
+                parsed = json.loads(row["skills"])
+                if isinstance(parsed, list):
+                    skills_value = [str(s) for s in parsed if s]
+            except Exception:
+                skills_value = None
         return cls(
             id=row["id"],
             title=row["title"],
@@ -146,6 +160,7 @@ class Task:
             current_step_key=(
                 row["current_step_key"] if "current_step_key" in keys else None
             ),
+            skills=skills_value,
         )
 
 
@@ -257,7 +272,11 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- these when the task is opted into a template but otherwise ignores
     -- them; the dispatcher doesn't consult them for routing yet.
     workflow_template_id TEXT,
-    current_step_key     TEXT
+    current_step_key     TEXT,
+    -- Force-loaded skills for the worker on this task, stored as JSON.
+    -- Appended to the dispatcher's built-in `--skills kanban-worker`.
+    -- NULL or empty array = no extras.
+    skills               TEXT
 );
 
 CREATE TABLE IF NOT EXISTS task_links (
@@ -435,6 +454,11 @@ def _migrate_add_optional_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE tasks ADD COLUMN workflow_template_id TEXT")
     if "current_step_key" not in cols:
         conn.execute("ALTER TABLE tasks ADD COLUMN current_step_key TEXT")
+    if "skills" not in cols:
+        # JSON array of skill names the dispatcher force-loads into the
+        # worker (additive to the built-in `kanban-worker`). NULL is fine
+        # for existing rows.
+        conn.execute("ALTER TABLE tasks ADD COLUMN skills TEXT")
 
     # task_events gained a run_id column; back-fill it as NULL for
     # historical events (they predate runs and can't be attributed).
@@ -581,6 +605,7 @@ def create_task(
     triage: bool = False,
     idempotency_key: Optional[str] = None,
     max_runtime_seconds: Optional[int] = None,
+    skills: Optional[Iterable[str]] = None,
 ) -> str:
     """Create a new task and optionally link it under parent tasks.
 
@@ -598,6 +623,13 @@ def create_task(
     ``max_runtime_seconds`` caps how long a worker may run before the
     dispatcher SIGTERMs (then SIGKILLs after a grace window) and
     re-queues the task. ``None`` means no cap (default).
+
+    ``skills`` is an optional list of skill names to force-load into
+    the worker when dispatched. Stored as JSON; the dispatcher passes
+    each name to ``hermes --skills ...`` alongside the built-in
+    ``kanban-worker``. Use this to pin a task to a specialist skill
+    (e.g. ``skills=["translation"]`` so the worker loads the
+    translation skill regardless of the profile's default config).
     """
     if not title or not title.strip():
         raise ValueError("title is required")
@@ -607,6 +639,32 @@ def create_task(
             f"got {workspace_kind!r}"
         )
     parents = tuple(p for p in parents if p)
+
+    # Normalise + validate skills: strip whitespace, drop empties, dedupe
+    # (preserving order). Refuse commas inside a single name so we don't
+    # invisibly splatter a comma-joined string into one argv slot — the
+    # `hermes --skills X,Y` comma syntax is handled in the dispatcher,
+    # not here.
+    skills_list: Optional[list[str]] = None
+    if skills is not None:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for s in skills:
+            if not s:
+                continue
+            name = str(s).strip()
+            if not name:
+                continue
+            if "," in name:
+                raise ValueError(
+                    f"skill name cannot contain comma: {name!r} "
+                    f"(pass a list of separate names instead of a comma-joined string)"
+                )
+            if name in seen:
+                continue
+            seen.add(name)
+            cleaned.append(name)
+        skills_list = cleaned
 
     # Idempotency check — return the existing task instead of creating a
     # duplicate. Done BEFORE entering write_txn to keep the fast path fast
@@ -660,8 +718,8 @@ def create_task(
                     INSERT INTO tasks (
                         id, title, body, assignee, status, priority,
                         created_by, created_at, workspace_kind, workspace_path,
-                        tenant, idempotency_key, max_runtime_seconds
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tenant, idempotency_key, max_runtime_seconds, skills
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task_id,
@@ -677,6 +735,7 @@ def create_task(
                         tenant,
                         idempotency_key,
                         int(max_runtime_seconds) if max_runtime_seconds else None,
+                        json.dumps(skills_list) if skills_list is not None else None,
                     ),
                 )
                 for pid in parents:
@@ -693,6 +752,7 @@ def create_task(
                         "status": initial_status,
                         "parents": list(parents),
                         "tenant": tenant,
+                        "skills": list(skills_list) if skills_list else None,
                     },
                 )
             return task_id
@@ -2028,9 +2088,22 @@ def _default_spawn(task: Task, workspace: str) -> Optional[int]:
         # at a different/additional skill via config if they want —
         # --skills is additive to the profile's default skill set.
         "--skills", "kanban-worker",
+    ]
+    # Per-task force-loaded skills. Each name goes in its own
+    # `--skills X` pair rather than a single comma-joined arg: the CLI
+    # accepts both forms (action='append' + comma-split), but
+    # per-name pairs are easier to read in `ps` output and avoid any
+    # quoting ambiguity if a skill name ever contains unusual chars.
+    # Dedupe against the built-in so we don't double-load kanban-worker
+    # if a task author asks for it explicitly.
+    if task.skills:
+        for sk in task.skills:
+            if sk and sk != "kanban-worker":
+                cmd.extend(["--skills", sk])
+    cmd.extend([
         "chat",
         "-q", prompt,
-    ]
+    ])
     # Redirect output to a per-task log under HERMES_HOME/kanban/logs/.
     from hermes_constants import get_hermes_home
     log_dir = get_hermes_home() / "kanban" / "logs"

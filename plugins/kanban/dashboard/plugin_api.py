@@ -307,6 +307,7 @@ class CreateTaskBody(BaseModel):
     triage: bool = False
     idempotency_key: Optional[str] = None
     max_runtime_seconds: Optional[int] = None
+    skills: Optional[list[str]] = None
 
 
 @router.post("/tasks")
@@ -327,6 +328,7 @@ def create_task(payload: CreateTaskBody):
             triage=payload.triage,
             idempotency_key=payload.idempotency_key,
             max_runtime_seconds=payload.max_runtime_seconds,
+            skills=payload.skills,
         )
         task = kanban_db.get_task(conn, task_id)
         return {"task": _task_dict(task) if task else None}

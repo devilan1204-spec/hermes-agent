@@ -69,6 +69,7 @@ def _task_to_dict(t: kb.Task) -> dict[str, Any]:
         "started_at": t.started_at,
         "completed_at": t.completed_at,
         "result": t.result,
+        "skills": list(t.skills) if t.skills else [],
     }
 
 
@@ -142,6 +143,11 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
                                "and re-queues the task.")
     p_create.add_argument("--created-by", default="user",
                           help="Author name recorded on the task (default: user)")
+    p_create.add_argument("--skill", action="append", default=[], dest="skills",
+                          help="Skill to force-load into the worker "
+                               "(repeatable). Appended to the built-in "
+                               "kanban-worker skill. Example: "
+                               "--skill translation --skill github-code-review")
     p_create.add_argument("--json", action="store_true", help="Emit JSON output")
 
     # --- list ---
@@ -557,6 +563,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
             triage=bool(getattr(args, "triage", False)),
             idempotency_key=getattr(args, "idempotency_key", None),
             max_runtime_seconds=max_runtime,
+            skills=getattr(args, "skills", None) or None,
         )
         task = kb.get_task(conn, task_id)
     if getattr(args, "json", False):
@@ -649,6 +656,8 @@ def _cmd_show(args: argparse.Namespace) -> int:
         print(f"  tenant:    {task.tenant}")
     print(f"  workspace: {task.workspace_kind}" +
           (f" @ {task.workspace_path}" if task.workspace_path else ""))
+    if task.skills:
+        print(f"  skills:    {', '.join(task.skills)}")
     print(f"  created:   {_fmt_ts(task.created_at)} by {task.created_by or '-'}")
     if task.started_at:
         print(f"  started:   {_fmt_ts(task.started_at)}")
