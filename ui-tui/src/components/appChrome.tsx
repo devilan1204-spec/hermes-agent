@@ -17,6 +17,16 @@ import type { Msg, Usage } from '../types.js'
 const FACE_TICK_MS = 2500
 const HEART_COLORS = ['#ff5fa2', '#ff4d6d']
 
+// Stable verb-segment width keeps the rest of the status bar from
+// jittering when the ticker rotates between short/long verbs (#13610).
+// `processing…` is 12 chars, `synthesizing…` is 13, `cogitating…` is 11
+// — without padding the cwd label and ctx bar to the right shift on
+// every cycle.  We pad to the longest verb in the catalogue + the
+// trailing ellipsis so every rotation lands on the same column.
+export const VERB_PAD_LEN = VERBS.reduce((max, v) => Math.max(max, v.length), 0) + 1 // + the '…'
+
+export const padVerb = (verb: string) => `${verb}…`.padEnd(VERB_PAD_LEN, ' ')
+
 function FaceTicker({ color, startedAt }: { color: string; startedAt?: null | number }) {
   const [tick, setTick] = useState(() => Math.floor(Math.random() * 1000))
   const [now, setNow] = useState(() => Date.now())
@@ -33,7 +43,8 @@ function FaceTicker({ color, startedAt }: { color: string; startedAt?: null | nu
 
   return (
     <Text color={color}>
-      {FACES[tick % FACES.length]} {VERBS[tick % VERBS.length]}…{startedAt ? ` · ${fmtDuration(now - startedAt)}` : ''}
+      {FACES[tick % FACES.length]} {padVerb(VERBS[tick % VERBS.length] ?? '')}
+      {startedAt ? `· ${fmtDuration(now - startedAt)}` : ''}
     </Text>
   )
 }
