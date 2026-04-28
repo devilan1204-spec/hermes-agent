@@ -377,6 +377,19 @@ def kanban_command(args: argparse.Namespace) -> int:
             )
         return 0
 
+    # Auto-initialize the DB before dispatching any subcommand. init_db
+    # is idempotent, so running it every invocation is cheap (one
+    # SELECT against sqlite_master when tables already exist) and
+    # prevents "no such table: tasks" on first use from a fresh
+    # HERMES_HOME. Previously only `init` and `daemon` triggered
+    # schema creation; `create` / `list` / every other command would
+    # error out on a fresh install.
+    try:
+        kb.init_db()
+    except Exception as exc:
+        print(f"kanban: could not initialize database: {exc}", file=sys.stderr)
+        return 1
+
     handlers = {
         "init":     _cmd_init,
         "create":   _cmd_create,
@@ -589,6 +602,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         events = kb.list_events(conn, args.task_id)
         parents = kb.parent_ids(conn, args.task_id)
         children = kb.child_ids(conn, args.task_id)
+        runs = kb.list_runs(conn, args.task_id)
 
     if getattr(args, "json", False):
         payload = {
@@ -600,8 +614,29 @@ def _cmd_show(args: argparse.Namespace) -> int:
                 for c in comments
             ],
             "events": [
-                {"kind": e.kind, "payload": e.payload, "created_at": e.created_at}
+                {
+                    "kind": e.kind,
+                    "payload": e.payload,
+                    "created_at": e.created_at,
+                    "run_id": e.run_id,
+                }
                 for e in events
+            ],
+            "runs": [
+                {
+                    "id": r.id,
+                    "profile": r.profile,
+                    "step_key": r.step_key,
+                    "status": r.status,
+                    "outcome": r.outcome,
+                    "summary": r.summary,
+                    "error": r.error,
+                    "metadata": r.metadata,
+                    "worker_pid": r.worker_pid,
+                    "started_at": r.started_at,
+                    "ended_at": r.ended_at,
+                }
+                for r in runs
             ],
         }
         print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -641,7 +676,21 @@ def _cmd_show(args: argparse.Namespace) -> int:
         print(f"Events ({len(events)}):")
         for e in events[-20:]:
             pl = f" {e.payload}" if e.payload else ""
-            print(f"  [{_fmt_ts(e.created_at)}] {e.kind}{pl}")
+            run_tag = f" [run {e.run_id}]" if e.run_id else ""
+            print(f"  [{_fmt_ts(e.created_at)}]{run_tag} {e.kind}{pl}")
+    if runs:
+        print()
+        print(f"Runs ({len(runs)}):")
+        for r in runs:
+            elapsed = (r.ended_at - r.started_at) if r.ended_at else None
+            el = f"{elapsed}s" if elapsed is not None else "active"
+            outcome = r.outcome or r.status or "active"
+            print(f"  #{r.id:<3} {outcome:<12} @{r.profile or '-'}  {el}  "
+                  f"{_fmt_ts(r.started_at)}")
+            if r.summary:
+                print(f"        → {r.summary.splitlines()[0][:160]}")
+            if r.error:
+                print(f"        ! {r.error.splitlines()[0][:160]}")
     return 0
 
 

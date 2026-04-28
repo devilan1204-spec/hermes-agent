@@ -333,28 +333,58 @@ CREATE INDEX IF NOT EXISTS idx_notify_task           ON kanban_notify_subs(task_
 # Connection helpers
 # ---------------------------------------------------------------------------
 
+_INITIALIZED_PATHS: set[str] = set()
+
+
 def connect(db_path: Optional[Path] = None) -> sqlite3.Connection:
     """Open (and initialize if needed) the kanban DB.
 
     WAL mode is enabled on every connection; it's a no-op after the first
     time but keeps the code robust if the DB file is ever re-created.
+
+    The first connection to a given path auto-runs :func:`init_db` so
+    fresh installs and test harnesses that construct `connect()`
+    directly don't have to remember a separate init step. Subsequent
+    connections skip the schema check via a module-level path cache.
     """
     path = db_path or kanban_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    resolved = str(path.resolve())
+    needs_init = resolved not in _INITIALIZED_PATHS
     conn = sqlite3.connect(str(path), isolation_level=None, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    if needs_init:
+        # Idempotent: runs CREATE TABLE IF NOT EXISTS + the additive
+        # migrations. Cached so subsequent connect() calls in the same
+        # process are cheap.
+        conn.executescript(SCHEMA_SQL)
+        _migrate_add_optional_columns(conn)
+        _INITIALIZED_PATHS.add(resolved)
     return conn
 
 
 def init_db(db_path: Optional[Path] = None) -> Path:
-    """Create the schema if it doesn't exist; return the path used."""
+    """Create the schema if it doesn't exist; return the path used.
+
+    Kept as a public entry point so CLI ``hermes kanban init`` and the
+    daemon have something explicit to call. Unlike :func:`connect`'s
+    first-time auto-init (which caches by path), ``init_db`` always
+    re-runs the migration pass. Callers that know the on-disk schema
+    may have drifted — tests that write legacy event kinds directly,
+    external tools that upgrade an old DB file — can call this to
+    force re-migration.
+    """
     path = db_path or kanban_db_path()
-    with contextlib.closing(connect(path)) as conn:
-        conn.executescript(SCHEMA_SQL)
-        _migrate_add_optional_columns(conn)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    resolved = str(path.resolve())
+    # Clear the cache entry so the underlying connect() re-runs the
+    # schema + migration pass unconditionally.
+    _INITIALIZED_PATHS.discard(resolved)
+    with contextlib.closing(connect(path)):
+        pass
     return path
 
 

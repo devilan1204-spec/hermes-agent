@@ -1680,3 +1680,85 @@ def test_claim_task_recovers_from_invariant_leak(kanban_home):
         assert new_run.ended_at is None
     finally:
         conn.close()
+
+
+# -------------------------------------------------------------------------
+# Live-test findings (Apr 2026 third pass: auto-init, show --json carries runs)
+# -------------------------------------------------------------------------
+
+def test_cli_create_on_fresh_home_auto_inits(tmp_path, monkeypatch):
+    """First CLI action on an empty HERMES_HOME must not error with
+    'no such table: tasks' — init_db auto-runs now."""
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    # Sanity: kanban.db does NOT exist yet.
+    import subprocess as _sp
+    import sys as _sys
+    worktree_root = Path(__file__).resolve().parents[2]
+    env = {**os.environ, "HERMES_HOME": str(home),
+           "PYTHONPATH": str(worktree_root)}
+    r = _sp.run(
+        [_sys.executable, "-m", "hermes_cli.main", "kanban",
+         "create", "smoke", "--assignee", "worker", "--json"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, f"rc={r.returncode} stderr={r.stderr}"
+    import json as _json
+    out = _json.loads(r.stdout)
+    assert out["status"] == "ready"
+    # DB file exists now.
+    assert (home / "kanban.db").exists()
+
+
+def test_connect_auto_inits_fresh_db(tmp_path, monkeypatch):
+    """Calling connect() on a fresh HERMES_HOME must create the
+    schema. Previously callers had to remember kb.init_db() first."""
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    # Flush the module-level cache so this path looks fresh.
+    kb._INITIALIZED_PATHS.clear()
+
+    # Direct connect() without init_db() — used to raise "no such table".
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="x")
+        assert tid is not None
+        assert kb.get_task(conn, tid).title == "x"
+    finally:
+        conn.close()
+
+
+def test_cli_show_json_carries_runs(kanban_home):
+    """hermes kanban show --json must include runs[] so scripts that
+    inspect attempt history don't need a separate 'runs' call."""
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(conn, title="show test", assignee="worker")
+        kb.claim_task(conn, tid)
+        kb.complete_task(conn, tid, summary="inspected")
+    finally:
+        conn.close()
+
+    out = run_slash(f"show {tid} --json")
+    import json as _json
+    # run_slash returns combined text; find the JSON block.
+    # The output IS json, single doc.
+    # Strip any leading ansi or surrounding noise.
+    try:
+        data = _json.loads(out)
+    except _json.JSONDecodeError:
+        # Some environments may prefix/suffix whitespace.
+        data = _json.loads(out.strip())
+
+    assert "runs" in data, f"show --json must include runs[], got keys: {list(data.keys())}"
+    assert len(data["runs"]) == 1
+    r = data["runs"][0]
+    assert r["outcome"] == "completed"
+    assert r["summary"] == "inspected"
+    # Events also carry run_id field.
+    for e in data["events"]:
+        assert "run_id" in e
