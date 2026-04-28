@@ -1,146 +1,136 @@
 ---
 name: kanban-worker
-description: How a Hermes profile should work a task from the shared Kanban board. Load this skill in any profile that participates in the board (researcher, backend-eng, reviewer, etc.). Triggers on HERMES_KANBAN_TASK env var or a "work kanban task <id>" prompt.
-version: 1.0.0
+description: Pitfalls, examples, and edge cases for Hermes Kanban workers. The lifecycle itself is auto-injected into every worker's system prompt as KANBAN_GUIDANCE (from agent/prompt_builder.py); this skill is what you load when you want deeper detail on specific scenarios.
+version: 2.0.0
 metadata:
   hermes:
-    tags: [kanban, multi-agent, collaboration, workflow]
+    tags: [kanban, multi-agent, collaboration, workflow, pitfalls]
     related_skills: [kanban-orchestrator]
 ---
 
-# Kanban Worker
+# Kanban Worker — Pitfalls and Examples
 
-Use this skill when you were spawned to work a task from the shared Hermes Kanban board. Symptoms:
+> The **lifecycle** (6 steps: orient → work → heartbeat → block/complete) lives in the `KANBAN_GUIDANCE` block that is auto-injected into every kanban worker's system prompt. You don't need to load this skill to work a task — you already have the lifecycle in your context plus the `kanban_*` tools with self-explanatory descriptions.
+>
+> This skill exists for the **edge cases and deeper examples** that don't fit in the guidance block.
 
-- Your initial prompt says "work kanban task <id>" — e.g. `work kanban task t_9f2a`.
-- Env vars set: `HERMES_KANBAN_TASK`, `HERMES_KANBAN_WORKSPACE`, optionally `HERMES_TENANT`.
-- You were started by `hermes kanban dispatch` (cron) or a human ran `hermes -p <profile> chat -q "work kanban task <id>"`.
+## Workspace handling
 
-## Your job
+Your workspace kind determines how you should behave inside `$HERMES_KANBAN_WORKSPACE`:
 
-You are **one run of one specialist profile working one task.** Read the task, do the work inside the workspace, record a result, and exit. Everything else is somebody else's job.
-
-## Step 1 — Read the full context
-
-Call the **`kanban_show`** tool. It returns the task's title + body, your prior attempts (if this is a retry), parent task handoffs (summary + metadata), comments, and a pre-formatted `worker_context` string suitable for inclusion verbatim in your reasoning.
-
-```
-kanban_show()                    # defaults to your current task via HERMES_KANBAN_TASK
-kanban_show(task_id="t_abc")     # peek at another task
-```
-
-**Read all of it.** The comment thread is the inter-agent protocol — past peers, human clarifications, and blocker resolutions all live there. If a reviewer left feedback or the user answered a blocker, it's in the comments. Prior attempts are the retry lesson: if you're running this task a second time, the first run's summary/error tells you what didn't work.
-
-> **Note:** the `kanban_*` tools are only available to you because you were spawned by the dispatcher (`HERMES_KANBAN_TASK` is set in your env). A normal chat session doesn't have them. For CLI debugging or scripting outside an agent run, use `hermes kanban <verb>` — same kernel, different surface.
-
-## Step 2 — Work inside the workspace
-
-`cd $HERMES_KANBAN_WORKSPACE` and do the work there. The workspace kind determines what that means:
-
-| `workspace_kind` | What it is | Your behavior |
+| Kind | What it is | How to work |
 |---|---|---|
-| `scratch` | Fresh temp dir, yours alone | Read/write freely; it gets GC'd when the task is archived. |
-| `dir:<path>` | Shared persistent directory | Treat as a long-lived workspace; other runs will read what you write. |
-| `worktree` | Git worktree at the resolved path | You may need to `git worktree add <path> <branch>` if it doesn't exist yet. Commit work here. |
+| `scratch` | Fresh tmp dir, yours alone | Read/write freely; it gets GC'd when the task is archived. |
+| `dir:<path>` | Shared persistent directory | Other runs will read what you write. Treat it like long-lived state. Path is guaranteed absolute (the kernel rejects relative paths). |
+| `worktree` | Git worktree at the resolved path | If `.git` doesn't exist, run `git worktree add <path> <branch>` from the main repo first, then cd and work normally. Commit work here. |
 
-For `worktree` mode: check if `.git` exists in the workspace path. If not, run:
-```bash
-git worktree add $HERMES_KANBAN_WORKSPACE
-```
-from the main repo's root. Then cd and work normally.
+## Tenant isolation
 
-## Step 3 — If tenancy matters, respect it
+If `$HERMES_TENANT` is set, the task belongs to a tenant namespace. When reading or writing persistent memory, prefix memory entries with the tenant so context doesn't leak across tenants:
 
-If `$HERMES_TENANT` is set, the task belongs to that tenant namespace. When reading or writing persistent memory, prefix memory entries with the tenant name so context doesn't leak across tenants:
+- Good: `business-a: Acme is our biggest customer`
+- Bad (leaks): `Acme is our biggest customer`
 
-> Good: memory entry `business-a: Acme is our biggest customer`
-> Bad: unprefixed `Acme is our biggest customer` (leaks across tenants)
+## Good summary + metadata shapes
 
-## Step 4 — If you hit an ambiguity you can't resolve, BLOCK. Don't guess.
+The `kanban_complete(summary=..., metadata=...)` handoff is how downstream workers read what you did. Patterns that work:
 
-Any of these should trigger a block:
-- User-specific decision you can't infer (IP vs. user-id keys; which tone to use).
-- Missing credential or access.
-- Source that needs human input (paywalled article, 2FA-gated login).
-- Peer profile needs to deliver something first and you can't reach around that.
-
-```
-kanban_block(reason="need decision: IP vs user_id for rate limit key?")
-```
-
-The block event is visible to humans on the board (dashboard + gateway notifier). When the user or a peer unblocks and the dispatcher re-spawns you, you'll see the full comment thread including their answer in step 1's context read.
-
-## Step 5 — Complete with a structured handoff
-
-```
+**Coding task:**
+```python
 kanban_complete(
-    summary="implemented token-bucket rate limiter, keys on user_id with IP fallback, all tests pass",
+    summary="shipped rate limiter — token bucket, keys on user_id with IP fallback, 14 tests pass",
     metadata={
         "changed_files": ["rate_limiter.py", "tests/test_rate_limiter.py"],
         "tests_run": 14,
-        "decisions": ["user_id primary, IP fallback for unauthenticated"],
+        "tests_passed": 14,
+        "decisions": ["user_id primary, IP fallback for unauthenticated requests"],
     },
 )
 ```
 
-Rules:
-
-- **`summary`** is the human-readable 1–3 sentence handoff. It appears in the Run History on the dashboard and is what downstream workers see first. Name concrete artifacts (file paths, URLs, commit SHAs).
-- **`metadata`** is machine-readable facts — changed files, test counts, findings, decisions. Downstream workers can parse it structurally instead of scraping prose.
-- **Do not** include secrets, tokens, or raw PII — run rows are durable in the board DB forever.
-
-Downstream tasks (children linked from this task) will see your `summary` + `metadata` via `build_worker_context` — that's the handoff channel.
-
-## Step 6 — If follow-up work is obvious, create it. Don't do it.
-
-You are one task. If you notice something else needs doing, create a linked child task for the right profile instead of scope-creeping:
-
-```
-kanban_create(
-    title="add concurrent-request test",
-    assignee="backend-eng",
-    parents=[os.environ["HERMES_KANBAN_TASK"]],
+**Research task:**
+```python
+kanban_complete(
+    summary="3 competing libraries reviewed; vLLM wins on throughput, SGLang on latency, Tensorrt-LLM on memory efficiency",
+    metadata={
+        "sources_read": 12,
+        "recommendation": "vLLM",
+        "benchmarks": {"vllm": 1.0, "sglang": 0.87, "trtllm": 0.72},
+    },
 )
 ```
 
-## Leave comments to talk to peers
-
-If you want to flag something for a reviewer, a future run, or the user — append a comment:
-
+**Review task:**
+```python
+kanban_complete(
+    summary="reviewed PR #123; 2 blocking issues found (SQL injection in /search, missing CSRF on /settings)",
+    metadata={
+        "pr_number": 123,
+        "findings": [
+            {"severity": "critical", "file": "api/search.py", "line": 42, "issue": "raw SQL concat"},
+            {"severity": "high", "file": "api/settings.py", "issue": "missing CSRF middleware"},
+        ],
+        "approved": False,
+    },
+)
 ```
+
+Shape `metadata` so downstream parsers (reviewers, aggregators, schedulers) can use it without re-reading your prose.
+
+## Block reasons that get answered fast
+
+Bad: `"stuck"` — the human has no context.
+
+Good: one sentence naming the specific decision you need. Leave longer context as a comment instead.
+
+```python
 kanban_comment(
     task_id=os.environ["HERMES_KANBAN_TASK"],
-    body="note: skipped the sqlite driver path; needs separate task",
+    body="Full context: I have user IPs from Cloudflare headers but some users are behind NATs with thousands of peers. Keying on IP alone causes false positives.",
 )
+kanban_block(reason="Rate limit key choice: IP (simple, NAT-unsafe) or user_id (requires auth, skips anonymous endpoints)?")
 ```
 
-Comments are the inter-agent protocol. Direct IPC does not exist; the board is the only channel.
+The block message is what appears in the dashboard / gateway notifier. The comment is the deeper context a human reads when they open the task.
 
-## Heartbeat on long loops
+## Heartbeats worth sending
 
-If your task forks a long-lived subprocess (training run, video encode, web crawl, batch upload), the dispatcher can't tell whether your Python is stuck or deliberately waiting. Call:
+Good heartbeats name progress: `"epoch 12/50, loss 0.31"`, `"scanned 1.2M/2.4M rows"`, `"uploaded 47/120 videos"`.
 
-```
-kanban_heartbeat(note="epoch 12/50, loss 0.31")
-```
+Bad heartbeats: `"still working"`, empty notes, sub-second intervals. Every few minutes max; skip entirely for tasks under ~2 minutes.
 
-…every few minutes during the long wait. The note is optional; the signal itself is the point. Heartbeats show up in the event stream so humans reading the dashboard or `hermes kanban watch` can see you're still alive. Skip heartbeats for short tasks — they're noise below a few-minute runtime.
+## Retry scenarios
+
+If you open the task and `kanban_show` returns `runs: [...]` with one or more closed runs, you're a retry. The prior runs' `outcome` / `summary` / `error` tell you what didn't work. Don't repeat that path. Typical retry diagnostics:
+
+- `outcome: "timed_out"` — the previous attempt hit `max_runtime_seconds`. You may need to chunk the work or shorten it.
+- `outcome: "crashed"` — OOM or segfault. Reduce memory footprint.
+- `outcome: "spawn_failed"` + `error: "..."` — usually a profile config issue (missing credential, bad PATH). Ask the human via `kanban_block` instead of retrying blindly.
+- `outcome: "reclaimed"` + `summary: "task archived..."` — operator archived the task out from under the previous run; you probably shouldn't be running at all, check status carefully.
+- `outcome: "blocked"` — a previous attempt blocked; the unblock comment should be in the thread by now.
 
 ## Do NOT
 
-- Do not call `delegate_task` as a substitute for creating kanban tasks — `delegate_task` is for short synchronous reasoning subtasks inside your own run, not for cross-agent handoffs.
-- Do not modify files outside `$HERMES_KANBAN_WORKSPACE` unless the task body explicitly asks for it.
-- Do not assign tasks to yourself during your run (you're already running one; create new tasks for follow-ups only).
-- Do not complete a task you didn't actually finish. Block it instead.
-
-## CLI fallback
-
-The `kanban_*` tools are the primary surface, but every operation has a CLI equivalent (`hermes kanban show`, `hermes kanban complete --summary ... --metadata '{...}'`, etc.). Use the tools — they're more ergonomic, always work regardless of terminal backend (Docker/Modal/SSH), and avoid shell-quoting issues. The CLI exists for human operators and scripts.
+- Call `delegate_task` as a substitute for `kanban_create`. `delegate_task` is for short reasoning subtasks inside YOUR run; `kanban_create` is for cross-agent handoffs that outlive one API loop.
+- Modify files outside `$HERMES_KANBAN_WORKSPACE` unless the task body says to.
+- Create follow-up tasks assigned to yourself — assign to the right specialist.
+- Complete a task you didn't actually finish. Block it instead.
 
 ## Pitfalls
 
-**The task might already be blocked or reassigned when you start.** Between when the dispatcher claimed and when you actually booted up, circumstances can change. Always read the current state at step 1. If `kanban_show` reports the task is blocked or reassigned, stop — don't keep running.
+**Task state can change between dispatch and your startup.** Between when the dispatcher claimed and when your process actually booted, the task may have been blocked, reassigned, or archived. Always `kanban_show` first. If it reports `blocked` or `archived`, stop — you shouldn't be running.
 
-**The workspace may already have artifacts from a previous run.** Especially for `dir:` and `worktree` workspaces, a previous worker may have written files that are incomplete or stale. Read the comment thread — it usually explains why you're running again.
+**Workspace may have stale artifacts.** Especially `dir:` and `worktree` workspaces can have files from previous runs. Read the comment thread — it usually explains why you're running again and what state the workspace is in.
 
-**Your memory persists but the task result does not carry over automatically.** If you learn something that matters for future runs of this profile in other tasks, write it to your profile memory via the normal mechanism. Comments on the task are for humans and peers; memory is for your future self.
+**Don't rely on the CLI when the guidance is available.** The `kanban_*` tools work across all terminal backends (Docker, Modal, SSH). `hermes kanban <verb>` from your terminal tool will fail in containerized backends because the CLI isn't installed there. When in doubt, use the tool.
+
+## CLI fallback (for scripting)
+
+Every tool has a CLI equivalent for human operators and scripts:
+- `kanban_show` ↔ `hermes kanban show <id> --json`
+- `kanban_complete` ↔ `hermes kanban complete <id> --summary "..." --metadata '{...}'`
+- `kanban_block` ↔ `hermes kanban block <id> "reason"`
+- `kanban_create` ↔ `hermes kanban create "title" --assignee <profile> [--parent <id>]`
+- etc.
+
+Use the tools from inside an agent; the CLI exists for the human at the terminal.
