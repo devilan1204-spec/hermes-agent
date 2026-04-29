@@ -17,7 +17,6 @@ import type {
 import { useGitBranch } from '../hooks/useGitBranch.js'
 import { useVirtualHistory } from '../hooks/useVirtualHistory.js'
 import { appendTranscriptMessage } from '../lib/messages.js'
-import { isMac } from '../lib/platform.js'
 import { asRpcResult, rpcErrorMessage } from '../lib/rpc.js'
 import { terminalParityHints } from '../lib/terminalParity.js'
 import { buildToolTrailLine, sameToolTrailGroup, toolTrailLabel } from '../lib/text.js'
@@ -150,19 +149,15 @@ export function useMainApp(gw: GatewayClient) {
     selection.setSelectionBgColor(ui.theme.color.selectionBg)
   }, [selection, ui.theme.color.selectionBg])
 
-  // macOS Terminal.app does not forward Cmd+C to fullscreen TUIs that enable
-  // mouse tracking, so the only reliable native-feeling path is iTerm-style
-  // copy-on-select: once a drag creates a stable TUI selection, write it to
-  // the system clipboard while keeping the highlight visible.
+  // Terminals generally route native selection/copy around fullscreen TUIs
+  // until mouse tracking is enabled; then the app owns selection. Mirror
+  // terminal copy-on-select behavior by writing stable TUI selections to the
+  // clipboard while keeping the highlight visible.
   //
   // Subscribe directly via the ink selection bus (not useSyncExternalStore)
   // so React doesn't re-render MainApp on every drag-move tick. The version
   // ref de-dupes against re-entrant notifications.
   useEffect(() => {
-    if (!isMac) {
-      return
-    }
-
     return selection.subscribe(() => {
       if (!selection.hasSelection()) {
         return

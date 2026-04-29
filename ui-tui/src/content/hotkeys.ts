@@ -5,15 +5,19 @@ const paste = isMac ? 'Cmd' : 'Alt'
 
 const copyHotkeys: [string, string][] = isMac
   ? [
+      ['Mouse select', 'copy selection'],
       ['Cmd+C', 'copy selection'],
       ['Ctrl+C', 'interrupt / clear draft / exit']
     ]
   : isRemoteShell()
     ? [
-        ['Cmd+C', 'copy selection when forwarded by the terminal'],
-        ['Ctrl+C', 'copy selection / interrupt / clear draft / exit']
+        ['Mouse select / Cmd+C', 'copy selection when forwarded by the terminal'],
+        ['Ctrl+C', 'interrupt / clear draft / exit']
       ]
-    : [['Ctrl+C', 'copy selection / interrupt / clear draft / exit']]
+    : [
+        ['Mouse select', 'copy selection'],
+        ['Ctrl+C', 'interrupt / clear draft / exit']
+      ]
 
 export const HOTKEYS: [string, string][] = [
   ...copyHotkeys,

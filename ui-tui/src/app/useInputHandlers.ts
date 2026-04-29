@@ -357,8 +357,9 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
         return
       }
 
-      // On macOS, Cmd+C with no selection is a no-op (Ctrl+C below handles interrupt).
-      // On non-macOS, isAction uses Ctrl, so fall through to interrupt/clear/exit.
+      // Cmd+C with no selection is a no-op; Ctrl+C below handles interrupt.
+      // Local non-macOS terminals keep Ctrl+C as interrupt because selection
+      // already copies on mouse-up while mouse tracking is enabled.
       if (isMac) {
         return
       }

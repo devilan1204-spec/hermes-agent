@@ -32,10 +32,10 @@ describe('platform action modifier', () => {
 })
 
 describe('isCopyShortcut', () => {
-  it('keeps Ctrl+C as the local non-macOS copy chord', async () => {
+  it('keeps Ctrl+C as interrupt instead of local non-macOS copy', async () => {
     const { isCopyShortcut } = await importPlatform('linux')
 
-    expect(isCopyShortcut({ ctrl: true, meta: false, super: false }, 'c', {})).toBe(true)
+    expect(isCopyShortcut({ ctrl: true, meta: false, super: false }, 'c', {})).toBe(false)
   })
 
   it('accepts client Cmd+C over SSH even when running on Linux', async () => {
