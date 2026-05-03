@@ -83,6 +83,7 @@ from tools.browser_providers.base import CloudBrowserProvider
 from tools.browser_providers.browserbase import BrowserbaseProvider
 from tools.browser_providers.browser_use import BrowserUseProvider
 from tools.browser_providers.firecrawl import FirecrawlProvider
+from tools.browser_providers.tinyfish import TinyFishBrowserProvider
 from tools.tool_backend_helpers import normalize_browser_cloud_provider
 
 # Camofox local anti-detection browser backend (optional).
@@ -391,6 +392,7 @@ _PROVIDER_REGISTRY: Dict[str, type] = {
     "browserbase": BrowserbaseProvider,
     "browser-use": BrowserUseProvider,
     "firecrawl": FirecrawlProvider,
+    "tinyfish": TinyFishBrowserProvider,
 }
 
 _cached_cloud_provider: Optional[CloudBrowserProvider] = None

@@ -380,6 +380,15 @@ TOOL_CATEGORIES = {
                 "post_setup": "agent_browser",
             },
             {
+                "name": "TinyFish",
+                "tag": "Low latency browser with stealth & proxies",
+                "env_vars": [
+                    {"key": "TINYFISH_API_KEY", "prompt": "TinyFish API key", "url": "https://agent.tinyfish.ai/api-keys"},
+                ],
+                "browser_provider": "tinyfish",
+                "post_setup": "agent_browser",
+            },
+            {
                 "name": "Camofox",
                 "badge": "free · local",
                 "tag": "Anti-detection browser (Firefox/Camoufox)",

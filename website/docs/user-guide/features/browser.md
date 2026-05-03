@@ -12,6 +12,7 @@ Hermes Agent includes a full browser automation toolset with multiple backend op
 - **Browserbase cloud mode** via [Browserbase](https://browserbase.com) for managed cloud browsers and anti-bot tooling
 - **Browser Use cloud mode** via [Browser Use](https://browser-use.com) as an alternative cloud browser provider
 - **Firecrawl cloud mode** via [Firecrawl](https://firecrawl.dev) for cloud browsers with built-in scraping
+- **TinyFish cloud mode** via [TinyFish](https://tinyfish.ai) for fast cloud CDP browsers
 - **Camofox local mode** via [Camofox](https://github.com/jo-inc/camofox-browser) for local anti-detection browsing (Firefox-based fingerprint spoofing)
 - **Local Chrome via CDP** — connect browser tools to your own Chrome instance using `/browser connect`
 - **Local browser mode** via the `agent-browser` CLI and a local Chromium installation
@@ -84,6 +85,29 @@ FIRECRAWL_API_URL=http://localhost:3002
 
 # Session TTL in seconds (default: 300)
 FIRECRAWL_BROWSER_TTL=600
+```
+
+### TinyFish cloud mode
+
+To use TinyFish as your cloud browser provider, add:
+
+```bash
+# Add to ~/.hermes/.env
+TINYFISH_API_KEY=your_key_here
+```
+
+Get your API key at [agent.tinyfish.ai/api-keys](https://agent.tinyfish.ai/api-keys). Then select TinyFish as your browser provider:
+
+```bash
+hermes setup tools
+# → Browser Automation → TinyFish
+```
+
+Optional settings:
+
+```bash
+# Session inactivity timeout in seconds (default: 300, capped to your plan maximum)
+TINYFISH_BROWSER_TIMEOUT=600
 ```
 
 ### Hybrid routing: cloud for public URLs, local for LAN/localhost

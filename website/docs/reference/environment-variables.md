@@ -118,6 +118,9 @@ For native Anthropic auth, Hermes prefers Claude Code's own credential files whe
 | `BROWSERBASE_PROJECT_ID` | Browserbase project ID |
 | `BROWSER_USE_API_KEY` | Browser Use cloud browser API key ([browser-use.com](https://browser-use.com/)) |
 | `FIRECRAWL_BROWSER_TTL` | Firecrawl browser session TTL in seconds (default: 300) |
+| `TINYFISH_API_KEY` | TinyFish API key for cloud browser ([agent.tinyfish.ai](https://agent.tinyfish.ai/api-keys)) |
+| `TINYFISH_API_URL` | TinyFish browser API URL override for staging/dev (optional) |
+| `TINYFISH_BROWSER_TIMEOUT` | TinyFish browser session inactivity timeout in seconds (default: 300) |
 | `BROWSER_CDP_URL` | Chrome DevTools Protocol URL for local browser (set via `/browser connect`, e.g. `ws://localhost:9222`) |
 | `CAMOFOX_URL` | Camofox local anti-detection browser URL (default: `http://localhost:9377`) |
 | `BROWSER_INACTIVITY_TIMEOUT` | Browser session inactivity timeout in seconds |

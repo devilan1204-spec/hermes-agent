@@ -1307,6 +1307,7 @@ ENV_VARS_BY_VERSION: Dict[int, List[str]] = {
         "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS"],
     10: ["TAVILY_API_KEY"],
     11: ["TERMINAL_MODAL_MODE"],
+    23: ["TINYFISH_API_KEY", "TINYFISH_API_URL", "TINYFISH_BROWSER_TIMEOUT"],
 }
 
 # Required environment variables with metadata for migration prompts.
@@ -1814,6 +1815,29 @@ OPTIONAL_ENV_VARS = {
     "FIRECRAWL_BROWSER_TTL": {
         "description": "Firecrawl browser session TTL in seconds (optional, default 300)",
         "prompt": "Browser session TTL (seconds)",
+        "tools": ["browser_navigate", "browser_click"],
+        "password": False,
+        "category": "tool",
+    },
+    "TINYFISH_API_KEY": {
+        "description": "TinyFish API key for cloud browser, search, fetch, and agent",
+        "prompt": "TinyFish API key",
+        "url": "https://agent.tinyfish.ai/api-keys",
+        "tools": ["browser_navigate", "browser_click"],
+        "password": True,
+        "category": "tool",
+    },
+    "TINYFISH_API_URL": {
+        "description": "TinyFish browser API URL override (optional, for staging/dev)",
+        "prompt": "TinyFish API URL (leave empty for default)",
+        "url": None,
+        "tools": ["browser_navigate", "browser_click"],
+        "password": False,
+        "category": "tool",
+    },
+    "TINYFISH_BROWSER_TIMEOUT": {
+        "description": "TinyFish browser session inactivity timeout in seconds (optional, default 300)",
+        "prompt": "Browser session timeout (seconds)",
         "tools": ["browser_navigate", "browser_click"],
         "password": False,
         "category": "tool",
@@ -4433,6 +4457,7 @@ def show_config():
         ("TAVILY_API_KEY", "Tavily"),
         ("BROWSERBASE_API_KEY", "Browserbase"),
         ("BROWSER_USE_API_KEY", "Browser Use"),
+        ("TINYFISH_API_KEY", "TinyFish"),
         ("FAL_KEY", "FAL"),
     ]
     
@@ -4617,6 +4642,7 @@ def set_config_value(key: str, value: str):
         'FIRECRAWL_GATEWAY_URL', 'TOOL_GATEWAY_DOMAIN', 'TOOL_GATEWAY_SCHEME',
         'TOOL_GATEWAY_USER_TOKEN', 'TAVILY_API_KEY',
         'BROWSERBASE_API_KEY', 'BROWSERBASE_PROJECT_ID', 'BROWSER_USE_API_KEY',
+        'TINYFISH_API_KEY', 'TINYFISH_API_URL',
         'FAL_KEY', 'TELEGRAM_BOT_TOKEN', 'DISCORD_BOT_TOKEN',
         'TERMINAL_SSH_HOST', 'TERMINAL_SSH_USER', 'TERMINAL_SSH_KEY',
         'SUDO_PASSWORD', 'SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN',
