@@ -4,7 +4,7 @@ import { useStore } from '@nanostores/react'
 import { useGateway } from '../app/gatewayContext.js'
 import type { AppOverlaysProps } from '../app/interfaces.js'
 import { $overlayState, patchOverlayState } from '../app/overlayStore.js'
-import { $uiSessionId, $uiTheme } from '../app/uiStore.js'
+import { $uiState } from '../app/uiStore.js'
 
 import { FloatBox } from './appChrome.js'
 import { MaskedPrompt } from './maskedPrompt.js'
@@ -25,12 +25,12 @@ export function PromptZone({
   onSudoSubmit
 }: Pick<AppOverlaysProps, 'cols' | 'onApprovalChoice' | 'onClarifyAnswer' | 'onSecretSubmit' | 'onSudoSubmit'>) {
   const overlay = useStore($overlayState)
-  const theme = useStore($uiTheme)
+  const ui = useStore($uiState)
 
   if (overlay.approval) {
     return (
       <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-        <ApprovalPrompt onChoice={onApprovalChoice} req={overlay.approval} t={theme} />
+        <ApprovalPrompt onChoice={onApprovalChoice} req={overlay.approval} t={ui.theme} />
       </Box>
     )
   }
@@ -47,7 +47,7 @@ export function PromptZone({
 
     return (
       <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-        <ConfirmPrompt onCancel={onCancel} onConfirm={onConfirm} req={req} t={theme} />
+        <ConfirmPrompt onCancel={onCancel} onConfirm={onConfirm} req={req} t={ui.theme} />
       </Box>
     )
   }
@@ -60,7 +60,7 @@ export function PromptZone({
           onAnswer={onClarifyAnswer}
           onCancel={() => onClarifyAnswer('')}
           req={overlay.clarify}
-          t={theme}
+          t={ui.theme}
         />
       </Box>
     )
@@ -69,7 +69,7 @@ export function PromptZone({
   if (overlay.sudo) {
     return (
       <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-        <MaskedPrompt cols={cols} icon="🔐" label="sudo password required" onSubmit={onSudoSubmit} t={theme} />
+        <MaskedPrompt cols={cols} icon="🔐" label="sudo password required" onSubmit={onSudoSubmit} t={ui.theme} />
       </Box>
     )
   }
@@ -83,7 +83,7 @@ export function PromptZone({
           label={overlay.secret.prompt}
           onSubmit={onSecretSubmit}
           sub={`for ${overlay.secret.envVar}`}
-          t={theme}
+          t={ui.theme}
         />
       </Box>
     )
@@ -102,8 +102,7 @@ export function FloatingOverlays({
 }: Pick<AppOverlaysProps, 'cols' | 'compIdx' | 'completions' | 'onModelSelect' | 'onPickerSelect' | 'pagerPageSize'>) {
   const { gw } = useGateway()
   const overlay = useStore($overlayState)
-  const sid = useStore($uiSessionId)
-  const theme = useStore($uiTheme)
+  const ui = useStore($uiState)
 
   const hasAny = overlay.modelPicker || overlay.pager || overlay.picker || overlay.skillsHub || completions.length
 
@@ -129,13 +128,13 @@ export function FloatingOverlays({
     widgets.push({
       id: 'picker',
       render: width => (
-        <FloatBox color={theme.color.border}>
+        <FloatBox color={ui.theme.color.border}>
           <SessionPicker
             gw={gw}
             maxWidth={capWidth(width)}
             onCancel={() => patchOverlayState({ picker: false })}
             onSelect={onPickerSelect}
-            t={theme}
+            t={ui.theme}
           />
         </FloatBox>
       )
@@ -146,14 +145,14 @@ export function FloatingOverlays({
     widgets.push({
       id: 'model-picker',
       render: width => (
-        <FloatBox color={theme.color.border}>
+        <FloatBox color={ui.theme.color.border}>
           <ModelPicker
             gw={gw}
             maxWidth={capWidth(width)}
             onCancel={() => patchOverlayState({ modelPicker: false })}
             onSelect={onModelSelect}
-            sessionId={sid}
-            t={theme}
+            sessionId={ui.sid}
+            t={ui.theme}
           />
         </FloatBox>
       )
@@ -164,12 +163,12 @@ export function FloatingOverlays({
     widgets.push({
       id: 'skills-hub',
       render: width => (
-        <FloatBox color={theme.color.border}>
+        <FloatBox color={ui.theme.color.border}>
           <SkillsHub
             gw={gw}
             maxWidth={capWidth(width)}
             onClose={() => patchOverlayState({ skillsHub: false })}
-            t={theme}
+            t={ui.theme}
           />
         </FloatBox>
       )
@@ -182,11 +181,11 @@ export function FloatingOverlays({
     widgets.push({
       id: 'pager',
       render: width => (
-        <FloatBox color={theme.color.border}>
+        <FloatBox color={ui.theme.color.border}>
           <Box flexDirection="column" paddingX={1} paddingY={1} width={capWidth(width)}>
             {pager.title && (
               <Box justifyContent="center" marginBottom={1}>
-                <Text bold color={theme.color.primary}>
+                <Text bold color={ui.theme.color.primary}>
                   {pager.title}
                 </Text>
               </Box>
@@ -197,7 +196,7 @@ export function FloatingOverlays({
             ))}
 
             <Box marginTop={1}>
-              <OverlayHint t={theme}>
+              <OverlayHint t={ui.theme}>
                 {pager.offset + pagerPageSize < pager.lines.length
                   ? `↑↓/jk line · Enter/Space/PgDn page · b/PgUp back · g/G top/bottom · Esc/q close (${Math.min(pager.offset + pagerPageSize, pager.lines.length)}/${pager.lines.length})`
                   : `end · ↑↓/jk · b/PgUp back · g top · Esc/q close (${pager.lines.length} lines)`}
@@ -214,23 +213,23 @@ export function FloatingOverlays({
     widgets.push({
       id: 'completions',
       render: width => (
-        <FloatBox color={theme.color.primary}>
+        <FloatBox color={ui.theme.color.primary}>
           <Box flexDirection="column" width={capWidth(width)}>
             {completions.slice(start, start + viewportSize).map((item, i) => {
               const active = start + i === compIdx
 
               return (
                 <Box
-                  backgroundColor={active ? theme.color.completionCurrentBg : undefined}
+                  backgroundColor={active ? ui.theme.color.completionCurrentBg : undefined}
                   flexDirection="row"
                   key={`${start + i}:${item.text}:${item.display}:${item.meta ?? ''}`}
                   width="100%"
                 >
-                  <Text bold color={theme.color.label}>
+                  <Text bold color={ui.theme.color.label}>
                     {' '}
                     {item.display}
                   </Text>
-                  {item.meta ? <Text color={theme.color.muted}> {item.meta}</Text> : null}
+                  {item.meta ? <Text color={ui.theme.color.muted}> {item.meta}</Text> : null}
                 </Box>
               )
             })}

@@ -1,4 +1,4 @@
-import { atom, computed } from 'nanostores'
+import { atom } from 'nanostores'
 
 import { MOUSE_TRACKING } from '../config/env.js'
 import { ZERO } from '../domain/usage.js'
@@ -29,9 +29,6 @@ const buildUiState = (): UiState => ({
 })
 
 export const $uiState = atom<UiState>(buildUiState())
-
-export const $uiTheme = computed($uiState, state => state.theme)
-export const $uiSessionId = computed($uiState, state => state.sid)
 
 export const getUiState = () => $uiState.get()
 
