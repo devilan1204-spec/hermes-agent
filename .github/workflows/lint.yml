@@ -121,6 +121,9 @@ jobs:
           name: lint-reports
           path: .lint-reports/
           retention-days: 14
+          # .lint-reports/ is a dotfile-prefixed directory, and upload-artifact@v4
+          # skips hidden files by default (breaking change from v3). Opt back in.
+          include-hidden-files: true
 
       - name: Post / update PR comment
         if: github.event_name == 'pull_request'
