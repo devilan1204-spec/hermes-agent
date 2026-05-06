@@ -20,9 +20,11 @@ Hermes has several distinct pluggable interfaces, each with its own doc. Use thi
 | A **memory backend** (Honcho/Mem0/Supermemory/etc.) | [Memory Provider Plugins](/docs/developer-guide/memory-provider-plugin) |
 | A **context-compression engine** | [Context Engine Plugins](/docs/developer-guide/context-engine-plugin) |
 | An **image-generation backend** | See bundled examples in `plugins/image_gen/openai/` and `plugins/image_gen/xai/` |
+| A **TTS backend** (any CLI — Piper, VoxCPM, Kokoro, voice cloning, …) | [TTS custom command providers](/docs/user-guide/features/tts#custom-command-providers) — config-driven, no Python needed |
+| An **STT backend** (custom whisper / ASR CLI) | [Voice Message Transcription](/docs/user-guide/features/tts#voice-message-transcription-stt) — set `HERMES_LOCAL_STT_COMMAND` to a shell template |
 | A first-class **core** inference provider (not a plugin) | [Adding Providers](/docs/developer-guide/adding-providers) |
 
-TTS and STT backends are not currently plugin-extensible — they're built-in or user-declared via `tts.providers.<name>` with `type: command` in `config.yaml`.
+TTS and STT are pluggable via **config-driven command templates** instead of a Python `register_*` API — any CLI that reads/writes files is automatically a plugin.
 :::
 
 ## What you're building

@@ -190,10 +190,13 @@ The table above shows the four plugin categories, but within "General plugins" t
 | A **memory backend** (Honcho, Mem0, Supermemory, …) | Memory (`kind: exclusive`) | Subclass `MemoryProvider` | [Memory Provider Plugins](/docs/developer-guide/memory-provider-plugin) |
 | A **context-compression strategy** | Context engine | `ctx.register_context_engine()` | [Context Engine Plugins](/docs/developer-guide/context-engine-plugin) |
 | An **image-generation backend** (DALL·E, SDXL, …) | General (`kind: backend`) | `ctx.register_image_gen_provider()` | See bundled examples in `plugins/image_gen/openai/` and `plugins/image_gen/xai/` |
-| A **TTS or STT backend** | (not plugin-extensible yet) | Use `tts.providers.<name>` with `type: command` in `config.yaml` | [TTS setup](/docs/user-guide/features/tts) |
+| A **TTS backend** (any CLI — Piper, VoxCPM, Kokoro, xtts, voice-cloning scripts, …) | Config-driven (not a Python plugin) | Declare under `tts.providers.<name>` with `type: command` in `config.yaml` | [TTS setup](/docs/user-guide/features/tts#custom-command-providers) |
+| An **STT backend** (custom whisper binary, local ASR CLI) | Config-driven (not a Python plugin) | Set `HERMES_LOCAL_STT_COMMAND` env var to a shell template | [Voice Message Transcription (STT)](/docs/user-guide/features/tts#voice-message-transcription-stt) |
 
 :::note
-TTS and STT backends aren't wired through the plugin system yet — today they are either built-in (Edge, ElevenLabs, OpenAI, MiniMax, etc.) or user-declared via "command providers" in `~/.hermes/config.yaml`. A `register_tts_provider()` / `register_stt_provider()` hook may follow in a future release.
+**TTS and STT use a different plugin style than the rest of the list above.** Instead of a Python `register_*` API, you declare a shell command in `config.yaml` (TTS supports a full `tts.providers.<name>` registry; STT currently has a single `HERMES_LOCAL_STT_COMMAND` escape hatch). Hermes renders input to a temp file, runs your command with placeholder substitution (`{input_path}`, `{output_path}`, `{voice}`, `{model}`, `{format}`, `{speed}`), and picks up the audio/text file the command produced. Any CLI that reads/writes files is automatically a plugin — no Python needed.
+
+A future release may add `ctx.register_tts_provider()` / `ctx.register_stt_provider()` hooks for providers that need richer Python integration (streaming, SDK auth flows), but the command-based surface already covers the common case.
 :::
 
 ## NixOS declarative plugins
