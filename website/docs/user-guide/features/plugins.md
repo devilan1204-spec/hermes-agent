@@ -176,27 +176,29 @@ Memory providers and context engines are **provider plugins** — only one of ea
 
 ## Pluggable interfaces — where to go for each
 
-The table above shows the four plugin categories, but within "General plugins" the `PluginContext` exposes several distinct extension points. Use this table to find the right doc for what you want to build:
+The table above shows the four plugin categories, but within "General plugins" the `PluginContext` exposes several distinct extension points — and Hermes also accepts extensions outside the Python plugin system (config-driven backends, shell-hooked commands, external servers, etc.). Use this table to find the right doc for what you want to build:
 
-| Want to add… | Plugin kind | PluginContext API | Authoring guide |
-|---|---|---|---|
-| A **tool** the LLM can call | General | `ctx.register_tool()` | [Build a Hermes Plugin](/docs/guides/build-a-hermes-plugin) · [Adding Tools](/docs/developer-guide/adding-tools) |
-| A **lifecycle hook** (pre/post LLM, session start/end, tool filter) | General | `ctx.register_hook()` | [Hooks reference](/docs/user-guide/features/hooks) · [Build a Hermes Plugin](/docs/guides/build-a-hermes-plugin) |
-| A **slash command** for the CLI / gateway | General | `ctx.register_command()` | [Build a Hermes Plugin](/docs/guides/build-a-hermes-plugin) · [Extending the CLI](/docs/developer-guide/extending-the-cli) |
-| A **subcommand** for `hermes <thing>` | General | `ctx.register_cli_command()` | [Extending the CLI](/docs/developer-guide/extending-the-cli) |
-| A bundled **skill** that your plugin ships | General | `ctx.register_skill()` | [Creating Skills](/docs/developer-guide/creating-skills) |
-| An **inference backend** (LLM provider: OpenAI-compatible, Codex, Anthropic-Messages, Bedrock) | Model provider | `register_provider(ProviderProfile(...))` | **[Model Provider Plugins](/docs/developer-guide/model-provider-plugin)** · [Adding Providers](/docs/developer-guide/adding-providers) |
-| A **gateway channel** (Discord / Telegram / IRC / Teams / etc.) | General (`kind: platform`) | `ctx.register_platform()` | [Adding Platform Adapters](/docs/developer-guide/adding-platform-adapters) |
-| A **memory backend** (Honcho, Mem0, Supermemory, …) | Memory (`kind: exclusive`) | Subclass `MemoryProvider` | [Memory Provider Plugins](/docs/developer-guide/memory-provider-plugin) |
-| A **context-compression strategy** | Context engine | `ctx.register_context_engine()` | [Context Engine Plugins](/docs/developer-guide/context-engine-plugin) |
-| An **image-generation backend** (DALL·E, SDXL, …) | General (`kind: backend`) | `ctx.register_image_gen_provider()` | See bundled examples in `plugins/image_gen/openai/` and `plugins/image_gen/xai/` |
-| A **TTS backend** (any CLI — Piper, VoxCPM, Kokoro, xtts, voice-cloning scripts, …) | Config-driven (not a Python plugin) | Declare under `tts.providers.<name>` with `type: command` in `config.yaml` | [TTS setup](/docs/user-guide/features/tts#custom-command-providers) |
-| An **STT backend** (custom whisper binary, local ASR CLI) | Config-driven (not a Python plugin) | Set `HERMES_LOCAL_STT_COMMAND` env var to a shell template | [Voice Message Transcription (STT)](/docs/user-guide/features/tts#voice-message-transcription-stt) |
+| Want to add… | How | Authoring guide |
+|---|---|---|
+| A **tool** the LLM can call | Python plugin — `ctx.register_tool()` | [Build a Hermes Plugin](/docs/guides/build-a-hermes-plugin) · [Adding Tools](/docs/developer-guide/adding-tools) |
+| A **lifecycle hook** (pre/post LLM, session start/end, tool filter) | Python plugin — `ctx.register_hook()` | [Hooks reference](/docs/user-guide/features/hooks) · [Build a Hermes Plugin](/docs/guides/build-a-hermes-plugin) |
+| A **slash command** for the CLI / gateway | Python plugin — `ctx.register_command()` | [Build a Hermes Plugin](/docs/guides/build-a-hermes-plugin) · [Extending the CLI](/docs/developer-guide/extending-the-cli) |
+| A **subcommand** for `hermes <thing>` | Python plugin — `ctx.register_cli_command()` | [Extending the CLI](/docs/developer-guide/extending-the-cli) |
+| A bundled **skill** that your plugin ships | Python plugin — `ctx.register_skill()` | [Creating Skills](/docs/developer-guide/creating-skills) |
+| An **inference backend** (LLM provider: OpenAI-compat, Codex, Anthropic-Messages, Bedrock) | Provider plugin — `register_provider(ProviderProfile(...))` in `plugins/model-providers/<name>/` | **[Model Provider Plugins](/docs/developer-guide/model-provider-plugin)** · [Adding Providers](/docs/developer-guide/adding-providers) |
+| A **gateway channel** (Discord / Telegram / IRC / Teams / etc.) | Platform plugin — `ctx.register_platform()` in `plugins/platforms/<name>/` | [Adding Platform Adapters](/docs/developer-guide/adding-platform-adapters) |
+| A **memory backend** (Honcho, Mem0, Supermemory, …) | Memory plugin — subclass `MemoryProvider` in `plugins/memory/<name>/` | [Memory Provider Plugins](/docs/developer-guide/memory-provider-plugin) |
+| A **context-compression strategy** | Context-engine plugin — `ctx.register_context_engine()` | [Context Engine Plugins](/docs/developer-guide/context-engine-plugin) |
+| An **image-generation backend** (DALL·E, SDXL, …) | Backend plugin — `ctx.register_image_gen_provider()` | See bundled examples in `plugins/image_gen/openai/` and `plugins/image_gen/xai/` |
+| A **TTS backend** (any CLI — Piper, VoxCPM, Kokoro, xtts, voice-cloning scripts, …) | Config-driven — declare under `tts.providers.<name>` with `type: command` in `config.yaml` | [TTS setup](/docs/user-guide/features/tts#custom-command-providers) |
+| An **STT backend** (custom whisper binary, local ASR CLI) | Config-driven — set `HERMES_LOCAL_STT_COMMAND` env var to a shell template | [Voice Message Transcription (STT)](/docs/user-guide/features/tts#voice-message-transcription-stt) |
+| **External tools via MCP** (filesystem, GitHub, Linear, Notion, any MCP server) | Config-driven — declare `mcp_servers.<name>` with `command:` / `url:` in `config.yaml`. Hermes auto-discovers the server's tools and registers them alongside built-ins. | [MCP](/docs/user-guide/features/mcp) |
+| **Additional skill sources** (custom GitHub repos, private skill indexes) | CLI — `hermes skills tap add <repo>` | [Skills Hub](/docs/user-guide/features/skills#skills-hub) |
+| **Gateway event hooks** (fire on `gateway:startup`, `session:start`, `agent:end`, `command:*`) | Drop `HOOK.yaml` + `handler.py` into `~/.hermes/hooks/<name>/` | [Event Hooks](/docs/user-guide/features/hooks#gateway-event-hooks) |
+| **Shell hooks** (run a shell command on events — notifications, audit logs, desktop alerts) | Config-driven — declare under `hooks:` in `config.yaml` | [Shell Hooks](/docs/user-guide/features/hooks#shell-hooks) |
 
 :::note
-**TTS and STT use a different plugin style than the rest of the list above.** Instead of a Python `register_*` API, you declare a shell command in `config.yaml` (TTS supports a full `tts.providers.<name>` registry; STT currently has a single `HERMES_LOCAL_STT_COMMAND` escape hatch). Hermes renders input to a temp file, runs your command with placeholder substitution (`{input_path}`, `{output_path}`, `{voice}`, `{model}`, `{format}`, `{speed}`), and picks up the audio/text file the command produced. Any CLI that reads/writes files is automatically a plugin — no Python needed.
-
-A future release may add `ctx.register_tts_provider()` / `ctx.register_stt_provider()` hooks for providers that need richer Python integration (streaming, SDK auth flows), but the command-based surface already covers the common case.
+Not everything is a Python plugin. Some extension surfaces intentionally use **config-driven shell commands** (TTS, STT, shell hooks) so any CLI you already have becomes a plugin without writing Python. Others are **external servers** (MCP) the agent connects to and auto-registers tools from. And some are **drop-in directories** (gateway hooks) with their own manifest format. Pick the right surface for the integration style that fits your use case; the authoring guides in the table above each cover placeholders, discovery, and examples.
 :::
 
 ## NixOS declarative plugins
