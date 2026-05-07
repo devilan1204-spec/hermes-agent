@@ -3,7 +3,7 @@ import { forceRedraw } from '@hermes/ink'
 import { NO_CONFIRM_DESTRUCTIVE } from '../../../config/env.js'
 import { dailyFortune, randomFortune } from '../../../content/fortunes.js'
 import { HOTKEYS } from '../../../content/hotkeys.js'
-import { SECTION_NAMES, isSectionName, nextDetailsMode, parseDetailsMode } from '../../../domain/details.js'
+import { isSectionName, nextDetailsMode, parseDetailsMode, SECTION_NAMES } from '../../../domain/details.js'
 import type {
   ConfigGetValueResponse,
   ConfigSetResponse,
@@ -74,7 +74,8 @@ export const coreCommands: SlashCommand[] = [
               '/details <section> [hidden|collapsed|expanded|reset]',
               'override one section (thinking/tools/subagents/activity)'
             ],
-            ['/fortune [random|daily]', 'show a random or daily local fortune']
+            ['/fortune [random|daily]', 'show a random or daily local fortune'],
+            ['/grid-test [cols]x[rows]', 'open the interactive widget-grid demo']
           ],
           title: 'TUI'
         },

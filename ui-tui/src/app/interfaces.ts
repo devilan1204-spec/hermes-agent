@@ -75,6 +75,7 @@ export interface OverlayState {
   approval: ApprovalReq | null
   clarify: ClarifyReq | null
   confirm: ConfirmReq | null
+  gridTest: GridTestState | null
   modelPicker: boolean
   pager: null | PagerState
   picker: boolean
@@ -87,6 +88,17 @@ export interface PagerState {
   lines: string[]
   offset: number
   title?: string
+}
+
+export interface GridTestState {
+  activeCol: number
+  activeRow: number
+  cols: number
+  gap: null | number
+  nested: boolean
+  paddingX: null | number
+  rows: number
+  zoomed: boolean
 }
 
 export interface TranscriptRow {

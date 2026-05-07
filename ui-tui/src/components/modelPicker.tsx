@@ -9,6 +9,7 @@ import { asRpcResult, rpcErrorMessage } from '../lib/rpc.js'
 import type { Theme } from '../theme.js'
 
 import { OverlayHint, useOverlayKeys, windowItems } from './overlayControls.js'
+import { WidgetGrid, type WidgetGridWidget } from './widgetGrid.js'
 
 const VISIBLE = 12
 const MIN_WIDTH = 40
@@ -386,6 +387,7 @@ export function ModelPicker({ gw, maxWidth, onCancel, onSelect, sessionId, t }: 
     const rows = providers.map((p, i) => {
       const authMark = p.authenticated === false ? '○' : p.is_current ? '*' : '●'
       const modelCount = p.total_models ?? p.models?.length ?? 0
+
       const suffix =
         p.authenticated === false ? (p.auth_type === 'api_key' ? '(no key)' : '(needs setup)') : `${modelCount} models`
 
@@ -393,6 +395,33 @@ export function ModelPicker({ gw, maxWidth, onCancel, onSelect, sessionId, t }: 
     })
 
     const { items, offset } = windowItems(rows, providerIdx, VISIBLE)
+
+    const rowWidgets: WidgetGridWidget[] = Array.from({ length: VISIBLE }, (_, i) => {
+      const row = items[i]
+      const idx = offset + i
+      const p = providers[idx]
+      const dimmed = p?.authenticated === false
+
+      return {
+        id: p?.slug ?? `pad-${i}`,
+        render: () =>
+          row ? (
+            <Text
+              bold={providerIdx === idx}
+              color={providerIdx === idx ? t.color.accent : dimmed ? t.color.label : t.color.muted}
+              inverse={providerIdx === idx}
+              wrap="truncate-end"
+            >
+              {providerIdx === idx ? '▸ ' : '  '}
+              {idx + 1}. {row}
+            </Text>
+          ) : (
+            <Text color={t.color.muted} wrap="truncate-end">
+              {' '}
+            </Text>
+          )
+      }
+    })
 
     return (
       <Box flexDirection="column" width={width}>
@@ -414,29 +443,7 @@ export function ModelPicker({ gw, maxWidth, onCancel, onSelect, sessionId, t }: 
           {offset > 0 ? ` ↑ ${offset} more` : ' '}
         </Text>
 
-        {Array.from({ length: VISIBLE }, (_, i) => {
-          const row = items[i]
-          const idx = offset + i
-          const p = providers[idx]
-          const dimmed = p?.authenticated === false
-
-          return row ? (
-            <Text
-              bold={providerIdx === idx}
-              color={providerIdx === idx ? t.color.accent : dimmed ? t.color.label : t.color.muted}
-              inverse={providerIdx === idx}
-              key={providers[idx]?.slug ?? `row-${idx}`}
-              wrap="truncate-end"
-            >
-              {providerIdx === idx ? '▸ ' : '  '}
-              {idx + 1}. {row}
-            </Text>
-          ) : (
-            <Text color={t.color.muted} key={`pad-${i}`} wrap="truncate-end">
-              {' '}
-            </Text>
-          )
-        })}
+        <WidgetGrid cols={width} columns={1} depth={1} gap={0} minColumnWidth={1} rowGap={0} widgets={rowWidgets} />
 
         <Text color={t.color.muted} wrap="truncate-end">
           {offset + VISIBLE < rows.length ? ` ↓ ${rows.length - offset - VISIBLE} more` : ' '}
@@ -452,6 +459,46 @@ export function ModelPicker({ gw, maxWidth, onCancel, onSelect, sessionId, t }: 
 
   // ── Model selection stage ────────────────────────────────────────────
   const { items, offset } = windowItems(models, modelIdx, VISIBLE)
+
+  const rowWidgets: WidgetGridWidget[] = Array.from({ length: VISIBLE }, (_, i) => {
+    const row = items[i]
+    const idx = offset + i
+
+    if (!row) {
+      return {
+        id: !models.length && i === 0 ? 'empty' : `pad-${i}`,
+        render: () =>
+          !models.length && i === 0 ? (
+            <Text color={t.color.muted} wrap="truncate-end">
+              no models listed for this provider
+            </Text>
+          ) : (
+            <Text color={t.color.muted} wrap="truncate-end">
+              {' '}
+            </Text>
+          )
+      }
+    }
+
+    return {
+      id: `${provider?.slug ?? 'prov'}:${idx}:${row}`,
+      render: () => {
+        const prefix = modelIdx === idx ? '▸ ' : row === currentModel ? '* ' : '  '
+
+        return (
+          <Text
+            bold={modelIdx === idx}
+            color={modelIdx === idx ? t.color.accent : t.color.muted}
+            inverse={modelIdx === idx}
+            wrap="truncate-end"
+          >
+            {prefix}
+            {idx + 1}. {row}
+          </Text>
+        )
+      }
+    }
+  })
 
   return (
     <Box flexDirection="column" width={width}>
@@ -469,37 +516,7 @@ export function ModelPicker({ gw, maxWidth, onCancel, onSelect, sessionId, t }: 
         {offset > 0 ? ` ↑ ${offset} more` : ' '}
       </Text>
 
-      {Array.from({ length: VISIBLE }, (_, i) => {
-        const row = items[i]
-        const idx = offset + i
-
-        if (!row) {
-          return !models.length && i === 0 ? (
-            <Text color={t.color.muted} key="empty" wrap="truncate-end">
-              no models listed for this provider
-            </Text>
-          ) : (
-            <Text color={t.color.muted} key={`pad-${i}`} wrap="truncate-end">
-              {' '}
-            </Text>
-          )
-        }
-
-        const prefix = modelIdx === idx ? '▸ ' : row === currentModel ? '* ' : '  '
-
-        return (
-          <Text
-            bold={modelIdx === idx}
-            color={modelIdx === idx ? t.color.accent : t.color.muted}
-            inverse={modelIdx === idx}
-            key={`${provider?.slug ?? 'prov'}:${idx}:${row}`}
-            wrap="truncate-end"
-          >
-            {prefix}
-            {idx + 1}. {row}
-          </Text>
-        )
-      })}
+      <WidgetGrid cols={width} columns={1} depth={1} gap={0} minColumnWidth={1} rowGap={0} widgets={rowWidgets} />
 
       <Text color={t.color.muted} wrap="truncate-end">
         {offset + VISIBLE < models.length ? ` ↓ ${models.length - offset - VISIBLE} more` : ' '}

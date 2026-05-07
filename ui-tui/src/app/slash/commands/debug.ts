@@ -1,7 +1,66 @@
 import { formatBytes, performHeapDump } from '../../../lib/memory.js'
+import { patchOverlayState } from '../../overlayStore.js'
 import type { SlashCommand } from '../types.js'
 
+const GRID_TEST_USAGE = 'usage: /grid-test [cols]x[rows]  or  /grid-test [cols] [rows]'
+const GRID_TEST_MAX_SIZE = 12
+
+const clampGridSize = (value: number, fallback: number) => {
+  if (!Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.max(1, Math.min(GRID_TEST_MAX_SIZE, Math.trunc(value)))
+}
+
+const parseGridTestSize = (arg: string) => {
+  const trimmed = arg.trim()
+
+  if (!trimmed) {
+    return { cols: 4, rows: 3 }
+  }
+
+  const grid = trimmed.match(/^(\d+)\s*x\s*(\d+)$/i)
+
+  if (grid) {
+    return { cols: clampGridSize(Number(grid[1]), 4), rows: clampGridSize(Number(grid[2]), 3) }
+  }
+
+  const [cols, rows, ...rest] = trimmed.split(/\s+/)
+
+  if (rest.length || !cols || !rows || Number.isNaN(Number(cols)) || Number.isNaN(Number(rows))) {
+    return null
+  }
+
+  return { cols: clampGridSize(Number(cols), 4), rows: clampGridSize(Number(rows), 3) }
+}
+
 export const debugCommands: SlashCommand[] = [
+  {
+    help: 'open an interactive widget-grid demo overlay',
+    name: 'grid-test',
+    run: (arg, ctx) => {
+      const size = parseGridTestSize(arg)
+
+      if (!size) {
+        return ctx.transcript.sys(GRID_TEST_USAGE)
+      }
+
+      patchOverlayState({
+        gridTest: {
+          activeCol: 0,
+          activeRow: 0,
+          cols: size.cols,
+          gap: null,
+          nested: false,
+          paddingX: null,
+          rows: size.rows,
+          zoomed: false
+        }
+      })
+    }
+  },
+
   {
     help: 'write a V8 heap snapshot + memory diagnostics (see HERMES_HEAPDUMP_DIR)',
     name: 'heapdump',

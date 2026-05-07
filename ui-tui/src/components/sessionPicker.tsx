@@ -7,6 +7,7 @@ import { asRpcResult, rpcErrorMessage } from '../lib/rpc.js'
 import type { Theme } from '../theme.js'
 
 import { OverlayHint, useOverlayKeys, windowOffset } from './overlayControls.js'
+import { WidgetGrid, type WidgetGridWidget } from './widgetGrid.js'
 
 const VISIBLE = 15
 const MIN_WIDTH = 60
@@ -167,6 +168,26 @@ export function SessionPicker({ gw, maxWidth, onCancel, onSelect, t }: SessionPi
   }
 
   const offset = windowOffset(items.length, sel, VISIBLE)
+  const visible = items.slice(offset, offset + VISIBLE)
+
+  const rowWidgets: WidgetGridWidget[] = visible.map((s, vi) => {
+    const i = offset + vi
+    const selected = sel === i
+    const pendingDelete = confirmDelete === i
+    const color = pendingDelete ? t.color.label : selected ? t.color.accent : t.color.muted
+    const meta = `${s.message_count} msgs, ${age(s.started_at)}, ${s.source || 'tui'}`
+    const title = pendingDelete ? 'press d again to delete' : s.title || s.preview || '(untitled)'
+
+    return {
+      id: s.id,
+      render: () => (
+        <Text bold={selected} color={color} inverse={selected} wrap="truncate-end">
+          {selected ? '▸ ' : '  '}
+          {String(i + 1).padStart(2)}. [{s.id}] ({meta}) {title}
+        </Text>
+      )
+    }
+  })
 
   return (
     <Box flexDirection="column" width={width}>
@@ -176,40 +197,7 @@ export function SessionPicker({ gw, maxWidth, onCancel, onSelect, t }: SessionPi
 
       {offset > 0 && <Text color={t.color.muted}> ↑ {offset} more</Text>}
 
-      {items.slice(offset, offset + VISIBLE).map((s, vi) => {
-        const i = offset + vi
-        const selected = sel === i
-        const pendingDelete = confirmDelete === i
-
-        return (
-          <Box key={s.id}>
-            <Text bold={selected} color={selected ? t.color.accent : t.color.muted} inverse={selected}>
-              {selected ? '▸ ' : '  '}
-            </Text>
-
-            <Box width={30}>
-              <Text bold={selected} color={selected ? t.color.accent : t.color.muted} inverse={selected}>
-                {String(i + 1).padStart(2)}. [{s.id}]
-              </Text>
-            </Box>
-
-            <Box width={30}>
-              <Text bold={selected} color={selected ? t.color.accent : t.color.muted} inverse={selected}>
-                ({s.message_count} msgs, {age(s.started_at)}, {s.source || 'tui'})
-              </Text>
-            </Box>
-
-            <Text
-              bold={selected}
-              color={pendingDelete ? t.color.label : selected ? t.color.accent : t.color.muted}
-              inverse={selected}
-              wrap="truncate-end"
-            >
-              {pendingDelete ? 'press d again to delete' : s.title || s.preview || '(untitled)'}
-            </Text>
-          </Box>
-        )
-      })}
+      <WidgetGrid cols={width} columns={1} depth={1} gap={0} minColumnWidth={1} rowGap={0} widgets={rowWidgets} />
 
       {offset + VISIBLE < items.length && <Text color={t.color.muted}> ↓ {items.length - offset - VISIBLE} more</Text>}
       {err && <Text color={t.color.label}>error: {err}</Text>}

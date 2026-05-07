@@ -18,6 +18,14 @@ describe('createSlashHandler', () => {
     expect(getOverlayState().picker).toBe(true)
   })
 
+  it('opens the grid-test overlay locally', () => {
+    const ctx = buildCtx()
+
+    expect(createSlashHandler(ctx)('/grid-test 6x4')).toBe(true)
+    expect(getOverlayState().gridTest).toMatchObject({ cols: 6, nested: false, rows: 4 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+  })
+
   it('handles /redraw locally without slash worker fallback', () => {
     const ctx = buildCtx()
 

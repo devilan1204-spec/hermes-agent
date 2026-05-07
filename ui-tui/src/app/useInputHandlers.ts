@@ -14,15 +14,31 @@ import { isAction, isCopyShortcut, isMac, isVoiceToggleKey } from '../lib/platfo
 import { computeWheelStep, initWheelAccelForHost } from '../lib/wheelAccel.js'
 
 import { getInputSelection } from './inputSelectionStore.js'
-import type { InputHandlerContext, InputHandlerResult } from './interfaces.js'
+import type { GridTestState, InputHandlerContext, InputHandlerResult } from './interfaces.js'
 import { $isBlocked, $overlayState, patchOverlayState } from './overlayStore.js'
 import { turnController } from './turnController.js'
 import { patchTurnState } from './turnStore.js'
 import { getUiState } from './uiStore.js'
 
 const isCtrl = (key: { ctrl: boolean }, ch: string, target: string) => key.ctrl && ch.toLowerCase() === target
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const PRECISION_WHEEL_MIN_GAP_MS = 80
 const PRECISION_WHEEL_STICKY_MS = 80
+const GRID_TEST_MAX_SIZE = 12
+
+const cycleAutoNumber = (value: null | number, max: number) => {
+  if (value === null) {
+    return 0
+  }
+
+  return value >= max ? null : value + 1
+}
+
+const keepGridCursorInBounds = (grid: GridTestState): GridTestState => ({
+  ...grid,
+  activeCol: clamp(grid.activeCol, 0, grid.cols - 1),
+  activeRow: clamp(grid.activeRow, 0, grid.rows - 1)
+})
 
 export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
   const { actions, composer, gateway, terminal, voice, wheelStep } = ctx
@@ -104,6 +120,10 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
 
     if (overlay.agents) {
       return patchOverlayState({ agents: false })
+    }
+
+    if (overlay.gridTest) {
+      return patchOverlayState({ gridTest: null })
     }
   }
 
@@ -266,6 +286,89 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
               ? { ...prev, pager: null }
               : { ...prev, pager: { ...prev.pager, offset: Math.min(offset + pagerPageSize, max) } }
           })
+        }
+
+        return
+      }
+
+      if (overlay.gridTest) {
+        const updateGrid = (fn: (grid: GridTestState) => GridTestState) =>
+          patchOverlayState(prev =>
+            prev.gridTest ? { ...prev, gridTest: keepGridCursorInBounds(fn(prev.gridTest)) } : prev
+          )
+
+        if (isCtrl(key, ch, 'c')) {
+          return patchOverlayState({ gridTest: null })
+        }
+
+        if (overlay.gridTest.zoomed && (key.escape || ch === 'q')) {
+          return updateGrid(grid => ({ ...grid, zoomed: false }))
+        }
+
+        if (key.escape || ch === 'q') {
+          return patchOverlayState({ gridTest: null })
+        }
+
+        if (key.return) {
+          return updateGrid(grid => ({ ...grid, nested: true, zoomed: true }))
+        }
+
+        if (ch === 'n') {
+          return updateGrid(grid => ({ ...grid, nested: !grid.nested }))
+        }
+
+        if (ch === 'g') {
+          return updateGrid(grid => ({ ...grid, gap: cycleAutoNumber(grid.gap, 3) }))
+        }
+
+        if (ch === 'p') {
+          return updateGrid(grid => ({ ...grid, paddingX: cycleAutoNumber(grid.paddingX, 2) }))
+        }
+
+        if (ch === 'r') {
+          return updateGrid(grid => ({
+            ...grid,
+            activeCol: 0,
+            activeRow: 0,
+            cols: 4,
+            gap: null,
+            nested: false,
+            paddingX: null,
+            rows: 3,
+            zoomed: false
+          }))
+        }
+
+        if (ch === '+' || ch === '=') {
+          return updateGrid(grid => ({ ...grid, cols: clamp(grid.cols + 1, 1, GRID_TEST_MAX_SIZE) }))
+        }
+
+        if (ch === '-' || ch === '_') {
+          return updateGrid(grid => ({ ...grid, cols: clamp(grid.cols - 1, 1, GRID_TEST_MAX_SIZE) }))
+        }
+
+        if (ch === ']') {
+          return updateGrid(grid => ({ ...grid, rows: clamp(grid.rows + 1, 1, GRID_TEST_MAX_SIZE) }))
+        }
+
+        if (ch === '[') {
+          return updateGrid(grid => ({ ...grid, rows: clamp(grid.rows - 1, 1, GRID_TEST_MAX_SIZE) }))
+        }
+
+        if (key.leftArrow || ch === 'h') {
+          return updateGrid(grid => ({ ...grid, activeCol: clamp(grid.activeCol - 1, 0, grid.cols - 1) }))
+        }
+
+        if (key.rightArrow || ch === 'l') {
+          return updateGrid(grid => ({ ...grid, activeCol: clamp(grid.activeCol + 1, 0, grid.cols - 1) }))
+        }
+
+        if (key.upArrow || ch === 'k') {
+          return updateGrid(grid => ({ ...grid, activeRow: clamp(grid.activeRow - 1, 0, grid.rows - 1) }))
+        }
+
+        if (key.downArrow || ch === 'j') {
+          return updateGrid(grid => ({ ...grid, activeRow: clamp(grid.activeRow + 1, 0, grid.rows - 1) }))
         }
 
         return

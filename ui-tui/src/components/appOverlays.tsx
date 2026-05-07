@@ -7,6 +7,7 @@ import { $overlayState, patchOverlayState } from '../app/overlayStore.js'
 import { $uiSessionId, $uiTheme } from '../app/uiStore.js'
 
 import { FloatBox } from './appChrome.js'
+import { GridTestOverlay } from './gridTestOverlay.js'
 import { MaskedPrompt } from './maskedPrompt.js'
 import { ModelPicker } from './modelPicker.js'
 import { OverlayHint } from './overlayControls.js'
@@ -105,7 +106,13 @@ export function FloatingOverlays({
   const sid = useStore($uiSessionId)
   const theme = useStore($uiTheme)
 
-  const hasAny = overlay.modelPicker || overlay.pager || overlay.picker || overlay.skillsHub || completions.length
+  const hasAny =
+    overlay.gridTest ||
+    overlay.modelPicker ||
+    overlay.pager ||
+    overlay.picker ||
+    overlay.skillsHub ||
+    completions.length
 
   if (!hasAny) {
     return null
@@ -125,6 +132,20 @@ export function FloatingOverlays({
 
   const widgets: WidgetGridWidget[] = []
 
+  const gridTest = overlay.gridTest
+
+  if (gridTest) {
+    widgets.push({
+      id: 'grid-test',
+      render: width => (
+        <FloatBox color={theme.color.border}>
+          <GridTestOverlay cols={capWidth(width)} state={gridTest} t={theme} />
+        </FloatBox>
+      ),
+      span: fullSpan
+    })
+  }
+
   if (overlay.picker) {
     widgets.push({
       id: 'picker',
@@ -138,7 +159,8 @@ export function FloatingOverlays({
             t={theme}
           />
         </FloatBox>
-      )
+      ),
+      span: fullSpan
     })
   }
 
@@ -211,30 +233,44 @@ export function FloatingOverlays({
   }
 
   if (completions.length) {
+    const completionWidgets: WidgetGridWidget[] = completions.slice(start, start + viewportSize).map((item, i) => {
+      const idx = start + i
+
+      return {
+        id: `${idx}:${item.text}:${item.display}:${item.meta ?? ''}`,
+        render: () => {
+          const active = idx === compIdx
+
+          return (
+            <Box
+              backgroundColor={active ? theme.color.completionCurrentBg : undefined}
+              flexDirection="row"
+              width="100%"
+            >
+              <Text bold color={theme.color.label}>
+                {item.display}
+              </Text>
+              {item.meta ? <Text color={theme.color.muted}> {item.meta}</Text> : null}
+            </Box>
+          )
+        }
+      }
+    })
+
     widgets.push({
       id: 'completions',
       render: width => (
         <FloatBox color={theme.color.primary}>
-          <Box flexDirection="column" width={capWidth(width)}>
-            {completions.slice(start, start + viewportSize).map((item, i) => {
-              const active = start + i === compIdx
-
-              return (
-                <Box
-                  backgroundColor={active ? theme.color.completionCurrentBg : undefined}
-                  flexDirection="row"
-                  key={`${start + i}:${item.text}:${item.display}:${item.meta ?? ''}`}
-                  width="100%"
-                >
-                  <Text bold color={theme.color.label}>
-                    {' '}
-                    {item.display}
-                  </Text>
-                  {item.meta ? <Text color={theme.color.muted}> {item.meta}</Text> : null}
-                </Box>
-              )
-            })}
-          </Box>
+          <WidgetGrid
+            cols={capWidth(width)}
+            columns={1}
+            depth={1}
+            gap={0}
+            minColumnWidth={1}
+            paddingX={0}
+            rowGap={0}
+            widgets={completionWidgets}
+          />
         </FloatBox>
       ),
       span: fullSpan

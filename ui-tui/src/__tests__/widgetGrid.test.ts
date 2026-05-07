@@ -57,4 +57,38 @@ describe('layoutWidgetGrid', () => {
       width: 50
     })
   })
+
+  it('honors an exact column count when the grid has room', () => {
+    const layout = layoutWidgetGrid({
+      columns: 4,
+      gap: 1,
+      items: Array.from({ length: 8 }, (_, idx) => ({ id: `cell-${idx}` })),
+      width: 43
+    })
+
+    expect(layout.columnCount).toBe(4)
+    expect(layout.columns).toEqual([10, 10, 10, 10])
+    expect(layout.rows).toHaveLength(2)
+  })
+
+  it('renders sparse explicit starts without collapsing holes', () => {
+    const layout = layoutWidgetGrid({
+      columns: 4,
+      gap: 1,
+      items: [
+        { colStart: 0, id: 'a' },
+        { colStart: 2, id: 'b' },
+        { colStart: 3, id: 'c' }
+      ],
+      width: 43
+    })
+
+    expect(layout.rows).toEqual([
+      [
+        { col: 0, id: 'a', span: 1, width: 10 },
+        { col: 2, id: 'b', span: 1, width: 10 },
+        { col: 3, id: 'c', span: 1, width: 10 }
+      ]
+    ])
+  })
 })
