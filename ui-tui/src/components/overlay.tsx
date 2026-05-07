@@ -16,11 +16,9 @@ export type OverlayZone =
   | 'top-right'
 
 interface OverlayProps {
-  /** Render a decorated character-fill scrim behind the content. */
+  /** Render a faux scrim behind the content (lipgloss-style: spaces + bg color). */
   backdrop?: boolean
-  /** Character used to paint the scrim. Defaults to `░` (light shade). */
-  backdropChar?: string
-  /** Foreground color of the scrim characters. */
+  /** Background color used to paint the scrim. Defaults to `theme.color.statusBg`. */
   backdropColor?: string
   children: ReactNode
   /** Nine CSS-grid-style zones. Defaults to `center`. */
@@ -29,32 +27,30 @@ interface OverlayProps {
 
 /**
  * Viewport-level overlay primitive. Positions its child in one of nine zones
- * and optionally paints a faux scrim behind it. Ink's `backgroundColor` only
- * paints cells with content, so the backdrop is rendered as an explicit
- * character grid (`░` by default) — like classic TUI dialogs. Uses stdout
- * dims so placement is deterministic regardless of tree depth.
+ * and optionally paints a scrim behind it.
+ *
+ * Backdrop uses the canonical TUI pattern (cf. `lipgloss.Place`): each cell is
+ * a SPACE with a backgroundColor, so the area reads as a clean dimmed plane
+ * over the transcript. Ink only paints `backgroundColor` on cells with
+ * content, so the scrim is rendered as explicit lines of spaces — a `<Box>`
+ * with a bg alone would be invisible. Uses stdout dims so placement is
+ * deterministic regardless of tree depth.
  */
-export function Overlay({
-  backdrop = false,
-  backdropChar = '░',
-  backdropColor,
-  children,
-  zone = 'center'
-}: OverlayProps) {
+export function Overlay({ backdrop = false, backdropColor, children, zone = 'center' }: OverlayProps) {
   const { stdout } = useStdout()
   const theme = useStore($uiTheme)
   const cols = stdout?.columns ?? 80
   const rows = stdout?.rows ?? 24
   const [justify, align] = zoneFlex(zone)
-  const scrimColor = backdropColor ?? theme.color.border
-  const scrimLine = backdropChar.repeat(cols)
+  const scrimBg = backdropColor ?? theme.color.statusBg
+  const scrimLine = ' '.repeat(cols)
 
   return (
     <>
       {backdrop && (
         <Box flexDirection="column" height={rows} left={0} position="absolute" top={0} width={cols}>
           {Array.from({ length: rows }, (_, i) => (
-            <Text color={scrimColor} key={i}>
+            <Text backgroundColor={scrimBg} key={i}>
               {scrimLine}
             </Text>
           ))}
