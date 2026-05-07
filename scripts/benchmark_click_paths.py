@@ -1,53 +1,57 @@
 """
-Benchmark: CDP coordinate click (real Lightpanda) vs agent-browser IPC latency.
+Benchmark: Current main (3 separate WS connections) vs optimized (1 connection).
 
-This measures:
-1. CDP path — browser_click(x, y) hitting real Lightpanda WS at :63372
-2. agent-browser HTTP IPC — raw HTTP request to /api/click (measures the IPC
-   channel cost without needing a loaded page)
+Compares the two CDP coordinate click implementations against a real
+Lightpanda WebSocket at ws://127.0.0.1:63372/.
 
-Usage: python scripts/benchmark_click_paths.py [--iterations N] [--warmup N]
+  - Baseline (current main style): 3 separate _cdp_call() invocations, each
+    opening a fresh WS connection (Target.getTargets, mousePressed, mouseReleased)
+  - Optimized (this PR): single WS connection with all 4 messages pipelined
+    (getTargets + attachToTarget + mousePressed+mouseReleased in one burst)
+
+Also measures the agent-browser HTTP IPC round-trip as a reference point
+for how fast the existing ref-based click path is.
+
+Usage:
+    python scripts/benchmark_click_paths.py
+    python scripts/benchmark_click_paths.py --iterations 300 --warmup 20
 """
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 import time
 import urllib.request
 from statistics import mean, median, stdev
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional, Tuple
 
 sys.path.insert(0, "/private/tmp/hermes-coord-click")
 
 LIGHTPANDA_WS = "ws://127.0.0.1:63372/"
-AGENT_BROWSER_BASE = "http://127.0.0.1:63371"
+AGENT_BROWSER_PORT = 63371
 
 
-def _stats(times_s: List[float]) -> Dict[str, float]:
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _stats(times_s: List[float]) -> Dict:
     ms = [t * 1000 for t in times_s]
     return {
-        "mean_ms": mean(ms),
+        "mean_ms":   mean(ms),
         "median_ms": median(ms),
-        "min_ms": min(ms),
-        "max_ms": max(ms),
-        "stdev_ms": stdev(ms) if len(ms) > 1 else 0.0,
-        "p95_ms": sorted(ms)[int(len(ms) * 0.95)],
+        "min_ms":    min(ms),
+        "max_ms":    max(ms),
+        "stdev_ms":  stdev(ms) if len(ms) > 1 else 0.0,
+        "p95_ms":    sorted(ms)[int(len(ms) * 0.95)],
     }
 
 
-def _row(label: str, stats: Dict, col_w: int = 9) -> None:
-    print(
-        f"  {label:<44}  "
-        f"{stats['mean_ms']:>{col_w}.2f}  "
-        f"{stats['median_ms']:>{col_w}.2f}  "
-        f"{stats['min_ms']:>{col_w}.2f}  "
-        f"{stats['p95_ms']:>{col_w}.2f}  "
-        f"{stats['max_ms']:>{col_w}.2f}  ms"
-    )
-
-
-def _bench(fn, n: int) -> Tuple[List[float], int]:
+def _bench(fn, warmup: int, n: int) -> Tuple[List[float], int]:
+    for _ in range(warmup):
+        fn()
     times, errors = [], 0
     for _ in range(n):
         t0 = time.perf_counter()
@@ -65,126 +69,170 @@ def _bench(fn, n: int) -> Tuple[List[float], int]:
     return times, errors
 
 
-def _http_get(url: str) -> float:
-    """Return elapsed seconds for a single HTTP GET (measures IPC round-trip)."""
-    t0 = time.perf_counter()
+def _row(label: str, stats: Dict, col_w: int = 9) -> None:
+    print(
+        f"  {label:<46}  "
+        f"{stats['mean_ms']:>{col_w}.2f}  "
+        f"{stats['median_ms']:>{col_w}.2f}  "
+        f"{stats['min_ms']:>{col_w}.2f}  "
+        f"{stats['p95_ms']:>{col_w}.2f}  "
+        f"{stats['max_ms']:>{col_w}.2f}  ms"
+    )
+
+
+# ---------------------------------------------------------------------------
+# The "current main" approach — 3 separate _cdp_call() connections
+# ---------------------------------------------------------------------------
+
+def _baseline_cdp_click(endpoint: str, x: int, y: int, button: str = "left") -> str:
+    """Replicate the previous 3-connection approach from the original PR."""
+    from tools.browser_cdp_tool import _cdp_call, _run_async
+
     try:
-        with urllib.request.urlopen(url, timeout=5) as r:
-            r.read()
+        targets_result = _run_async(_cdp_call(endpoint, "Target.getTargets", {}, None, 10.0))
+        page_target = None
+        for t in targets_result.get("targetInfos", []):
+            if t.get("type") == "page" and t.get("attached", True):
+                page_target = t["targetId"]
+                break
     except Exception:
-        pass
-    return time.perf_counter() - t0
+        page_target = None
+
+    mouse_params = {"type": "", "x": x, "y": y, "button": button, "clickCount": 1}
+    try:
+        _run_async(_cdp_call(endpoint, "Input.dispatchMouseEvent",
+                             {**mouse_params, "type": "mousePressed"}, page_target, 10.0))
+        _run_async(_cdp_call(endpoint, "Input.dispatchMouseEvent",
+                             {**mouse_params, "type": "mouseReleased"}, page_target, 10.0))
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+    return json.dumps({"success": True, "clicked_at": {"x": x, "y": y}, "method": "baseline"})
 
 
-def run_benchmark(iterations: int = 200, warmup: int = 15) -> None:
-    print(f"\n{'=' * 76}")
-    print(f"  browser_click: CDP Coordinate Click (real Lightpanda) Benchmark")
-    print(f"{'=' * 76}")
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def run_benchmark(iterations: int = 300, warmup: int = 20) -> None:
+    print(f"\n{'=' * 78}")
+    print(f"  browser_click Coordinate Click: Current Main vs Optimized (1-conn)")
+    print(f"  Real Lightpanda WS: {LIGHTPANDA_WS}")
+    print(f"{'=' * 78}")
     print(f"  Iterations: {iterations}  |  Warmup: {warmup}")
+
+    # pre-flight
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:63372/json/version", timeout=2) as r:
+            info = json.loads(r.read())
+            assert "webSocketDebuggerUrl" in info
+        print(f"  ✓ Lightpanda CDP: {info.get('webSocketDebuggerUrl')}")
+    except Exception as e:
+        print(f"  ✗ Lightpanda not reachable: {e}")
+        return
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{AGENT_BROWSER_PORT}/api/sessions", timeout=2) as r:
+            sessions = json.loads(r.read())
+        print(f"  ✓ agent-browser: {len(sessions)} session(s)")
+        ab_ok = True
+    except Exception:
+        print(f"  ⚠  agent-browser not reachable — ref-click IPC baseline skipped")
+        ab_ok = False
 
     import importlib
     import tools.browser_tool as bt
     import tools.browser_cdp_tool as cdp_mod
     importlib.reload(cdp_mod)
     importlib.reload(bt)
-
     bt._is_camofox_mode = lambda: False
     _orig_resolve = cdp_mod._resolve_cdp_endpoint
 
     # -----------------------------------------------------------------------
-    # A. CDP coord click via real Lightpanda WS
+    # 1. Baseline: current-main 3-connection approach
     # -----------------------------------------------------------------------
-    print(f"\n  [A] CDP coord → Lightpanda WS ({LIGHTPANDA_WS})")
+    print(f"\n  [1/3] Baseline (current main — 3 separate WS connections per click)")
+    print(f"        Warmup {warmup}, then {iterations} iterations...")
+
+    base_times, base_err = _bench(
+        lambda: _baseline_cdp_click(LIGHTPANDA_WS, 150, 200),
+        warmup, iterations,
+    )
+    base_stats = _stats(base_times)
+    print(f"        Done — {base_err} errors, mean={base_stats['mean_ms']:.2f}ms")
+
+    # -----------------------------------------------------------------------
+    # 2. Optimized: single-connection (this PR)
+    # -----------------------------------------------------------------------
+    print(f"\n  [2/3] Optimized (this PR — 1 WS connection, pipelined mouse events)")
+    print(f"        Warmup {warmup}, then {iterations} iterations...")
+
     cdp_mod._resolve_cdp_endpoint = lambda: LIGHTPANDA_WS
-
-    print(f"      Warming up ({warmup})...")
-    for _ in range(warmup):
-        bt.browser_click(x=100.0, y=100.0, task_id="bench")
-
-    print(f"      Benchmarking ({iterations})...")
-    cdp_times, cdp_err = _bench(
+    opt_times, opt_err = _bench(
         lambda: bt.browser_click(x=150.0, y=200.0, task_id="bench"),
-        iterations,
+        warmup, iterations,
     )
     cdp_mod._resolve_cdp_endpoint = _orig_resolve
-    cdp_stats = _stats(cdp_times)
-    print(f"      Done — {cdp_err} errors, mean={cdp_stats['mean_ms']:.2f}ms")
+    opt_stats = _stats(opt_times)
+    print(f"        Done — {opt_err} errors, mean={opt_stats['mean_ms']:.2f}ms")
 
     # -----------------------------------------------------------------------
-    # B. agent-browser HTTP IPC latency (GET /api/sessions — lightweight ping)
+    # 3. agent-browser HTTP IPC reference (what a ref click costs)
     # -----------------------------------------------------------------------
-    print(f"\n  [B] agent-browser HTTP IPC round-trip (:63371/api/sessions)")
-    print(f"      Warming up ({warmup})...")
-    for _ in range(warmup):
-        _http_get(f"{AGENT_BROWSER_BASE}/api/sessions")
+    if ab_ok:
+        print(f"\n  [3/3] agent-browser HTTP IPC (reference for ref-click latency)")
+        print(f"        Warmup {warmup}, then {iterations} iterations...")
 
-    print(f"      Benchmarking ({iterations})...")
-    ab_times = []
-    for _ in range(iterations):
-        ab_times.append(_http_get(f"{AGENT_BROWSER_BASE}/api/sessions"))
-    ab_stats = _stats(ab_times)
-    print(f"      Done — mean={ab_stats['mean_ms']:.2f}ms")
-
-    # -----------------------------------------------------------------------
-    # C. Raw Lightpanda WS latency (single CDP call — no click, just a ping)
-    #    This measures WS connection setup + 1 message round-trip
-    # -----------------------------------------------------------------------
-    print(f"\n  [C] Raw single CDP call to Lightpanda (Target.getTargets baseline)")
-    print(f"      Warming up ({warmup})...")
-
-    async def _single_cdp():
-        from tools.browser_cdp_tool import _cdp_call, _run_async
-        return _run_async(_cdp_call(LIGHTPANDA_WS, "Target.getTargets", {}, None, 5.0))
-
-    def _time_single_cdp():
-        from tools.browser_cdp_tool import _cdp_call, _run_async
-        return _run_async(_cdp_call(LIGHTPANDA_WS, "Target.getTargets", {}, None, 5.0))
-
-    for _ in range(warmup):
-        _time_single_cdp()
-
-    print(f"      Benchmarking ({iterations})...")
-    single_cdp_times = []
-    for _ in range(iterations):
-        t0 = time.perf_counter()
-        _time_single_cdp()
-        single_cdp_times.append(time.perf_counter() - t0)
-    single_cdp_stats = _stats(single_cdp_times)
-    print(f"      Done — mean={single_cdp_stats['mean_ms']:.2f}ms per WS connection+call")
+        ab_times = []
+        for _ in range(warmup):
+            urllib.request.urlopen(f"http://127.0.0.1:{AGENT_BROWSER_PORT}/api/sessions", timeout=5).read()
+        for _ in range(iterations):
+            t0 = time.perf_counter()
+            urllib.request.urlopen(f"http://127.0.0.1:{AGENT_BROWSER_PORT}/api/sessions", timeout=5).read()
+            ab_times.append(time.perf_counter() - t0)
+        ab_stats = _stats(ab_times)
+        print(f"        Done — mean={ab_stats['mean_ms']:.2f}ms")
 
     # -----------------------------------------------------------------------
     # Results
     # -----------------------------------------------------------------------
     col_w = 9
-    print(f"\n{'─' * 76}")
-    print(f"  {'Path':<44}  {'Mean':>{col_w}}  {'Median':>{col_w}}  {'Min':>{col_w}}  {'p95':>{col_w}}  {'Max':>{col_w}}")
-    print(f"{'─' * 76}")
-    _row("CDP coord (x,y) → Lightpanda [3 WS conns]", cdp_stats, col_w)
-    _row("Single CDP call [1 WS conn baseline]", single_cdp_stats, col_w)
-    _row("agent-browser HTTP IPC [1 request]", ab_stats, col_w)
-    print(f"{'─' * 76}")
+    print(f"\n{'─' * 78}")
+    print(f"  {'Approach':<46}  {'Mean':>{col_w}}  {'Median':>{col_w}}  {'Min':>{col_w}}  {'p95':>{col_w}}  {'Max':>{col_w}}")
+    print(f"{'─' * 78}")
+    _row("Baseline  (3 connections, sequential)", base_stats, col_w)
+    _row("Optimized (1 connection, pipelined)  ", opt_stats,  col_w)
+    if ab_ok:
+        _row("Ref-click IPC baseline (1 HTTP req)  ", ab_stats,  col_w)
+    print(f"{'─' * 78}")
 
-    expected_3x = single_cdp_stats["mean_ms"] * 3
-    print(f"\n  Analysis:")
-    print(f"    • Full CDP click = {cdp_stats['mean_ms']:.2f}ms  ({cdp_stats['mean_ms'] / single_cdp_stats['mean_ms']:.1f}× single call)")
-    print(f"    • Expected at 3 sequential WS connections: ~{expected_3x:.1f}ms")
-    print(f"    • Single WS conn+call baseline: {single_cdp_stats['mean_ms']:.2f}ms")
-    print(f"    • agent-browser HTTP IPC: {ab_stats['mean_ms']:.2f}ms per call")
-    print(f"      (ref click = ~1 IPC call, fallback mouse = ~3 IPC calls)")
-    print(f"    • Estimated ref click latency: ~{ab_stats['mean_ms']:.1f}ms")
-    print(f"    • Estimated fallback (mouse) latency: ~{ab_stats['mean_ms']*3:.1f}ms")
-    print(f"    • CDP coord vs ref estimate: {cdp_stats['mean_ms']:.1f}ms vs ~{ab_stats['mean_ms']:.1f}ms")
-    cdp_vs_ref_est = cdp_stats["mean_ms"] / ab_stats["mean_ms"]
-    print(f"      Ratio: {cdp_vs_ref_est:.1f}x — overhead from 3 per-click WS conn setups.")
-    print(f"    • Both are well under 100ms human perception threshold.")
-    print(f"    • A persistent WS connection would reduce CDP clicks to ~{single_cdp_stats['mean_ms']*2:.1f}ms")
-    print(f"      (just mousePressed + mouseReleased on existing session).")
+    speedup = base_stats["mean_ms"] / opt_stats["mean_ms"]
+    saved_ms = base_stats["mean_ms"] - opt_stats["mean_ms"]
+    print(f"\n  Results:")
+    print(f"    Speedup (mean):     {speedup:.2f}x  ({saved_ms:.2f} ms saved per click)")
+    print(f"    Speedup (median):   {base_stats['median_ms'] / opt_stats['median_ms']:.2f}x")
+    print(f"    Speedup (p95):      {base_stats['p95_ms'] / opt_stats['p95_ms']:.2f}x")
+
+    if ab_ok:
+        cdp_vs_ref = opt_stats["mean_ms"] / ab_stats["mean_ms"]
+        print(f"\n    Optimized CDP vs ref-click: {cdp_vs_ref:.1f}x  "
+              f"(+{opt_stats['mean_ms'] - ab_stats['mean_ms']:.2f} ms over ref)")
+        print(f"    For scenarios where ref-click works, it's still faster.")
+        print(f"    For cross-origin iframes/shadow DOM/canvas, coordinate click")
+        print(f"    is the only option — {opt_stats['mean_ms']:.1f}ms is the cost.")
+
+    print(f"\n  Why the optimized approach is faster:")
+    print(f"    • Baseline: 3 sequential websocket.connect() calls")
+    print(f"      Each = TCP handshake + WS upgrade + message + close")
+    print(f"    • Optimized: 1 connect, then 4 messages in sequence")
+    print(f"      mousePressed + mouseReleased are pipelined (sent before")
+    print(f"      awaiting either response) — they travel in the same burst.")
+    print(f"    • Savings come entirely from eliminating 2 WS handshakes.")
     print()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iterations", type=int, default=200)
-    parser.add_argument("--warmup", type=int, default=15)
+    parser.add_argument("--iterations", type=int, default=300)
+    parser.add_argument("--warmup", type=int, default=20)
     args = parser.parse_args()
     run_benchmark(iterations=args.iterations, warmup=args.warmup)

@@ -2293,6 +2293,94 @@ def browser_snapshot(
         return json.dumps(_copy_fallback_warning(response, result), ensure_ascii=False)
 
 
+async def _cdp_coordinate_click_async(
+    ws_url: str,
+    x: int,
+    y: int,
+    button: str,
+    timeout: float,
+) -> None:
+    """Perform a compositor-level click on a single persistent WS connection.
+
+    Opens the WebSocket once, then sends all required CDP messages on it:
+      1. Target.getTargets  — find the active page target
+      2. Target.attachToTarget (optional) — get a sessionId for page-scope input
+      3. Input.dispatchMouseEvent (mousePressed)
+      4. Input.dispatchMouseEvent (mouseReleased)
+
+    This is 3–4 messages over one connection vs the previous approach of
+    3 separate connections (one per call), saving 2 TCP+WS handshakes per click.
+    mousePressed and mouseReleased are pipelined — both sent before either
+    response is awaited — so they travel in the same network burst.
+    """
+    import asyncio as _asyncio
+    from tools.browser_cdp_tool import websockets as _ws  # already imported at module level
+
+    async with _ws.connect(
+        ws_url,
+        max_size=None,
+        open_timeout=timeout,
+        close_timeout=5,
+        ping_interval=None,
+    ) as ws:
+        deadline = _asyncio.get_event_loop().time() + timeout
+        msg_id = 0
+
+        def _next_id() -> int:
+            nonlocal msg_id
+            msg_id += 1
+            return msg_id
+
+        async def _send(method: str, params: dict, session_id: Optional[str] = None) -> int:
+            call_id = _next_id()
+            req = {"id": call_id, "method": method, "params": params}
+            if session_id:
+                req["sessionId"] = session_id
+            await ws.send(json.dumps(req))
+            return call_id
+
+        async def _recv_until(call_id: int) -> dict:
+            while True:
+                remaining = deadline - _asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    raise TimeoutError(f"CDP timed out waiting for id={call_id}")
+                raw = await _asyncio.wait_for(ws.recv(), timeout=remaining)
+                msg = json.loads(raw)
+                if msg.get("id") == call_id:
+                    if "error" in msg:
+                        raise RuntimeError(f"CDP error: {msg['error']}")
+                    return msg.get("result", {})
+                # ignore events and unrelated responses
+
+        # 1. Target.getTargets — find page target
+        gt_id = await _send("Target.getTargets", {})
+        gt_result = await _recv_until(gt_id)
+        page_target_id: Optional[str] = None
+        for t in gt_result.get("targetInfos", []):
+            if t.get("type") == "page" and t.get("attached", True):
+                page_target_id = t["targetId"]
+                break
+
+        # 2. Target.attachToTarget — get a session scoped to the page
+        #    (so Input.dispatchMouseEvent reaches the renderer, not browser-level)
+        session_id: Optional[str] = None
+        if page_target_id:
+            at_id = await _send("Target.attachToTarget",
+                                {"targetId": page_target_id, "flatten": True})
+            at_result = await _recv_until(at_id)
+            session_id = at_result.get("sessionId")
+
+        mouse_params = {"x": x, "y": y, "button": button, "clickCount": 1}
+
+        # 3+4. mousePressed + mouseReleased — pipeline both before awaiting either
+        press_id = await _send("Input.dispatchMouseEvent",
+                               {**mouse_params, "type": "mousePressed"}, session_id)
+        release_id = await _send("Input.dispatchMouseEvent",
+                                 {**mouse_params, "type": "mouseReleased"}, session_id)
+        await _recv_until(press_id)
+        await _recv_until(release_id)
+
+
 def _cdp_coordinate_click(
     x: float,
     y: float,
@@ -2307,10 +2395,14 @@ def _cdp_coordinate_click(
     (open and closed), canvas/WebGL elements, and overlays — anything visible
     at those coordinates gets clicked.
 
+    Uses a single persistent WebSocket connection for all CDP messages
+    (Target.getTargets + optional attachToTarget + mousePressed + mouseReleased),
+    avoiding the overhead of opening a new connection per call.
+
     Inspired by browser-harness's ``click_at_xy()`` strategy.
     """
     try:
-        from tools.browser_cdp_tool import _cdp_call, _run_async, _resolve_cdp_endpoint, _WS_AVAILABLE
+        from tools.browser_cdp_tool import _run_async, _resolve_cdp_endpoint, _WS_AVAILABLE
     except ImportError:
         return json.dumps({
             "success": False,
@@ -2325,49 +2417,15 @@ def _cdp_coordinate_click(
 
     endpoint = _resolve_cdp_endpoint()
     if not endpoint:
-        # Fall back to agent-browser mouse commands (3 subprocess calls)
         return _coordinate_click_via_agent_browser(x, y, task_id, button)
 
     if not endpoint.startswith(("ws://", "wss://")):
         return _coordinate_click_via_agent_browser(x, y, task_id, button)
 
-    # Find the page target to scope the input events to.
-    # Input.dispatchMouseEvent is a page-level method — we need a session.
-    try:
-        targets_result = _run_async(
-            _cdp_call(endpoint, "Target.getTargets", {}, None, 10.0)
-        )
-        page_target = None
-        for t in targets_result.get("targetInfos", []):
-            if t.get("type") == "page" and t.get("attached", True):
-                page_target = t["targetId"]
-                break
-        if not page_target:
-            # No attached page target — try without target_id
-            # (some CDP endpoints scope Input to the default page)
-            page_target = None
-    except Exception:
-        page_target = None
-
     ix, iy = int(round(x)), int(round(y))
 
     try:
-        # mousePressed
-        _run_async(_cdp_call(endpoint, "Input.dispatchMouseEvent", {
-            "type": "mousePressed",
-            "x": ix,
-            "y": iy,
-            "button": button,
-            "clickCount": 1,
-        }, page_target, 10.0))
-        # mouseReleased
-        _run_async(_cdp_call(endpoint, "Input.dispatchMouseEvent", {
-            "type": "mouseReleased",
-            "x": ix,
-            "y": iy,
-            "button": button,
-            "clickCount": 1,
-        }, page_target, 10.0))
+        _run_async(_cdp_coordinate_click_async(endpoint, ix, iy, button, 10.0))
     except Exception as exc:
         return json.dumps({
             "success": False,
