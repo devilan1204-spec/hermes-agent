@@ -75,6 +75,7 @@ export interface OverlayState {
   approval: ApprovalReq | null
   clarify: ClarifyReq | null
   confirm: ConfirmReq | null
+  dialog: DialogState | null
   gridTest: GridTestState | null
   modelPicker: boolean
   pager: null | PagerState
@@ -82,6 +83,13 @@ export interface OverlayState {
   secret: null | SecretReq
   skillsHub: boolean
   sudo: null | SudoReq
+}
+
+export interface DialogState {
+  body: string
+  hint?: string
+  title?: string
+  zone?: 'bottom' | 'bottom-left' | 'bottom-right' | 'center' | 'left' | 'right' | 'top' | 'top-left' | 'top-right'
 }
 
 export interface PagerState {

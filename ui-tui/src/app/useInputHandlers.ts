@@ -125,6 +125,10 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
     if (overlay.gridTest) {
       return patchOverlayState({ gridTest: null })
     }
+
+    if (overlay.dialog) {
+      return patchOverlayState({ dialog: null })
+    }
   }
 
   const cycleQueue = (dir: 1 | -1) => {
@@ -369,6 +373,14 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
 
         if (key.downArrow || ch === 'j') {
           return updateGrid(grid => ({ ...grid, activeRow: clamp(grid.activeRow + 1, 0, grid.rows - 1) }))
+        }
+
+        return
+      }
+
+      if (overlay.dialog) {
+        if (key.escape || isCtrl(key, ch, 'c') || ch === 'q' || key.return) {
+          return patchOverlayState({ dialog: null })
         }
 
         return

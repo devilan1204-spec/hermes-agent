@@ -8,6 +8,7 @@ const buildOverlayState = (): OverlayState => ({
   approval: null,
   clarify: null,
   confirm: null,
+  dialog: null,
   gridTest: null,
   modelPicker: false,
   pager: null,
@@ -21,12 +22,13 @@ export const $overlayState = atom<OverlayState>(buildOverlayState())
 
 export const $isBlocked = computed(
   $overlayState,
-  ({ agents, approval, clarify, confirm, gridTest, modelPicker, pager, picker, secret, skillsHub, sudo }) =>
+  ({ agents, approval, clarify, confirm, dialog, gridTest, modelPicker, pager, picker, secret, skillsHub, sudo }) =>
     Boolean(
       agents ||
       approval ||
       clarify ||
       confirm ||
+      dialog ||
       gridTest ||
       modelPicker ||
       pager ||
@@ -58,6 +60,7 @@ export const resetFlowOverlays = () =>
     ...buildOverlayState(),
     agents: $overlayState.get().agents,
     agentsInitialHistoryIndex: $overlayState.get().agentsInitialHistoryIndex,
+    dialog: $overlayState.get().dialog,
     gridTest: $overlayState.get().gridTest,
     modelPicker: $overlayState.get().modelPicker,
     picker: $overlayState.get().picker,

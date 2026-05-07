@@ -1,9 +1,24 @@
 import { formatBytes, performHeapDump } from '../../../lib/memory.js'
+import type { DialogState } from '../../interfaces.js'
 import { patchOverlayState } from '../../overlayStore.js'
 import type { SlashCommand } from '../types.js'
 
 const GRID_TEST_USAGE = 'usage: /grid-test [cols]x[rows]  or  /grid-test [cols] [rows]'
 const GRID_TEST_MAX_SIZE = 12
+
+const DIALOG_TEST_ZONES = new Set<DialogState['zone']>([
+  'bottom',
+  'bottom-left',
+  'bottom-right',
+  'center',
+  'left',
+  'right',
+  'top',
+  'top-left',
+  'top-right'
+])
+
+const DIALOG_TEST_USAGE = `usage: /dialog-test [zone]   zones: ${[...DIALOG_TEST_ZONES].join(', ')}`
 
 const clampGridSize = (value: number, fallback: number) => {
   if (!Number.isFinite(value)) {
@@ -56,6 +71,33 @@ export const debugCommands: SlashCommand[] = [
           paddingX: null,
           rows: size.rows,
           zoomed: false
+        }
+      })
+    }
+  },
+
+  {
+    help: 'open a sample dialog overlay with a faked backdrop',
+    name: 'dialog-test',
+    run: (arg, ctx) => {
+      const trimmed = arg.trim().toLowerCase()
+      const zone = (trimmed || 'center') as DialogState['zone']
+
+      if (!DIALOG_TEST_ZONES.has(zone)) {
+        return ctx.transcript.sys(DIALOG_TEST_USAGE)
+      }
+
+      patchOverlayState({
+        dialog: {
+          body: [
+            'This is a viewport-level overlay with a backdrop.',
+            '',
+            `Zone: ${zone}`,
+            'Try: /dialog-test top-right · bottom · left · ...'
+          ].join('\n'),
+          hint: 'Esc/q/Enter close · Ctrl+C close',
+          title: 'Dialog primitive',
+          zone
         }
       })
     }
