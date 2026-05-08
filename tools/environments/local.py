@@ -1,6 +1,7 @@
 """Local execution environment — spawn-per-call with session snapshot."""
 
 import logging
+import ntpath
 import os
 import platform
 import re
@@ -217,6 +218,30 @@ _SANE_PATH = (
     "/opt/homebrew/bin:/opt/homebrew/sbin:"
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
+_SANE_PATH_WINDOWS = tuple(
+    p for p in (
+        os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32"),
+        os.environ.get("SystemRoot", r"C:\Windows"),
+        os.path.join(
+            os.environ.get("SystemRoot", r"C:\Windows"),
+            "System32",
+            "WindowsPowerShell",
+            "v1.0",
+        ),
+        os.path.join(
+            os.environ.get("ProgramFiles", r"C:\Program Files"),
+            "Git",
+            "bin",
+        ),
+        os.path.join(
+            os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+            "Git",
+            "bin",
+        ),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Git", "bin"),
+    )
+    if p
+)
 
 
 def _make_run_env(env: dict) -> dict:
@@ -235,7 +260,24 @@ def _make_run_env(env: dict) -> dict:
         elif k not in _HERMES_PROVIDER_ENV_BLOCKLIST or _is_passthrough(k):
             run_env[k] = v
     existing_path = run_env.get("PATH", "")
-    if "/usr/bin" not in existing_path.split(":"):
+    if _IS_WINDOWS:
+        # Keep PATH Windows-native (`;` separator, case-insensitive dedupe)
+        # and avoid injecting POSIX defaults like /usr/bin.
+        parts = [p for p in existing_path.split(";") if p]
+        seen = {
+            ntpath.normcase(ntpath.normpath(p.rstrip("\\/")))
+            for p in parts
+            if p
+        }
+        for candidate in _SANE_PATH_WINDOWS:
+            norm = ntpath.normcase(ntpath.normpath(candidate.rstrip("\\/")))
+            if norm in seen:
+                continue
+            parts.append(candidate)
+            seen.add(norm)
+        if parts:
+            run_env["PATH"] = ";".join(parts)
+    elif "/usr/bin" not in existing_path.split(":"):
         run_env["PATH"] = f"{existing_path}:{_SANE_PATH}" if existing_path else _SANE_PATH
 
     # Per-profile HOME isolation: redirect system tool configs (git, ssh, gh,

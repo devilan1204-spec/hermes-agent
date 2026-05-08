@@ -328,3 +328,36 @@ class TestSanePathIncludesHomebrew:
             result = _make_run_env({})
         # Should keep existing PATH unchanged
         assert result["PATH"] == "/usr/bin:/bin"
+
+
+class TestWindowsSanePath:
+    def test_make_run_env_windows_uses_windows_path_rules(self):
+        """Windows mode should use ';' and avoid POSIX /usr/bin injections."""
+        from tools.environments.local import _make_run_env
+
+        with patch("tools.environments.local._IS_WINDOWS", True), patch.dict(
+            os.environ, {"PATH": r"C:\Users\Test\bin"}, clear=True
+        ):
+            result = _make_run_env({})
+
+        assert "PATH" in result
+        assert ";" in result["PATH"]
+        assert "/usr/bin" not in result["PATH"]
+        parts = [p for p in result["PATH"].split(";") if p]
+        assert any("git" in p.lower() and "bin" in p.lower() for p in parts)
+
+    def test_make_run_env_windows_dedupes_case_insensitive_entries(self):
+        """Repeated Windows path entries should not be appended twice."""
+        from tools.environments.local import _make_run_env
+
+        with patch("tools.environments.local._IS_WINDOWS", True), patch.dict(
+            os.environ, {"PATH": r"C:\Windows\System32;C:\TOOLS\BIN"}, clear=True
+        ):
+            result = _make_run_env({})
+
+        normalized = [
+            p.replace("/", "\\").lower().rstrip("\\")
+            for p in result["PATH"].split(";")
+            if p
+        ]
+        assert normalized.count(r"c:\windows\system32") == 1

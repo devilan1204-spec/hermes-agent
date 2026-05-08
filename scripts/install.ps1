@@ -65,6 +65,108 @@ function Write-Err {
     Write-Host "✗ $Message" -ForegroundColor Red
 }
 
+function Add-UserPathEntry {
+    param(
+        [string]$CurrentPath,
+        [string]$Entry
+    )
+
+    if (-not $Entry) {
+        return $CurrentPath
+    }
+
+    $parts = @()
+    if ($CurrentPath) {
+        $parts = $CurrentPath -split ";" | Where-Object { $_ -and $_.Trim() }
+    }
+
+    $normalizedEntry = $Entry.Trim().TrimEnd("\")
+    foreach ($part in $parts) {
+        if ($part.Trim().TrimEnd("\") -ieq $normalizedEntry) {
+            return $CurrentPath
+        }
+    }
+
+    if ($CurrentPath) {
+        return "$Entry;$CurrentPath"
+    }
+    return $Entry
+}
+
+function Resolve-NpmInvocation {
+    # Prefer npm.cmd to avoid PowerShell execution-policy failures from npm.ps1.
+    $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($npmCmd -and $npmCmd.Source) {
+        return @($npmCmd.Source)
+    }
+
+    $npm = Get-Command npm -ErrorAction SilentlyContinue
+    if ($npm -and $npm.Source) {
+        if ($npm.Source -notmatch "\.ps1$") {
+            return @($npm.Source)
+        }
+
+        $candidateCmd = [System.IO.Path]::ChangeExtension($npm.Source, ".cmd")
+        if (Test-Path $candidateCmd) {
+            return @($candidateCmd)
+        }
+    }
+
+    # Last fallback for odd PATH setups: invoke npm-cli.js directly via node.
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if ($node -and $node.Source) {
+        $nodeDir = Split-Path -Parent $node.Source
+        $candidates = @(
+            (Join-Path $nodeDir "node_modules\npm\bin\npm-cli.js"),
+            "$HermesHome\node\node_modules\npm\bin\npm-cli.js"
+        )
+        foreach ($candidate in $candidates) {
+            if (Test-Path $candidate) {
+                return @($node.Source, $candidate)
+            }
+        }
+    }
+
+    return $null
+}
+
+function Invoke-NpmInstallSilent {
+    param(
+        [string]$WorkingDir
+    )
+
+    $npmInvocation = Resolve-NpmInvocation
+    if (-not $npmInvocation) {
+        throw "npm command not found in PATH"
+    }
+
+    Push-Location $WorkingDir
+    try {
+        $output = @()
+        if ($npmInvocation.Count -eq 1) {
+            $output = & $npmInvocation[0] install --silent 2>&1
+        } else {
+            $output = & $npmInvocation[0] $npmInvocation[1] install --silent 2>&1
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            $lastLine = ""
+            if ($output) {
+                $lines = @($output | ForEach-Object { "$_" } | Where-Object { $_ })
+                if ($lines.Count -gt 0) {
+                    $lastLine = $lines[-1]
+                }
+            }
+            if ($lastLine) {
+                throw "npm install exited with code $LASTEXITCODE: $lastLine"
+            }
+            throw "npm install exited with code $LASTEXITCODE"
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 # ============================================================================
 # Dependency checks
 # ============================================================================
@@ -550,11 +652,21 @@ function Install-Dependencies {
         $env:VIRTUAL_ENV = "$InstallDir\venv"
     }
     
-    # Install main package with all extras
-    try {
-        & $UvCmd pip install -e ".[all]" 2>&1 | Out-Null
-    } catch {
-        & $UvCmd pip install -e "." | Out-Null
+    # Install main package with all extras first. If that fails (for example
+    # due to an optional extra on this machine), fall back to the minimum
+    # dependency profile required for native Windows CLI + TUI operation.
+    & $UvCmd pip install -e ".[all]" 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "Full extras install failed. Retrying with Windows CLI/TUI dependency set..."
+        & $UvCmd pip install -e ".[pty,mcp,honcho,acp]" 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Windows CLI/TUI extras install failed. Retrying with base package..."
+            & $UvCmd pip install -e "." 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Pop-Location
+                throw "Failed to install Hermes Python dependencies."
+            }
+        }
     }
     
     Write-Success "Main package installed"
@@ -586,20 +698,35 @@ function Set-PathVariable {
         $hermesBin = "$InstallDir\venv\Scripts"
     }
     
-    # Add the venv Scripts dir to user PATH so hermes is globally available
-    # On Windows, the hermes.exe in venv\Scripts\ has the venv Python baked in
+    # Add required bins to user PATH so hermes and --tui dependencies persist
+    # across new terminal sessions.
+    # On Windows, the hermes.exe in venv\Scripts\ has the venv Python baked in.
     $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    
-    if ($currentPath -notlike "*$hermesBin*") {
-        [Environment]::SetEnvironmentVariable(
-            "Path",
-            "$hermesBin;$currentPath",
-            "User"
-        )
+    $newPath = Add-UserPathEntry -CurrentPath $currentPath -Entry $hermesBin
+    if ($newPath -ne $currentPath) {
         Write-Success "Added to user PATH: $hermesBin"
     } else {
-        Write-Info "PATH already configured"
+        Write-Info "PATH already includes: $hermesBin"
     }
+
+    $managedNodeDir = "$HermesHome\node"
+    $managedNodeExe = "$managedNodeDir\node.exe"
+    if (Test-Path $managedNodeExe) {
+        $pathWithNode = Add-UserPathEntry -CurrentPath $newPath -Entry $managedNodeDir
+        if ($pathWithNode -ne $newPath) {
+            Write-Success "Added managed Node.js to user PATH: $managedNodeDir"
+        } else {
+            Write-Info "PATH already includes managed Node.js"
+        }
+        $newPath = $pathWithNode
+
+        # Hint hermes_cli.main._make_tui_argv() where node lives when a managed
+        # install is used (it still prefers PATH when available).
+        [Environment]::SetEnvironmentVariable("HERMES_NODE", $managedNodeExe, "User")
+        $env:HERMES_NODE = $managedNodeExe
+    }
+
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
     
     # Set HERMES_HOME so the Python code finds config/data in the right place.
     # Only needed on Windows where we install to %LOCALAPPDATA%\hermes instead
@@ -612,7 +739,10 @@ function Set-PathVariable {
     $env:HERMES_HOME = $HermesHome
     
     # Update current session
-    $env:Path = "$hermesBin;$env:Path"
+    $env:Path = Add-UserPathEntry -CurrentPath $env:Path -Entry $hermesBin
+    if (Test-Path "$HermesHome\node\node.exe") {
+        $env:Path = Add-UserPathEntry -CurrentPath $env:Path -Entry "$HermesHome\node"
+    }
     
     Write-Success "hermes command ready"
 }
@@ -708,16 +838,14 @@ function Install-NodeDeps {
         Write-Info "Skipping Node.js dependencies (Node not installed)"
         return
     }
-    
-    Push-Location $InstallDir
-    
-    if (Test-Path "package.json") {
+
+    if (Test-Path "$InstallDir\package.json") {
         Write-Info "Installing Node.js dependencies (browser tools)..."
         try {
-            npm install --silent 2>&1 | Out-Null
+            Invoke-NpmInstallSilent -WorkingDir $InstallDir
             Write-Success "Node.js dependencies installed"
         } catch {
-            Write-Warn "npm install failed (browser tools may not work)"
+            Write-Warn "Browser tools npm install could not be launched: $($_.Exception.Message)"
         }
     }
     
@@ -725,19 +853,13 @@ function Install-NodeDeps {
     $tuiDir = "$InstallDir\ui-tui"
     if (Test-Path "$tuiDir\package.json") {
         Write-Info "Installing TUI dependencies..."
-        Push-Location $tuiDir
         try {
-            npm install --silent 2>&1 | Out-Null
+            Invoke-NpmInstallSilent -WorkingDir $tuiDir
             Write-Success "TUI dependencies installed"
         } catch {
-            Write-Warn "TUI npm install failed (hermes --tui may not work)"
+            Write-Warn "TUI npm install could not be launched: $($_.Exception.Message)"
         }
-        Pop-Location
     }
-
-
-    
-    Pop-Location
 }
 
 function Invoke-SetupWizard {
