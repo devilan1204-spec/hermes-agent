@@ -493,7 +493,10 @@ class TestLaunchdServiceRecovery:
 
         label = gateway_cli.get_launchd_label()
         domain = gateway_cli._launchd_domain()
-        assert "--replace" in plist_path.read_text(encoding="utf-8")
+        plist_text = plist_path.read_text(encoding="utf-8")
+        assert "<string>gateway</string>" in plist_text
+        assert "<string>run</string>" in plist_text
+        assert "--replace" not in plist_text
         assert calls[:2] == [
             ["launchctl", "bootout", f"{domain}/{label}"],
             ["launchctl", "bootstrap", domain, str(plist_path)],
@@ -1616,7 +1619,8 @@ class TestProfileArg:
         monkeypatch.setattr(gateway_cli, "get_hermes_home", lambda: profile_dir)
         unit = gateway_cli.generate_systemd_unit(system=False)
         assert "--profile mybot" in unit
-        assert "gateway run --replace" in unit
+        assert "gateway run" in unit
+        assert "--replace" not in unit
 
     def test_launchd_plist_includes_profile(self, tmp_path, monkeypatch):
         """generate_launchd_plist should include --profile in ProgramArguments for named profiles."""
@@ -1628,6 +1632,24 @@ class TestProfileArg:
         plist = gateway_cli.generate_launchd_plist()
         assert "<string>--profile</string>" in plist
         assert "<string>mybot</string>" in plist
+        assert "<string>--replace</string>" not in plist
+
+    def test_gateway_run_args_for_profile_omit_replace(self, monkeypatch):
+        monkeypatch.setattr(gateway_cli, "get_python_path", lambda: "/venv/bin/python")
+
+        default_args = gateway_cli._gateway_run_args_for_profile("default")
+        named_args = gateway_cli._gateway_run_args_for_profile("mybot")
+
+        assert default_args == ["/venv/bin/python", "-m", "hermes_cli.main", "gateway", "run"]
+        assert named_args == [
+            "/venv/bin/python",
+            "-m",
+            "hermes_cli.main",
+            "--profile",
+            "mybot",
+            "gateway",
+            "run",
+        ]
 
     def test_launchd_plist_path_uses_real_user_home_not_profile_home(self, tmp_path, monkeypatch):
         profile_dir = tmp_path / ".hermes" / "profiles" / "orcha"
