@@ -1,3 +1,4 @@
+import { isIP } from 'node:net'
 import { useEffect, useMemo, useState } from 'react'
 
 const titleCache = new Map<string, string>()
@@ -5,6 +6,7 @@ const titleInflight = new Map<string, Promise<string>>()
 const titleSubs = new Map<string, Set<(value: string) => void>>()
 
 const TITLE_CACHE_LIMIT = 500
+const TITLE_MAX_LENGTH = 240
 const TITLE_BYTE_BUDGET = 96 * 1024
 const TITLE_TIMEOUT_MS = 5000
 
@@ -16,7 +18,8 @@ const TITLE_ERROR_RE =
 
 const DOMAIN_RE = /^(?:www\.)?[a-z0-9](?:[a-z0-9-]*\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s]*)?$/i
 const SKIP_PROTO_RE = /^(?:file|data|mailto|javascript|blob|chrome|about|hermes):/i
-const LOCAL_HOST_RE = /^(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?$/i
+const LOCAL_HOSTNAME_RE = /^(?:localhost|localhost\.localdomain)$/i
+const LOCAL_HOST_SUFFIXES = ['.corp', '.home', '.internal', '.lan', '.local', '.localdomain']
 
 const HTML_ENTITIES: Record<string, string> = {
   '#39': "'",
@@ -118,6 +121,112 @@ export function urlSlugTitleLabel(value: string): string {
   return hostPathLabel(value)
 }
 
+function parseIpv4Octets(value: string): null | [number, number, number, number] {
+  const parts = value.split('.')
+
+  if (parts.length !== 4) {
+    return null
+  }
+
+  const octets: number[] = []
+
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) {
+      return null
+    }
+
+    const next = Number(part)
+
+    if (!Number.isInteger(next) || next < 0 || next > 255) {
+      return null
+    }
+
+    octets.push(next)
+  }
+
+  return [octets[0]!, octets[1]!, octets[2]!, octets[3]!]
+}
+
+function isPrivateIpv4(value: string): boolean {
+  const octets = parseIpv4Octets(value)
+
+  if (!octets) {
+    return false
+  }
+
+  const [a, b] = octets
+
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    a === 255 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19))
+  )
+}
+
+function isPrivateIpv6(value: string): boolean {
+  const normalized = value.toLowerCase()
+
+  if (normalized === '::' || normalized === '::1') {
+    return true
+  }
+
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) {
+    return true
+  }
+
+  if (normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) {
+    return true
+  }
+
+  if (normalized.startsWith('::ffff:')) {
+    return isPrivateIpv4(normalized.slice('::ffff:'.length))
+  }
+
+  return false
+}
+
+function normalizeHostname(value: string): string {
+  const withoutBrackets = value.replace(/^\[/, '').replace(/\]$/, '')
+  const withoutZoneId = withoutBrackets.split('%', 1)[0]!
+
+  return withoutZoneId.replace(/\.$/, '').toLowerCase()
+}
+
+function isPrivateOrLocalHost(hostname: string): boolean {
+  const normalized = normalizeHostname(hostname)
+
+  if (!normalized) {
+    return true
+  }
+
+  if (LOCAL_HOSTNAME_RE.test(normalized)) {
+    return true
+  }
+
+  if (LOCAL_HOST_SUFFIXES.some(suffix => normalized.endsWith(suffix))) {
+    return true
+  }
+
+  const ipVersion = isIP(normalized)
+
+  if (ipVersion === 4) {
+    return isPrivateIpv4(normalized)
+  }
+
+  if (ipVersion === 6) {
+    return isPrivateIpv6(normalized)
+  }
+
+  // Single-label hostnames are usually LAN names or enterprise intranet aliases.
+  return !normalized.includes('.')
+}
+
 export function isTitleFetchable(value: string): boolean {
   if (!value || SKIP_PROTO_RE.test(value)) {
     return false
@@ -125,7 +234,7 @@ export function isTitleFetchable(value: string): boolean {
 
   const url = parseUrl(value)
 
-  return Boolean(url && /^https?:$/.test(url.protocol) && !LOCAL_HOST_RE.test(url.host))
+  return Boolean(url && /^https?:$/.test(url.protocol) && !isPrivateOrLocalHost(url.hostname))
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -238,7 +347,7 @@ async function fetchHtmlTitle(normalizedUrl: string): Promise<string> {
 
     const html = await readResponseSnippet(response)
 
-    return parseHtmlTitle(html).slice(0, 240)
+    return parseHtmlTitle(html).slice(0, TITLE_MAX_LENGTH)
   } catch {
     return ''
   } finally {
@@ -265,13 +374,16 @@ export function fetchLinkTitle(url: string): Promise<string> {
   }
 
   const promise = fetchHtmlTitle(normalizedUrl)
-    .then(value => usableTitle(value))
+    .then(usableTitle)
+    .catch(() => '')
     .then(clean => {
       cacheTitle(key, clean)
-      titleInflight.delete(key)
       titleSubs.get(key)?.forEach(sub => sub(clean))
 
       return clean
+    })
+    .finally(() => {
+      titleInflight.delete(key)
     })
 
   titleInflight.set(key, promise)
