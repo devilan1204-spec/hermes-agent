@@ -223,7 +223,10 @@ let linuxCopy: 'wl-copy' | 'xclip' | 'xsel' | null | undefined
 
 /** Internal: probe once and cache — wl-copy first, then xclip, then xsel. */
 async function probeLinuxCopy(): Promise<'wl-copy' | 'xclip' | 'xsel' | null> {
-  const opts = { useCwd: false, timeout: 500 }
+  // resolveOnExit: wl-copy daemonizes and the daemon inherits stdio pipes,
+  // so 'close' never fires and the await would hang past the timeout.
+  // 'exit' fires on the immediate child's exit — what we actually care about.
+  const opts = { useCwd: false, timeout: 500, resolveOnExit: true }
 
   const r = await execFileNoThrow('wl-copy', [], opts)
 
@@ -260,7 +263,11 @@ async function probeLinuxCopy(): Promise<'wl-copy' | 'xclip' | 'xsel' | null> {
  * we skip probing entirely and treat linuxCopy as permanently null.
  */
 function copyNative(text: string): boolean {
-  const opts = { input: text, useCwd: false, timeout: 2000 }
+  // resolveOnExit: pbcopy/wl-copy/xclip/xsel/clip all daemonize or hold
+  // the system selection live in a forked process. Without resolveOnExit,
+  // the inherited stdio pipes keep node from seeing 'close' → the
+  // fire-and-forget await never resolves and the actual copy never runs.
+  const opts = { input: text, useCwd: false, timeout: 2000, resolveOnExit: true }
 
   switch (process.platform) {
     case 'darwin':
