@@ -40,7 +40,7 @@ function configPathParts(path: string): string[] {
 }
 
 function safeSet(target: Record<string, unknown>, key: string, value: unknown): void {
-  if (!isSafePart(key)) {
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype' || !key) {
     throw new Error(`Unsafe config key: ${key}`)
   }
   Object.defineProperty(target, key, {
