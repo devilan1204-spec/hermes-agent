@@ -7,7 +7,10 @@ function run(command, args) {
   return new Promise((resolve, reject) => {
     execFile(command, args, (error, stdout, stderr) => {
       if (error) {
-        reject(new Error(`${command} ${args.join(' ')} failed: ${stderr?.trim() || stdout?.trim() || error.message}`))
+        // Intentionally omit args from the rejection message: callers pass
+        // notarization credentials (key id, issuer, key file path) here, and
+        // surfacing them in error output would land in CI logs.
+        reject(new Error(`${command} failed: ${stderr?.trim() || stdout?.trim() || error.message}`))
         return
       }
       resolve()

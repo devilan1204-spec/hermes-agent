@@ -32,7 +32,12 @@ function scrubBacktickNoise(text: string): string {
     const marker = match[2] || '```'
     const info = match[3] || ''
     const body = match[4] || ''
-    const closeRe = new RegExp(`\\n[ \\t]*${marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[ \\t]*(?=\\n|$)`)
+    // `marker` is captured by `(`{3,}|~{3,})` above, so its only meta-character
+    // is the backtick or tilde. Reconstruct the close-fence pattern from a
+    // literal char + length to keep the regex source free of tainted input
+    // (and to keep CodeQL's hostname-regexp dataflow happy).
+    const fenceChar = marker[0] === '~' ? '\\~' : '`'
+    const closeRe = new RegExp(`\\n[ \\t]*${fenceChar}{${marker.length}}[ \\t]*(?=\\n|$)`)
 
     if (!closeRe.test(body) && sanitizeLanguageTag(info) && !isLikelyProseFence(info, body)) {
       protectedRanges.push({ end: text.length, start })

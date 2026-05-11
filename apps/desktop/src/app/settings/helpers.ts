@@ -25,14 +25,30 @@ export const providerPriority = (name: string) => PROVIDER_GROUPS.find(g => g.na
 
 const POLLUTING_PATH_PARTS = new Set(['__proto__', 'constructor', 'prototype'])
 
+function isSafePart(part: string): boolean {
+  return part.length > 0 && !POLLUTING_PATH_PARTS.has(part)
+}
+
 function configPathParts(path: string): string[] {
   const parts = path.split('.')
 
-  if (parts.some(part => !part || POLLUTING_PATH_PARTS.has(part))) {
+  if (!parts.every(isSafePart)) {
     throw new Error(`Unsafe config path: ${path}`)
   }
 
   return parts
+}
+
+function safeSet(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (!isSafePart(key)) {
+    throw new Error(`Unsafe config key: ${key}`)
+  }
+  Object.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  })
 }
 
 export function getNested(obj: HermesConfigRecord, path: string): unknown {
@@ -40,6 +56,10 @@ export function getNested(obj: HermesConfigRecord, path: string): unknown {
 
   for (const part of configPathParts(path)) {
     if (cur == null || typeof cur !== 'object') {
+      return undefined
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(cur, part)) {
       return undefined
     }
 
@@ -57,14 +77,20 @@ export function setNested(obj: HermesConfigRecord, path: string, value: unknown)
   for (let i = 0; i < parts.length - 1; i += 1) {
     const part = parts[i]
 
-    if (cur[part] == null || typeof cur[part] !== 'object') {
-      cur[part] = {}
+    if (!isSafePart(part)) {
+      throw new Error(`Unsafe config path part: ${part}`)
+    }
+
+    const existing = Object.prototype.hasOwnProperty.call(cur, part) ? cur[part] : undefined
+
+    if (existing == null || typeof existing !== 'object') {
+      safeSet(cur, part, {})
     }
 
     cur = cur[part] as Record<string, unknown>
   }
 
-  cur[parts[parts.length - 1]] = value
+  safeSet(cur, parts[parts.length - 1], value)
 
   return clone
 }
