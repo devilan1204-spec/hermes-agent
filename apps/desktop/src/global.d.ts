@@ -25,23 +25,93 @@ declare global {
       stopPreviewFileWatch: (id: string) => Promise<boolean>
       setPreviewShortcutActive?: (active: boolean) => void
       openExternal: (url: string) => Promise<void>
+      fetchLinkTitle: (url: string) => Promise<string>
       readDir: (path: string) => Promise<HermesReadDirResult>
       gitRoot?: (path: string) => Promise<string | null>
       onClosePreviewRequested?: (callback: () => void) => () => void
+      onOpenUpdatesRequested?: (callback: () => void) => () => void
+      onWindowStateChanged?: (callback: (payload: HermesWindowState) => void) => () => void
       onPreviewFileChanged: (callback: (payload: HermesPreviewFileChanged) => void) => () => void
       onBackendExit: (callback: (payload: BackendExit) => void) => () => void
       onBootProgress: (callback: (payload: DesktopBootProgress) => void) => () => void
+      getVersion: () => Promise<DesktopVersionInfo>
+      updates: {
+        check: () => Promise<DesktopUpdateStatus>
+        apply: (opts?: DesktopUpdateApplyOptions) => Promise<DesktopUpdateApplyResult>
+        getBranch: () => Promise<{ branch: string }>
+        setBranch: (name: string) => Promise<{ branch: string }>
+        onProgress: (callback: (payload: DesktopUpdateProgress) => void) => () => void
+      }
     }
   }
 }
 
+export interface DesktopVersionInfo {
+  appVersion: string
+  electronVersion: string
+  nodeVersion: string
+  platform: string
+  hermesRoot: string
+}
+
+export interface DesktopUpdateCommit {
+  sha: string
+  summary: string
+  author: string
+  at: number
+}
+
+export interface DesktopUpdateStatus {
+  supported: boolean
+  branch?: string
+  currentBranch?: string
+  reason?: string
+  message?: string
+  error?: string
+  behind?: number
+  currentSha?: string
+  targetSha?: string
+  commits?: DesktopUpdateCommit[]
+  dirty?: boolean
+  fetchedAt?: number
+}
+
+export type DesktopUpdateDirtyStrategy = 'abort' | 'stash' | 'force'
+
+export interface DesktopUpdateApplyOptions {
+  dirtyStrategy?: DesktopUpdateDirtyStrategy
+}
+
+export interface DesktopUpdateApplyResult {
+  ok: boolean
+  branch?: string
+  error?: string
+  message?: string
+}
+
+export type DesktopUpdateStage = 'idle' | 'prepare' | 'fetch' | 'pull' | 'pydeps' | 'restart' | 'error'
+
+export interface DesktopUpdateProgress {
+  stage: DesktopUpdateStage
+  message: string
+  percent: number | null
+  error: string | null
+  at: number
+}
+
 export interface HermesConnection {
   baseUrl: string
+  isFullscreen: boolean
   mode?: 'local' | 'remote'
   source?: 'env' | 'local' | 'settings'
   token: string
   wsUrl: string
   logs: string[]
+  windowButtonPosition: { x: number; y: number } | null
+}
+
+export interface HermesWindowState {
+  isFullscreen: boolean
   windowButtonPosition: { x: number; y: number } | null
 }
 

@@ -39,6 +39,7 @@ import { upsertDesktopActionTask } from '@/store/activity'
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
 import { $sessions } from '@/store/session'
 
+import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { OverlayActionButton, OverlayCard, overlayCardClass, OverlayIconButton } from '../overlays/overlay-chrome'
 import { OverlaySearchInput } from '../overlays/overlay-search-input'
 import { OverlayMain, OverlayNavItem, OverlaySidebar, OverlaySplitLayout } from '../overlays/overlay-split-layout'
@@ -46,6 +47,8 @@ import { OverlayView } from '../overlays/overlay-view'
 import { ARTIFACTS_ROUTE, MESSAGING_ROUTE, NEW_CHAT_ROUTE, SETTINGS_ROUTE, SKILLS_ROUTE } from '../routes'
 
 export type CommandCenterSection = 'models' | 'sessions' | 'system'
+
+const SECTIONS = ['sessions', 'system', 'models'] as const satisfies readonly CommandCenterSection[]
 
 interface CommandCenterViewProps {
   initialSection?: CommandCenterSection
@@ -186,7 +189,9 @@ export function CommandCenterView({
 }: CommandCenterViewProps) {
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
-  const [section, setSection] = useState<CommandCenterSection>(initialSection ?? 'sessions')
+
+  const [section, setSection] = useRouteEnumParam('section', SECTIONS, initialSection ?? 'sessions')
+
   const [query, setQuery] = useState('')
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchGroups, setSearchGroups] = useState<CommandCenterSearchGroup[]>([])
@@ -319,12 +324,6 @@ export function CommandCenterView({
       setModelsLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    if (initialSection && initialSection !== section) {
-      setSection(initialSection)
-    }
-  }, [initialSection, section])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -536,7 +535,7 @@ export function CommandCenterView({
 
       onOpenSession(result.sessionId)
     },
-    [onNavigateRoute, onOpenSession]
+    [onNavigateRoute, onOpenSession, setSection]
   )
 
   return (
@@ -555,7 +554,7 @@ export function CommandCenterView({
     >
       <OverlaySplitLayout>
         <OverlaySidebar>
-          {(['sessions', 'system', 'models'] as const).map(value => (
+          {SECTIONS.map(value => (
             <OverlayNavItem
               active={section === value}
               icon={value === 'sessions' ? Pin : value === 'system' ? Activity : Cpu}

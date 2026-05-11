@@ -257,6 +257,7 @@ export function ChatView({
       <div className="relative min-h-0 max-w-full flex-1 overflow-hidden rounded-b-[1.0625rem] bg-transparent contain-[layout_paint]">
         <AssistantRuntimeProvider runtime={runtime}>
           <Thread
+            clampToComposer={showChatBar}
             intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
             loading={threadLoading}
             onBranchInNewChat={onBranchInNewChat}

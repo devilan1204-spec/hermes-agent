@@ -311,7 +311,8 @@ export const MODE_OPTIONS: ModeOption[] = [
   { id: 'system', label: 'System', description: 'Follow macOS appearance', icon: Monitor }
 ]
 
-export const SEARCH_PLACEHOLDER: Record<'config' | 'gateway' | 'keys' | 'tools', string> = {
+export const SEARCH_PLACEHOLDER: Record<'about' | 'config' | 'gateway' | 'keys' | 'tools', string> = {
+  about: 'About Hermes Desktop',
   config: 'Search settings...',
   gateway: 'Gateway connection...',
   keys: 'Search API keys...',

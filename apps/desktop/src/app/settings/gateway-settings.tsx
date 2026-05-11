@@ -192,7 +192,7 @@ export function GatewaySettings() {
         </div>
         <p className="mt-2 max-w-2xl text-xs leading-5 text-muted-foreground">
           Hermes Desktop starts its own local gateway by default. Use a remote gateway when you want this app to
-          control an already-running Hermes dashboard backend on another machine or behind a trusted proxy.
+          control an already-running Hermes backend on another machine or behind a trusted proxy.
         </p>
       </div>
 
@@ -212,7 +212,7 @@ export function GatewaySettings() {
       <div className="grid gap-3 sm:grid-cols-2">
         <ModeCard
           active={state.mode === 'local'}
-          description="Start a private Hermes dashboard backend on localhost. This is the default and works offline."
+          description="Start a private Hermes backend on localhost. This is the default and works offline."
           disabled={state.envOverride}
           icon={Monitor}
           onSelect={() => setState(current => ({ ...current, mode: 'local' }))}
@@ -220,7 +220,7 @@ export function GatewaySettings() {
         />
         <ModeCard
           active={state.mode === 'remote'}
-          description="Connect this desktop shell to a remote Hermes dashboard backend using its session token."
+          description="Connect this desktop shell to a remote Hermes backend using its session token."
           disabled={state.envOverride}
           icon={Globe}
           onSelect={() => setState(current => ({ ...current, mode: 'remote' }))}

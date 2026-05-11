@@ -45,9 +45,6 @@ async function startBrowserDownload(src: string) {
   window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000)
 }
 
-const imageActionButtonClass =
-  'absolute right-2 top-2 grid size-8 place-items-center rounded-full border border-border/70 bg-background/80 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 disabled:opacity-50'
-
 export interface ZoomableImageProps extends ComponentProps<'img'> {
   containerClassName?: string
   slot?: string
@@ -125,7 +122,7 @@ export function ZoomableImage({ className, containerClassName, src, alt, slot, .
         data-slot={slot ?? 'aui_zoomable-image'}
       >
         <button
-          className="block max-w-full cursor-zoom-in bg-transparent p-0 text-left"
+          className="contents"
           disabled={!canOpen}
           onClick={() => canOpen && setLightboxOpen(true)}
           title={canOpen ? 'Open image' : undefined}
@@ -153,7 +150,7 @@ function ImageActionButton({
     <button
       aria-label={saving ? 'Saving image' : 'Download image'}
       className={cn(
-        imageActionButtonClass,
+        'absolute right-2 top-2 grid size-8 place-items-center rounded-full border border-border/70 bg-background/80 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 disabled:opacity-50',
         variant === 'inline' ? 'group-hover/image:opacity-100' : 'group-hover/lightbox:opacity-100'
       )}
       disabled={saving}

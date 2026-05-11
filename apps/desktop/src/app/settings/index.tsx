@@ -3,14 +3,16 @@ import { useEffect, useRef, useState } from 'react'
 
 import { getHermesConfigDefaults, getHermesConfigRecord, saveHermesConfig } from '@/hermes'
 import { triggerHaptic } from '@/lib/haptics'
-import { Globe, KeyRound, Package } from '@/lib/icons'
+import { Globe, Info, KeyRound, Package } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 
+import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { OverlayIconButton } from '../overlays/overlay-chrome'
 import { OverlaySearchInput } from '../overlays/overlay-search-input'
 import { OverlayMain, OverlayNavItem, OverlaySidebar, OverlaySplitLayout } from '../overlays/overlay-split-layout'
 import { OverlayView } from '../overlays/overlay-view'
 
+import { AboutSettings } from './about-settings'
 import { AppearanceSettings } from './appearance-settings'
 import { ConfigSettings } from './config-settings'
 import { SEARCH_PLACEHOLDER, SECTIONS } from './constants'
@@ -19,10 +21,19 @@ import { KeysSettings } from './keys-settings'
 import { ToolsSettings } from './tools-settings'
 import type { SettingsPageProps, SettingsQueryKey, SettingsView as SettingsViewId } from './types'
 
+const SETTINGS_VIEWS: readonly SettingsViewId[] = [
+  ...SECTIONS.map(s => `config:${s.id}` as SettingsViewId),
+  'gateway',
+  'keys',
+  'tools',
+  'about'
+]
+
 export function SettingsView({ onClose, onConfigSaved }: SettingsPageProps) {
-  const [activeView, setActiveView] = useState<SettingsViewId>('config:model')
+  const [activeView, setActiveView] = useRouteEnumParam('tab', SETTINGS_VIEWS, 'config:model' as SettingsViewId)
 
   const [queries, setQueries] = useState<Record<SettingsQueryKey, string>>({
+    about: '',
     config: '',
     gateway: '',
     keys: '',
@@ -136,6 +147,13 @@ export function SettingsView({ onClose, onConfigSaved }: SettingsPageProps) {
             label="Skills & Tools"
             onClick={() => setActiveView('tools')}
           />
+          <div className="my-2 h-px bg-border/30" />
+          <OverlayNavItem
+            active={activeView === 'about'}
+            icon={Info}
+            label="About"
+            onClick={() => setActiveView('about')}
+          />
           <div className="mt-auto flex items-center gap-1 pt-2">
             <OverlayIconButton onClick={() => void exportConfig()} title="Export config">
               <IconDownload className="size-3.5" />
@@ -165,6 +183,8 @@ export function SettingsView({ onClose, onConfigSaved }: SettingsPageProps) {
         <OverlayMain className="p-0">
           {activeView === 'config:appearance' ? (
             <AppearanceSettings />
+          ) : activeView === 'about' ? (
+            <AboutSettings />
           ) : activeView === 'gateway' ? (
             <GatewaySettings />
           ) : activeView.startsWith('config:') ? (

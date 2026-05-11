@@ -18,6 +18,7 @@ import { useElapsedSeconds } from '@/components/assistant-ui/activity-timer'
 import { ActivityTimerText } from '@/components/assistant-ui/activity-timer-text'
 import { ClarifyTool } from '@/components/assistant-ui/clarify-tool'
 import { DirectiveContent, DirectiveText } from '@/components/assistant-ui/directive-text'
+import { DisclosureRow } from '@/components/assistant-ui/disclosure-row'
 import { GeneratedImageProvider, useGeneratedImageContext } from '@/components/assistant-ui/generated-image-context'
 import { ImageGenerationPlaceholder } from '@/components/assistant-ui/image-generation-placeholder'
 import { Intro, type IntroProps } from '@/components/assistant-ui/intro'
@@ -104,27 +105,45 @@ function pinElementToBottom(el: HTMLElement) {
 }
 
 export const Thread: FC<{
+  clampToComposer?: boolean
   intro?: IntroProps
   loading?: ThreadLoadingState
   onBranchInNewChat?: (messageId: string) => void
   sessionKey?: string | null
-}> = ({ intro, loading, onBranchInNewChat, sessionKey }) => {
+}> = ({ clampToComposer = false, intro, loading, onBranchInNewChat, sessionKey }) => {
+  const introHero = useAuiState(s => Boolean(intro) && s.thread.isEmpty)
+
   return (
     <GeneratedImageProvider>
       <ThreadPrimitive.Root className="relative grid h-full min-h-0 max-w-full grid-rows-[minmax(0,1fr)] overflow-hidden bg-transparent contain-[layout_paint]">
         <ThreadPrimitive.ViewportProvider>
           <StickToBottom
-            className="relative h-full min-h-0 max-w-full overflow-hidden contain-[layout_paint]"
+            className="relative min-h-0 max-w-full overflow-hidden contain-[layout_paint]"
             initial="instant"
             resize="instant"
+            style={{ height: clampToComposer ? 'var(--thread-viewport-height)' : '100%' }}
           >
             <ThreadScrollSync sessionKey={sessionKey} />
             <StickToBottom.Content
-              className="scroll-auto pb-(--thread-bottom-pad) mx-auto flex w-full max-w-[calc(var(--composer-width)-2rem)] min-w-0 flex-col gap-3 px-4 pt-[calc(var(--vsq)*19)] sm:px-6 lg:px-8"
+              className={cn(
+                'scroll-auto mx-auto min-h-full w-full max-w-[calc(var(--composer-width)-2rem)] min-w-0 gap-3 px-4 sm:px-6 lg:px-8',
+                introHero
+                  ? 'grid grid-rows-[minmax(0,1fr)_auto] py-[calc(var(--vsq)*12)]'
+                  : 'flex flex-col pt-[calc(var(--vsq)*19)]'
+              )}
               data-slot="aui_thread-content"
               scrollClassName="overflow-x-hidden overflow-y-auto overscroll-contain"
             >
-              <AuiIf condition={s => Boolean(intro) && s.thread.isEmpty}>{intro && <Intro {...intro} />}</AuiIf>
+              <AuiIf condition={s => Boolean(intro) && s.thread.isEmpty}>
+                {intro ? (
+                  <div
+                    className="flex min-h-0 w-full flex-col items-center justify-center"
+                    style={{ paddingBottom: 'var(--composer-measured-height)' }}
+                  >
+                    <Intro {...intro} />
+                  </div>
+                ) : null}
+              </AuiIf>
               <ThreadPrimitive.Messages
                 components={{
                   AssistantMessage: () => <AssistantMessage onBranchInNewChat={onBranchInNewChat} />,
@@ -134,7 +153,6 @@ export const Thread: FC<{
                 }}
               />
               {loading === 'response' && <ResponseLoadingIndicator />}
-              <ComposerClearance />
             </StickToBottom.Content>
           </StickToBottom>
         </ThreadPrimitive.ViewportProvider>
@@ -305,91 +323,6 @@ const ThreadScrollSync: FC<{ sessionKey?: string | null }> = ({ sessionKey }) =>
   return null
 }
 
-const COMPOSER_BREATHING_ROOM_PX = 36
-const DEFAULT_COMPOSER_CLEARANCE_PX = 192
-
-const ComposerClearance: FC = () => {
-  const [height, setHeight] = useState<number>(() => {
-    if (typeof document === 'undefined') {
-      return DEFAULT_COMPOSER_CLEARANCE_PX
-    }
-
-    const composer = document.querySelector<HTMLElement>('[data-slot="composer-root"]')
-
-    return composer
-      ? composer.getBoundingClientRect().height + COMPOSER_BREATHING_ROOM_PX
-      : DEFAULT_COMPOSER_CLEARANCE_PX
-  })
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return
-    }
-
-    let composerObserver: ResizeObserver | null = null
-    let observedComposer: HTMLElement | null = null
-
-    const apply = (composer: HTMLElement) => {
-      const h = composer.getBoundingClientRect().height
-
-      setHeight(prev => {
-        const next = Math.round(h + COMPOSER_BREATHING_ROOM_PX)
-
-        return Math.abs(prev - next) < 1 ? prev : next
-      })
-    }
-
-    const bindComposer = () => {
-      if (typeof document === 'undefined') {
-        return false
-      }
-
-      const composer = document.querySelector<HTMLElement>('[data-slot="composer-root"]')
-
-      if (!composer || composer === observedComposer) {
-        return false
-      }
-
-      observedComposer = composer
-      apply(composer)
-      composerObserver?.disconnect()
-      composerObserver = new ResizeObserver(() => apply(composer))
-      composerObserver.observe(composer)
-
-      return true
-    }
-
-    bindComposer()
-    let bindRaf: number | null = null
-    let bindAttempts = 0
-
-    const tryBindComposer = () => {
-      if (bindComposer()) {
-        return
-      }
-
-      if (bindAttempts >= 120) {
-        return
-      }
-
-      bindAttempts += 1
-      bindRaf = window.requestAnimationFrame(tryBindComposer)
-    }
-
-    tryBindComposer()
-
-    return () => {
-      composerObserver?.disconnect()
-
-      if (bindRaf !== null) {
-        window.cancelAnimationFrame(bindRaf)
-      }
-    }
-  }, [])
-
-  return <div aria-hidden="true" className="shrink-0" style={{ height: `${height}px` }} />
-}
-
 function pickPrimaryPreviewTarget(targets: string[]): string[] {
   if (targets.length <= 1) {
     return targets
@@ -438,7 +371,7 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
 
   return (
     <MessagePrimitive.Root
-      className="group flex w-full min-w-0 max-w-full flex-col gap-2 self-start overflow-hidden"
+      className="group flex w-full min-w-0 max-w-full flex-col gap-0 self-start overflow-hidden"
       data-role="assistant"
       data-slot="aui_assistant-message-root"
     >
@@ -471,18 +404,25 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
         </MessagePrimitive.Error>
       </div>
       {messageText.trim().length > 0 && (
-        <div className="min-h-6">
-          <AssistantFooter messageId={messageId} messageText={messageText} onBranchInNewChat={onBranchInNewChat} />
-        </div>
+        <AssistantFooter messageId={messageId} messageText={messageText} onBranchInNewChat={onBranchInNewChat} />
       )}
     </MessagePrimitive.Root>
   )
 }
 
-const STATUS_ROW_CLASS = 'flex max-w-full items-center gap-2 self-start text-sm text-muted-foreground/70'
-
-const StatusRow: FC<{ children: ReactNode; label: string }> = ({ children, label }) => (
-  <div aria-label={label} aria-live="polite" className={STATUS_ROW_CLASS} role="status">
+const StatusRow: FC<{ children: ReactNode; label: string } & React.ComponentPropsWithoutRef<'div'>> = ({
+  children,
+  label,
+  className,
+  ...rest
+}) => (
+  <div
+    aria-label={label}
+    aria-live="polite"
+    className={cn('flex max-w-full items-center gap-2 self-start text-sm text-muted-foreground/70', className)}
+    role="status"
+    {...rest}
+  >
     {children}
   </div>
 )
@@ -491,7 +431,7 @@ const ResponseLoadingIndicator: FC = () => {
   const elapsed = useElapsedSeconds()
 
   return (
-    <StatusRow label="Hermes is loading a response">
+    <StatusRow data-slot="aui_response-loading" label="Hermes is loading a response">
       <span aria-hidden="true" className="dither inline-block size-3 rounded-[2px] text-midground/80 animate-pulse" />
       <ActivityTimerText seconds={elapsed} />
     </StatusRow>
@@ -537,25 +477,12 @@ const ThinkingDisclosure: FC<{
   const elapsed = useElapsedSeconds(pending)
 
   return (
-    <div className="text-sm text-muted-foreground" data-slot="tool-block">
-      <button
-        aria-expanded={open}
-        className="group/thinking-row grid w-full min-w-0 cursor-pointer grid-cols-[var(--message-text-indent)_minmax(0,1fr)] items-start py-0.5 pr-2 text-left text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--dt-midground)_8%,transparent)] hover:text-foreground"
-        onClick={() => setOpen(value => !value)}
-        type="button"
-      >
-        <span className="flex h-[1.1rem] items-center justify-center">
-          <ChevronRightIcon
-            className={cn(
-              'size-3 text-muted-foreground/55 transition-transform group-hover/thinking-row:text-muted-foreground/85',
-              open && 'rotate-90'
-            )}
-          />
-        </span>
+    <div className="text-sm text-muted-foreground" data-slot="aui_thinking-disclosure">
+      <DisclosureRow onToggle={() => setOpen(v => !v)} open={open}>
         <span className="flex min-w-0 items-baseline gap-1.5">
           <span
             className={cn(
-              'text-[0.78rem] font-medium leading-[1.1rem] text-foreground/75',
+              'text-[0.78rem] font-medium leading-[1.1rem] text-foreground/85',
               pending && 'shimmer text-foreground/55'
             )}
           >
@@ -565,9 +492,11 @@ const ThinkingDisclosure: FC<{
             <ActivityTimerText className="text-[0.625rem] tabular-nums text-muted-foreground/55" seconds={elapsed} />
           )}
         </span>
-      </button>
+      </DisclosureRow>
       {open && (
-        <div className="mt-2 w-full min-w-0 max-w-full overflow-hidden pl-(--message-text-indent) pr-2 wrap-anywhere pb-1">{children}</div>
+        <div className="mt-2 w-full min-w-0 max-w-full overflow-hidden pl-(--message-text-indent) pr-2 wrap-anywhere pb-1">
+          {children}
+        </div>
       )}
     </div>
   )
@@ -632,22 +561,20 @@ function formatMessageTimestamp(value: Date | string | number | undefined): stri
   return SHORT_FMT.format(date)
 }
 
-const ACTION_BAR_CLASS = cn(
-  'absolute inset-0 flex gap-1 text-muted-foreground opacity-0 transition-opacity duration-100',
-  'pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100',
-  'focus-within:pointer-events-auto focus-within:opacity-100'
-)
-
 const AssistantActionBar: FC<MessageActionProps> = ({ messageId, messageText, onBranchInNewChat }) => {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <div className="relative h-6 w-20 shrink-0">
+    <div className="relative shrink-0">
       <ActionBarPrimitive.Root
-        className={cn(ACTION_BAR_CLASS, menuOpen && 'pointer-events-auto opacity-100')}
+        className={cn(
+          'relative flex flex-row items-center gap-2 py-2.5 opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100',
+          menuOpen && 'pointer-events-auto opacity-100 [&_button]:opacity-100'
+        )}
+        data-slot="aui_msg-actions"
         hideWhenRunning
       >
-        <CopyMessageButton text={messageText} />
+        <CopyButton appearance="icon" buttonSize="icon" disabled={!messageText} label="Copy" text={messageText} />
         <ActionBarPrimitive.Reload asChild>
           <TooltipIconButton onClick={() => triggerHaptic('submit')} tooltip="Refresh">
             <RefreshCwIcon />
@@ -670,19 +597,6 @@ const AssistantActionBar: FC<MessageActionProps> = ({ messageId, messageText, on
         </DropdownMenu>
       </ActionBarPrimitive.Root>
     </div>
-  )
-}
-
-const CopyMessageButton: FC<{ text: string }> = ({ text }) => {
-  return (
-    <CopyButton
-      appearance="icon"
-      buttonSize="icon"
-      className="aui-button-icon size-6 p-1"
-      disabled={!text}
-      label="Copy"
-      text={text}
-    />
   )
 }
 
@@ -797,17 +711,19 @@ const UserMessage: FC = () => {
           </div>
         )}
       </div>
-      <div className="min-h-6">
-        <UserActionBar messageText={messageText} />
-      </div>
+      <UserActionBar messageText={messageText} />
     </MessagePrimitive.Root>
   )
 }
 
 const UserActionBar: FC<{ messageText: string }> = ({ messageText }) => (
-  <div className="relative h-6 w-14 shrink-0">
-    <ActionBarPrimitive.Root className={ACTION_BAR_CLASS} hideWhenRunning>
-      <CopyMessageButton text={messageText} />
+  <div className="relative shrink-0">
+    <ActionBarPrimitive.Root
+      className="relative flex flex-row items-center gap-2 py-2.5 opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+      data-slot="aui_msg-actions"
+      hideWhenRunning
+    >
+      <CopyButton appearance="icon" buttonSize="icon" disabled={!messageText} label="Copy" text={messageText} />
       <ActionBarPrimitive.Edit asChild>
         <TooltipIconButton onClick={() => triggerHaptic('selection')} tooltip="Edit">
           <PencilIcon />

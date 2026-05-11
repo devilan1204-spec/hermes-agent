@@ -160,6 +160,7 @@ export function DesktopOnboardingOverlay({ enabled, onCompleted, requestGateway 
 function Preparing({ boot }: { boot: DesktopBootState }) {
   const progress = Math.max(2, Math.min(100, Math.round(boot.progress)))
   const hasError = Boolean(boot.error)
+  const installing = boot.phase.startsWith('runtime.')
 
   const resetToLocalGateway = async () => {
     await window.hermesDesktop?.applyConnectionConfig({ mode: 'local' })
@@ -168,7 +169,9 @@ function Preparing({ boot }: { boot: DesktopBootState }) {
   return (
     <div className="grid gap-3" role="status">
       <p className="text-sm text-muted-foreground">
-        While we get you set up — Hermes is finishing install. This usually takes under a minute on first run.
+        {installing
+          ? 'Hermes is finishing install. This usually takes under a minute on first run.'
+          : 'Starting Hermes…'}
       </p>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
         <div

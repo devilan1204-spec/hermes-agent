@@ -35,6 +35,7 @@ import {
   setSessions,
   setSessionsLoading
 } from '../store/session'
+import { openUpdatesWindow, startUpdatePoller, stopUpdatePoller } from '../store/updates'
 
 import { ChatView } from './chat'
 import { useComposerActions } from './chat/hooks/use-composer-actions'
@@ -67,6 +68,7 @@ import { useStatusbarItems } from './shell/hooks/use-statusbar-items'
 import type { StatusbarItem } from './shell/statusbar-controls'
 import type { TitlebarTool } from './shell/titlebar-controls'
 import { useGroupRegistry } from './shell/use-group-registry'
+import { UpdatesOverlay } from './updates-overlay'
 
 const AgentsView = lazy(async () => ({ default: (await import('./agents')).AgentsView }))
 const ArtifactsView = lazy(async () => ({ default: (await import('./artifacts')).ArtifactsView }))
@@ -138,6 +140,16 @@ export function DesktopController() {
   useEffect(() => {
     window.hermesDesktop?.setPreviewShortcutActive?.(Boolean(chatOpen && (filePreviewTarget || previewTarget)))
   }, [chatOpen, filePreviewTarget, previewTarget])
+
+  useEffect(() => {
+    startUpdatePoller()
+    const unsubscribe = window.hermesDesktop?.onOpenUpdatesRequested?.(() => openUpdatesWindow())
+
+    return () => {
+      unsubscribe?.()
+      stopUpdatePoller()
+    }
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -407,6 +419,7 @@ export function DesktopController() {
         requestGateway={requestGateway}
       />
       <ModelPickerOverlay gateway={gatewayRef.current || undefined} onSelect={selectModel} />
+      <UpdatesOverlay />
 
       {settingsOpen && (
         <Suspense fallback={null}>

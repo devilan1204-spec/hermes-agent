@@ -2,12 +2,19 @@ import { atom } from 'nanostores'
 
 export type NotificationKind = 'error' | 'warning' | 'info' | 'success'
 
+export interface NotificationAction {
+  label: string
+  onClick: () => void
+}
+
 export interface AppNotification {
   id: string
   kind: NotificationKind
   title?: string
   message: string
   detail?: string
+  action?: NotificationAction
+  onDismiss?: () => void
   createdAt: number
 }
 
@@ -17,6 +24,8 @@ interface NotificationInput {
   title?: string
   message: string
   detail?: string
+  action?: NotificationAction
+  onDismiss?: () => void
   durationMs?: number
 }
 
@@ -97,6 +106,8 @@ export function notify(input: NotificationInput): string {
     title: input.title,
     message: input.message,
     detail: input.detail,
+    action: input.action,
+    onDismiss: input.onDismiss,
     createdAt: Date.now()
   }
 
@@ -130,7 +141,9 @@ export function notifyError(error: unknown, fallback: string): string {
 export function dismissNotification(id: string) {
   window.clearTimeout(timers.get(id))
   timers.delete(id)
+  const dismissed = $notifications.get().find(item => item.id === id)
   $notifications.set($notifications.get().filter(item => item.id !== id))
+  dismissed?.onDismiss?.()
 }
 
 export function clearNotifications() {
@@ -139,5 +152,9 @@ export function clearNotifications() {
   }
 
   timers.clear()
+  const all = $notifications.get()
   $notifications.set([])
+  for (const item of all) {
+    item.onDismiss?.()
+  }
 }

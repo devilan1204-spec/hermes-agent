@@ -1,5 +1,6 @@
 import { useStore } from '@nanostores/react'
 import type { CSSProperties, ReactNode } from 'react'
+import { useSyncExternalStore } from 'react'
 
 import { Backdrop } from '@/components/Backdrop'
 import { PaneShell } from '@/components/pane-shell'
@@ -28,6 +29,21 @@ interface AppShellProps {
   titlebarTools?: readonly TitlebarTool[]
 }
 
+// Renderer-side fallback so layout snaps even when the main-process fullscreen event
+// hasn't landed yet (e.g. dev reloads, before the IPC bridge is wired).
+function subscribeWindowSize(cb: () => void) {
+  window.addEventListener('resize', cb)
+  window.addEventListener('fullscreenchange', cb)
+
+  return () => {
+    window.removeEventListener('resize', cb)
+    window.removeEventListener('fullscreenchange', cb)
+  }
+}
+
+const viewportIsFullscreen = () =>
+  window.innerWidth >= window.screen.width && window.innerHeight >= window.screen.height
+
 export function AppShell({
   children,
   leftStatusbarItems,
@@ -41,9 +57,9 @@ export function AppShell({
   const fileBrowserOpen = useStore($fileBrowserOpen)
   const fileBrowserWidthOverride = useStore($paneWidthOverride(FILE_BROWSER_PANE_ID))
   const connection = useStore($connection)
-
-  const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition)
-
+  const viewportFullscreen = useSyncExternalStore(subscribeWindowSize, viewportIsFullscreen, () => false)
+  const isFullscreen = Boolean(connection?.isFullscreen) || viewportFullscreen
+  const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
   const titlebarContentInset = sidebarOpen
     ? 0
     : titlebarControls.left + TITLEBAR_HEIGHT + Math.round(TITLEBAR_HEIGHT / 2)
@@ -101,7 +117,7 @@ export function AppShell({
       <TitlebarControls leftTools={leftTitlebarTools} onOpenSettings={onOpenSettings} tools={titlebarTools} />
 
       <Backdrop />
-      <main className="relative z-[3] flex h-screen w-full flex-col overflow-hidden pr-0.75 pb-0.75 pt-0.75 transition-none">
+      <main className="relative z-3 flex h-screen w-full flex-col overflow-hidden pr-0.75 pt-0.75 transition-none">
         <PaneShell className="min-h-0 flex-1">
           <div
             aria-hidden="true"

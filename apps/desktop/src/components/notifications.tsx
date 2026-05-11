@@ -102,6 +102,18 @@ function NotificationItem({ notification }: { notification: AppNotification }) {
         <AlertDescription className="col-start-auto">
           <p className="m-0">{notification.message}</p>
           {hasDetail && <NotificationDetail detail={notification.detail || ''} />}
+          {notification.action && (
+            <button
+              className="mt-1.5 inline-flex items-center rounded-md bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25"
+              onClick={() => {
+                notification.action?.onClick()
+                dismissNotification(notification.id)
+              }}
+              type="button"
+            >
+              {notification.action.label}
+            </button>
+          )}
         </AlertDescription>
       </div>
       <button

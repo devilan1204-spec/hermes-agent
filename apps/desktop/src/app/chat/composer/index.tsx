@@ -17,6 +17,7 @@ import {
 
 import { formatRefValue, hermesDirectiveFormatter } from '@/components/assistant-ui/directive-text'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { chatMessageText } from '@/lib/chat-messages'
 import { contextPath } from '@/lib/chat-runtime'
 import { DATA_IMAGE_URL_RE, dataUrlToBlob } from '@/lib/embedded-images'
@@ -118,7 +119,7 @@ const COMPOSER_FROST_CLASS = cn(
   'bg-[color-mix(in_srgb,var(--dt-card)_72%,transparent)]',
   'backdrop-blur-[0.75rem] backdrop-saturate-[1.12]',
   '[-webkit-backdrop-filter:blur(0.75rem)_saturate(1.12)]',
-  'transition-[background-color,backdrop-filter,-webkit-backdrop-filter] duration-150 ease-out',
+  'transition-[background-color] duration-150 ease-out',
   'group-data-[thread-scrolled-up]/composer:bg-[color-mix(in_srgb,var(--dt-card)_48%,transparent)]',
   'group-focus-within/composer:bg-[var(--dt-card)]',
   'group-focus-within/composer:[backdrop-filter:none]',
@@ -201,6 +202,7 @@ export function ChatBar({
   const scrolledUp = useStore($threadScrolledUp)
 
   const composerRef = useRef<HTMLFormElement | null>(null)
+  const composerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<HTMLDivElement | null>(null)
   const glassShellRef = useRef<HTMLDivElement | null>(null)
   const draftRef = useRef(draft)
@@ -280,24 +282,38 @@ export function ChatBar({
     }
   }, [draft, expanded])
 
-  useEffect(() => {
-    const el = composerRef.current
+  const syncComposerMetrics = useCallback(() => {
+    const composer = composerRef.current
 
-    if (!el) {
+    if (!composer) {
       return
     }
 
-    const ro = new ResizeObserver(() => {
-      const width = el.getBoundingClientRect().width
+    const { height, width } = composer.getBoundingClientRect()
+    const surfaceHeight = composerSurfaceRef.current?.getBoundingClientRect().height
+    const root = document.documentElement
 
-      if (width > 0) {
-        setTight(width < COMPOSER_STACK_BREAKPOINT_PX)
-      }
-    })
+    if (width > 0) {
+      setTight(width < COMPOSER_STACK_BREAKPOINT_PX)
+    }
 
-    ro.observe(el)
+    if (height > 0) {
+      root.style.setProperty('--composer-measured-height', `${Math.round(height)}px`)
+    }
 
-    return () => ro.disconnect()
+    if (surfaceHeight && surfaceHeight > 0) {
+      root.style.setProperty('--composer-surface-measured-height', `${Math.round(surfaceHeight)}px`)
+    }
+  }, [])
+
+  useResizeObserver(syncComposerMetrics, composerRef, composerSurfaceRef)
+
+  useEffect(() => {
+    return () => {
+      const root = document.documentElement
+      root.style.removeProperty('--composer-measured-height')
+      root.style.removeProperty('--composer-surface-measured-height')
+    }
   }, [])
 
   const insertText = (text: string) => {
@@ -965,13 +981,14 @@ export function ChatBar({
             </div>
             <div
               className={cn(
-                'relative z-4 isolate rounded-[inherit] border border-[color-mix(in_srgb,var(--dt-midground)_18%,var(--dt-input))] shadow-composer transition-[border-color,box-shadow] duration-200 ease-out',
-                'group-focus-within/composer:border-ring/45 group-focus-within/composer:shadow-composer-focus',
+                'relative z-4 isolate rounded-[inherit] border border-[color-mix(in_srgb,var(--dt-composer-ring)_calc(18%*var(--composer-ring-strength)),var(--dt-input))] shadow-composer transition-[border-color,box-shadow] duration-200 ease-out',
+                'group-focus-within/composer:border-[color-mix(in_srgb,var(--dt-composer-ring)_calc(45%*var(--composer-ring-strength)),transparent)] group-focus-within/composer:shadow-composer-focus',
                 'group-has-data-[state=open]/composer:border-t-transparent',
-                'group-has-data-[state=open]/composer:shadow-[0_0.0625rem_0_0.0625rem_color-mix(in_srgb,var(--dt-ring)_35%,transparent),0_0.5rem_1.5rem_color-mix(in_srgb,var(--shadow-ink)_6%,transparent)]',
+                'group-has-data-[state=open]/composer:shadow-[0_0.0625rem_0_0.0625rem_color-mix(in_srgb,var(--dt-composer-ring)_calc(35%*var(--composer-ring-strength)),transparent),0_0.5rem_1.5rem_color-mix(in_srgb,var(--shadow-ink)_6%,transparent)]',
                 dragActive && 'border-midground/70 shadow-composer-focus ring-2 ring-midground/40'
               )}
               data-slot="composer-surface"
+              ref={composerSurfaceRef}
             >
               <div aria-hidden className={COMPOSER_FROST_CLASS} />
               {dragActive && (
@@ -1028,7 +1045,7 @@ export function ChatBarFallback() {
       className={cn(COMPOSER_SHELL_CLASS, 'bg-linear-to-b from-transparent to-background/55')}
       data-slot="composer-root"
     >
-      <div className="composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit] border border-[color-mix(in_srgb,var(--dt-midground)_18%,var(--dt-input))] shadow-composer">
+      <div className="composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit] border border-[color-mix(in_srgb,var(--dt-composer-ring)_calc(18%*var(--composer-ring-strength)),var(--dt-input))] shadow-composer">
         <div aria-hidden className={COMPOSER_FROST_CLASS} />
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { type FC, useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import introCopyJsonl from './intro-copy.jsonl?raw'
 
@@ -17,12 +17,6 @@ export type IntroProps = {
 }
 
 const NEUTRAL_PERSONALITIES = new Set(['', 'default', 'none', 'neutral'])
-
-const HERMES_FRAME_COUNT = 8
-// Optical centering offsets tuned per frame so Hermes' body stays centered
-// even when the staff extends farther left/right in certain poses.
-const HERMES_DEFAULT_FRAME_OPTICAL_OFFSET_PX = [8, 4, 4, 0, 9, 2, 5, 9] as const
-const ASSET_BASE_URL = import.meta.env.BASE_URL || '/'
 
 const FALLBACK_COPY: IntroCopy[] = [
   {
@@ -158,46 +152,21 @@ function resolveCopy(personality?: string, seed?: number): IntroCopy {
   return pickCopy(copies, seed)
 }
 
-function publicAssetPath(path: string): string {
-  return `${ASSET_BASE_URL}${path}`.replace(/([^:]\/)\/+/g, '$1')
-}
-
-export const Intro: FC<IntroProps> = ({ personality, seed }) => {
+export function Intro({ personality, seed }: IntroProps) {
   const [mountSeed] = useState(() => Math.floor(Math.random() * 100000))
-  const [frameOffset, setFrameOffset] = useState(0)
-  const introSeed = mountSeed + (seed ?? 0)
-  const copy = resolveCopy(personality, introSeed)
-  const frameIndex = Math.abs(introSeed + frameOffset) % HERMES_FRAME_COUNT
-  const spriteOffsetPx = HERMES_DEFAULT_FRAME_OPTICAL_OFFSET_PX[frameIndex] ?? 0
-
-  const advanceFrame = useCallback(() => {
-    setFrameOffset(offset => offset + 1 + Math.floor(Math.random() * (HERMES_FRAME_COUNT - 1)))
-  }, [])
+  const copy = resolveCopy(personality, mountSeed + (seed ?? 0))
 
   return (
-    <div className="pointer-events-none flex min-h-[calc(100vh-var(--titlebar-height)-var(--thread-composer-clearance)-var(--composer-shell-pad-block-end))] w-full min-w-0 flex-col items-center justify-center px-3 py-8 text-center text-muted-foreground sm:px-6 lg:px-8">
-      <button
-        aria-label="Change Hermes pose"
-        className="pointer-events-auto mb-5 aspect-8/7 w-full max-w-64 cursor-default border-0 bg-transparent p-0"
-        onClick={advanceFrame}
-        type="button"
-      >
-        <img
-          alt=""
-          aria-hidden="true"
-          className="h-full w-full object-contain select-none"
-          draggable={false}
-          src={publicAssetPath(`hermes-frames/hermes-frame-${frameIndex}.png?v=matte-clean-6`)}
-          style={{ transform: `translateX(${spriteOffsetPx}px) scale(1.1)` }}
-        />
-      </button>
+    <div
+      className="pointer-events-none flex w-full min-w-0 flex-col items-center justify-center px-3 py-6 text-center text-muted-foreground sm:px-6 lg:px-8"
+      data-slot="aui_intro"
+    >
       <div className="w-full min-w-0 max-w-xl">
-        <p className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.18em] text-midground/85">
-          <span aria-hidden="true" className="dither inline-block size-1.5 rounded-[1px]" />
+        <p className="mb-3 font-['Collapse'] text-[clamp(3.25rem,4.6dvw,4.875rem)] font-bold uppercase leading-[0.95] tracking-wider text-midground mix-blend-plus-lighter dark:text-foreground/90">
           Hermes Agent
         </p>
-        <h1 className="mb-2.5 text-xl font-semibold tracking-tight text-foreground">{copy.headline}</h1>
-        <p className="m-0 leading-normal">{copy.body}</p>
+
+        <p className="m-0 text-center leading-normal tracking-tight">{copy.body}</p>
       </div>
     </div>
   )

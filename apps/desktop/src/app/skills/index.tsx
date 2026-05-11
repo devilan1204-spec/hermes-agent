@@ -12,12 +12,14 @@ import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import type { SkillInfo, ToolsetInfo } from '@/types/hermes'
 
+import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { asText, includesQuery, prettyName, toolNames } from '../settings/helpers'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 import { titlebarHeaderBaseClass } from '../shell/titlebar'
 import type { SetTitlebarToolGroup } from '../shell/titlebar-controls'
 
-type SkillsMode = 'skills' | 'toolsets'
+const SKILLS_MODES = ['skills', 'toolsets'] as const
+type SkillsMode = (typeof SKILLS_MODES)[number]
 
 function categoryFor(skill: SkillInfo): string {
   return asText(skill.category) || 'general'
@@ -70,7 +72,8 @@ export function SkillsView({
   setTitlebarToolGroup,
   ...props
 }: SkillsViewProps) {
-  const [mode, setMode] = useState<SkillsMode>('skills')
+  const [mode, setMode] = useRouteEnumParam('tab', SKILLS_MODES, 'skills')
+
   const [query, setQuery] = useState('')
   const [skills, setSkills] = useState<SkillInfo[] | null>(null)
   const [toolsets, setToolsets] = useState<ToolsetInfo[] | null>(null)
@@ -367,19 +370,24 @@ function CategoryButton({
   onClick: () => void
 }) {
   return (
-    <Button
+    <button
       className={cn(
-        'h-7 rounded-full px-2.5 text-[0.68rem]',
-        active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'
+        'inline-flex h-7 items-center gap-1 bg-transparent px-1.5 text-[0.68rem] transition-colors',
+        active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
       )}
       onClick={onClick}
-      size="sm"
       type="button"
-      variant="ghost"
     >
-      {label}
-      <span className="ml-1 rounded-full bg-muted px-1.5 py-0 text-[0.62rem] text-muted-foreground">{count}</span>
-    </Button>
+      <span
+        className={cn(
+          'underline-offset-4 decoration-current',
+          active ? 'font-medium underline' : 'hover:underline'
+        )}
+      >
+        {label}
+      </span>
+      <span className="text-[0.62rem] text-muted-foreground/80 no-underline">{count}</span>
+    </button>
   )
 }
 

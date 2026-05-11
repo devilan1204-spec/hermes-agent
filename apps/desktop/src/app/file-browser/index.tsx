@@ -9,11 +9,9 @@ import { notifyError } from '@/store/notifications'
 import { setCurrentSessionPreviewTarget } from '@/store/preview'
 import { $currentCwd } from '@/store/session'
 
+import { SidebarPanelLabel } from '../shell/sidebar-label'
 import { ProjectTree } from './tree'
 import { useProjectTree } from './use-project-tree'
-
-const HEADER_ACTION_CLASS =
-  'pointer-events-none size-6 shrink-0 opacity-0 text-muted-foreground/75 transition-opacity hover:text-foreground focus-visible:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100'
 
 interface FileBrowserPaneProps {
   /** Activates a file row — drops the path into the composer as `@file:` ref. */
@@ -64,20 +62,19 @@ export function FileBrowserPane({ onActivateFile, onChangeCwd }: FileBrowserPane
   return (
     <aside
       aria-label="File browser"
-      className="relative flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-border/60 bg-[color-mix(in_srgb,var(--dt-sidebar-bg)_94%,transparent)] pt-[calc(var(--titlebar-height)-0.625rem)] text-muted-foreground [backdrop-filter:blur(1.5rem)_saturate(1.08)]"
+      className="relative flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-border/60 bg-[color-mix(in_srgb,var(--dt-sidebar-bg)_94%,transparent)] px-(--sidebar-content-inline-padding) pt-[calc(var(--titlebar-height)-0.625rem)] text-muted-foreground [backdrop-filter:blur(1.5rem)_saturate(1.08)]"
     >
-      <header className="group/project-header shrink-0 pl-4 pr-2 pb-1 pt-0">
+      <header className="group/project-header shrink-0 pb-1 pt-0">
         <div className="flex items-center gap-1.5">
           <FadeText
-            className="flex-1 flex items-center gap-2 px-2 pb-1 pt-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-midground/75"
+            className="flex flex-1 items-center px-2 pb-1 pt-1"
             title={hasCwd ? currentCwd : 'No folder selected'}
           >
-            <span aria-hidden="true" className="dither inline-block size-2 shrink-0 rounded-[1px] text-midground" />
-            {cwdName}
+            <SidebarPanelLabel>{cwdName}</SidebarPanelLabel>
           </FadeText>
           <Button
             aria-label="Change working directory"
-            className={HEADER_ACTION_CLASS}
+            className="pointer-events-none size-6 shrink-0 text-muted-foreground/75 opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100"
             onClick={() => void chooseFolder()}
             size="icon"
             title="Change working directory"
@@ -87,7 +84,7 @@ export function FileBrowserPane({ onActivateFile, onChangeCwd }: FileBrowserPane
           </Button>
           <Button
             aria-label="Refresh tree"
-            className={HEADER_ACTION_CLASS}
+            className="pointer-events-none size-6 shrink-0 text-muted-foreground/75 opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100"
             disabled={!hasCwd || rootLoading}
             onClick={() => void refreshRoot()}
             size="icon"

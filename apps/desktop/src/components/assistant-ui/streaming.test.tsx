@@ -185,6 +185,20 @@ function GroupedReasoningHarness() {
   )
 }
 
+function IntroHarness() {
+  const runtime = useExternalStoreRuntime<ThreadMessage>({
+    messages: [],
+    isRunning: false,
+    onNew: async () => {}
+  })
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <Thread intro={{ personality: 'default', seed: 1 }} />
+    </AssistantRuntimeProvider>
+  )
+}
+
 describe('assistant-ui streaming renderer', () => {
   beforeEach(() => {
     resizeObservers.clear()
@@ -214,6 +228,12 @@ describe('assistant-ui streaming renderer', () => {
     await waitFor(() => {
       expect(container.textContent).toContain('first chunk second chunk')
     })
+  })
+
+  it('does not render composer clearance for intro-only threads', () => {
+    const { container } = render(<IntroHarness />)
+
+    expect(container.querySelector('[data-slot="aui_composer-clearance"]')).toBeNull()
   })
 
   it('does not pull the viewport back down after the user scrolls up during streaming', async () => {
@@ -268,10 +288,10 @@ describe('assistant-ui streaming renderer', () => {
   it('groups consecutive reasoning parts under one thinking disclosure', () => {
     const { container } = render(<GroupedReasoningHarness />)
 
-    const disclosures = container.querySelectorAll('[data-slot="tool-block"] > button')
+    const disclosures = container.querySelectorAll('[data-slot="aui_thinking-disclosure"]')
     expect(disclosures.length).toBe(1)
 
-    fireEvent.click(disclosures[0])
+    fireEvent.click(disclosures[0].querySelector('button')!)
 
     const reasoningParts = container.querySelectorAll('[data-slot="aui_reasoning-text"]')
     expect(reasoningParts.length).toBe(2)

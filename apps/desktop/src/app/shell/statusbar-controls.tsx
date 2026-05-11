@@ -44,7 +44,7 @@ interface StatusbarControlsProps extends ComponentProps<'footer'> {
 }
 
 const statusbarItemClass =
-  'inline-flex h-5 items-center gap-1 rounded px-1 text-[0.68rem] text-muted-foreground/95 transition-colors hover:bg-[color-mix(in_srgb,var(--dt-midground)_10%,transparent)] hover:text-foreground disabled:cursor-default disabled:opacity-45'
+  'inline-flex h-full cursor-pointer items-center gap-1 rounded-none px-1.5 text-[0.68rem] text-muted-foreground/95 transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground disabled:cursor-default disabled:opacity-45'
 
 export function StatusbarControls({ className, leftItems = [], items = [], ...props }: StatusbarControlsProps) {
   const navigate = useNavigate()
@@ -52,19 +52,19 @@ export function StatusbarControls({ className, leftItems = [], items = [], ...pr
   return (
     <footer
       className={cn(
-        'flex h-7 shrink-0 items-center justify-between gap-2 border-t border-border/55 bg-[color-mix(in_srgb,var(--dt-muted)_45%,var(--dt-card))] px-2.5 py-1 text-muted-foreground/95 [-webkit-app-region:no-drag]',
+        'flex h-7 shrink-0 items-stretch justify-between gap-2 border-t border-border/55 bg-[color-mix(in_srgb,var(--dt-muted)_45%,var(--dt-card))] px-1 py-0 text-muted-foreground/95 [-webkit-app-region:no-drag]',
         className
       )}
       {...props}
     >
-      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+      <div className="flex min-w-0 items-stretch gap-0.5 overflow-x-auto">
         {leftItems
           .filter(item => !item.hidden)
           .map(item => (
             <StatusbarItemView item={item} key={`left:${item.id}`} navigate={navigate} />
           ))}
       </div>
-      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+      <div className="flex min-w-0 items-stretch gap-0.5 overflow-x-auto">
         {items
           .filter(item => !item.hidden)
           .map(item => (
@@ -150,7 +150,7 @@ function StatusbarItemView({ item, navigate }: { item: StatusbarItem; navigate: 
     return (
       <div
         className={cn(
-          'inline-flex h-5 items-center gap-1 px-0.5 text-[0.68rem] text-muted-foreground/90',
+          'inline-flex h-full items-center gap-1 px-1.5 text-[0.68rem] text-muted-foreground/90',
           item.className
         )}
       >

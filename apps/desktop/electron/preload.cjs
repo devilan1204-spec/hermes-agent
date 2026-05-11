@@ -29,12 +29,23 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   stopPreviewFileWatch: id => ipcRenderer.invoke('hermes:stopPreviewFileWatch', id),
   setPreviewShortcutActive: active => ipcRenderer.send('hermes:previewShortcutActive', Boolean(active)),
   openExternal: url => ipcRenderer.invoke('hermes:openExternal', url),
+  fetchLinkTitle: url => ipcRenderer.invoke('hermes:fetchLinkTitle', url),
   readDir: dirPath => ipcRenderer.invoke('hermes:fs:readDir', dirPath),
   gitRoot: startPath => ipcRenderer.invoke('hermes:fs:gitRoot', startPath),
   onClosePreviewRequested: callback => {
     const listener = () => callback()
     ipcRenderer.on('hermes:close-preview-requested', listener)
     return () => ipcRenderer.removeListener('hermes:close-preview-requested', listener)
+  },
+  onOpenUpdatesRequested: callback => {
+    const listener = () => callback()
+    ipcRenderer.on('hermes:open-updates', listener)
+    return () => ipcRenderer.removeListener('hermes:open-updates', listener)
+  },
+  onWindowStateChanged: callback => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('hermes:window-state-changed', listener)
+    return () => ipcRenderer.removeListener('hermes:window-state-changed', listener)
   },
   onPreviewFileChanged: callback => {
     const listener = (_event, payload) => callback(payload)
@@ -50,5 +61,17 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     const listener = (_event, payload) => callback(payload)
     ipcRenderer.on('hermes:boot-progress', listener)
     return () => ipcRenderer.removeListener('hermes:boot-progress', listener)
+  },
+  getVersion: () => ipcRenderer.invoke('hermes:version'),
+  updates: {
+    check: () => ipcRenderer.invoke('hermes:updates:check'),
+    apply: opts => ipcRenderer.invoke('hermes:updates:apply', opts),
+    getBranch: () => ipcRenderer.invoke('hermes:updates:branch:get'),
+    setBranch: name => ipcRenderer.invoke('hermes:updates:branch:set', name),
+    onProgress: callback => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('hermes:updates:progress', listener)
+      return () => ipcRenderer.removeListener('hermes:updates:progress', listener)
+    }
   }
 })

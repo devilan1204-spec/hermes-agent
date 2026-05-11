@@ -16,6 +16,7 @@ import { AlertTriangle, ChevronDown, ExternalLink, RefreshCw, Save, Trash2 } fro
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 
+import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 import { titlebarHeaderBaseClass } from '../shell/titlebar'
 import type { SetTitlebarToolGroup } from '../shell/titlebar-controls'
@@ -206,10 +207,11 @@ export function MessagingView({
   ...props
 }: MessagingViewProps) {
   const [platforms, setPlatforms] = useState<MessagingPlatformInfo[] | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [edits, setEdits] = useState<EditMap>({})
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
+  const platformIds = useMemo(() => platforms?.map(p => p.id) ?? [], [platforms])
+  const [selectedId, setSelectedId] = useRouteEnumParam('platform', platformIds, platformIds[0] ?? '')
 
   const refreshPlatforms = useCallback(async (silent = false) => {
     if (!silent) {
@@ -219,7 +221,6 @@ export function MessagingView({
     try {
       const result = await getMessagingPlatforms()
       setPlatforms(result.platforms)
-      setSelectedId(current => current || result.platforms[0]?.id || null)
     } catch (err) {
       if (!silent) {
         notifyError(err, 'Messaging platforms failed to load')

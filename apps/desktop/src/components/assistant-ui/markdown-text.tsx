@@ -13,6 +13,7 @@ import { PreviewAttachment } from '@/components/assistant-ui/preview-attachment'
 import { SyntaxHighlighter } from '@/components/assistant-ui/shiki-highlighter'
 import { ZoomableImage } from '@/components/assistant-ui/zoomable-image'
 import { CopyButton } from '@/components/ui/copy-button'
+import { normalizeExternalUrl, openExternalLink, PrettyLink } from '@/lib/external-link'
 import { isLikelyProseCodeBlock, sanitizeLanguageTag } from '@/lib/markdown-code'
 import { preprocessMarkdown } from '@/lib/markdown-preprocess'
 import {
@@ -25,15 +26,6 @@ import {
 } from '@/lib/media'
 import { previewTargetFromMarkdownHref } from '@/lib/preview-targets'
 import { cn } from '@/lib/utils'
-
-const MARKDOWN_CONTAINER_CLASS = cn(
-  'aui-md prose w-full max-w-none overflow-hidden text-base leading-(--dt-line-height) text-foreground',
-  'prose-p:leading-(--dt-line-height) prose-li:leading-(--dt-line-height)',
-  'prose-headings:text-foreground prose-strong:text-foreground',
-  'prose-a:break-words prose-p:[overflow-wrap:anywhere]',
-  'prose-li:marker:text-midground/55',
-  'prose-code:rounded prose-code:border-0 prose-code:bg-muted/80 prose-code:px-0.5 prose-code:py-px prose-code:font-mono prose-code:text-[0.86em] prose-code:text-muted-foreground prose-code:before:content-none prose-code:after:content-none'
-)
 
 function CodeHeader({ language, code }: { language?: string; code?: string }) {
   const normalizedCode = (code ?? '').replace(/^\n+/, '').trimEnd()
@@ -164,11 +156,11 @@ function MediaAttachment({ path }: { path: string }) {
 
   return (
     <a
-      className="font-medium text-foreground underline underline-offset-4 decoration-foreground/30 wrap-anywhere hover:decoration-foreground/70"
+      className="font-semibold text-foreground underline underline-offset-4 decoration-current wrap-anywhere"
       href="#"
       onClick={event => {
         event.preventDefault()
-        void window.hermesDesktop?.openExternal(mediaExternalUrl(path))
+        openExternalLink(mediaExternalUrl(path))
       }}
     >
       {failed ? `Open ${name}` : `Loading ${name}...`}
@@ -176,29 +168,55 @@ function MediaAttachment({ path }: { path: string }) {
   )
 }
 
-function MarkdownLink({ className, href, ...props }: ComponentProps<'a'>) {
+function childrenToText(children: unknown): string {
+  if (typeof children === 'string' || typeof children === 'number') {
+    return String(children).trim()
+  }
+
+  if (Array.isArray(children) && children.every(c => typeof c === 'string' || typeof c === 'number')) {
+    return children.join('').trim()
+  }
+
+  return ''
+}
+
+function MarkdownLink({ children, className, href, ...props }: ComponentProps<'a'>) {
   const mediaPath = mediaPathFromMarkdownHref(href)
-  const previewTarget = previewTargetFromMarkdownHref(href)
 
   if (mediaPath) {
     return <MediaAttachment path={mediaPath} />
   }
 
+  const previewTarget = previewTargetFromMarkdownHref(href)
+
   if (previewTarget) {
     return <PreviewAttachment source="explicit-link" target={previewTarget} />
   }
 
+  const target = href ? normalizeExternalUrl(href) : href
+
+  if (!target || !/^https?:\/\//i.test(target)) {
+    return (
+      <a
+        className={cn(
+          'font-semibold text-foreground underline underline-offset-4 decoration-current wrap-anywhere',
+          className
+        )}
+        href={href}
+        rel="noopener noreferrer"
+        target="_blank"
+        {...props}
+      >
+        {children}
+      </a>
+    )
+  }
+
+  const text = childrenToText(children)
+  const fallbackLabel = text && normalizeExternalUrl(text) !== target ? text : undefined
+
   return (
-    <a
-      className={cn(
-        'font-medium text-foreground underline underline-offset-4 decoration-midground/55 wrap-anywhere hover:decoration-midground',
-        className
-      )}
-      href={href}
-      rel="noopener noreferrer"
-      target="_blank"
-      {...props}
-    />
+    <PrettyLink className={cn('wrap-anywhere', className)} fallbackLabel={fallbackLabel} href={target} {...props} />
   )
 }
 
@@ -207,10 +225,10 @@ function MarkdownImage({ className, src, alt, ...props }: ComponentProps<'img'>)
     <ZoomableImage
       alt={alt}
       className={cn(
-        'block h-auto w-auto max-h-(--image-preview-height) max-w-[min(100%,var(--image-preview-max-width))] rounded-[1.125rem] border border-[color-mix(in_srgb,var(--dt-border)_70%,transparent)] object-contain shadow-[0_0.0625rem_0.125rem_color-mix(in_srgb,#000_4%,transparent),0_0.625rem_1.5rem_color-mix(in_srgb,#000_5%,transparent)]',
+        'm-0 block h-auto w-auto max-h-(--image-preview-height) max-w-[min(100%,var(--image-preview-max-width))] rounded-lg object-contain shadow-[0_0.0625rem_0.125rem_color-mix(in_srgb,#000_4%,transparent),0_0.625rem_1.5rem_color-mix(in_srgb,#000_5%,transparent)]',
         className
       )}
-      containerClassName="my-3 max-w-[min(100%,var(--image-preview-max-width))]"
+      containerClassName="my-2 block w-fit max-w-full"
       slot="aui_markdown-image"
       src={src}
       {...props}
@@ -291,7 +309,15 @@ const MarkdownTextImpl = () => {
     <StreamdownTextPrimitive
       caret="block"
       components={components}
-      containerClassName={MARKDOWN_CONTAINER_CLASS}
+      containerClassName={cn(
+        'aui-md prose w-full max-w-none overflow-hidden text-base leading-(--dt-line-height) text-foreground',
+        'prose-p:leading-(--dt-line-height) prose-li:leading-(--dt-line-height)',
+        'prose-headings:text-foreground prose-strong:text-foreground',
+        'prose-a:break-words prose-p:[overflow-wrap:anywhere]',
+        'prose-li:marker:text-midground/55',
+        'prose-code:rounded prose-code:border-0 prose-code:bg-muted/80 prose-code:px-0.5 prose-code:py-px prose-code:font-mono prose-code:text-[0.86em] prose-code:text-muted-foreground prose-code:before:content-none prose-code:after:content-none',
+        '[&>*:last-child]:mb-0'
+      )}
       lineNumbers={false}
       mode="streaming"
       parseIncompleteMarkdown={!isStreaming}

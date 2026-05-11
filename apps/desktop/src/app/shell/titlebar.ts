@@ -21,11 +21,16 @@ export const titlebarHeaderBaseClass =
 export const titlebarHeaderShadowClass =
   "shadow-header after:pointer-events-none after:absolute after:left-0 after:right-0 after:top-full after:h-10 after:bg-linear-to-b after:from-background after:via-background/80 after:to-transparent after:content-['']"
 
-export function titlebarControlsPosition(windowButtonPosition: HermesConnection['windowButtonPosition'] | undefined) {
-  const position = windowButtonPosition || WINDOW_BUTTON_FALLBACK
+export function titlebarControlsPosition(
+  windowButtonPosition: HermesConnection['windowButtonPosition'] | undefined,
+  isFullscreen = false
+) {
+  const top = Math.max(0, TITLEBAR_CONTROLS_TOP)
 
-  return {
-    left: position.x + TITLEBAR_CONTROL_OFFSET_X,
-    top: Math.max(0, TITLEBAR_CONTROLS_TOP)
+  // macOS hides traffic lights in fullscreen — pin to the edge instead of reserving their slot.
+  if (windowButtonPosition && isFullscreen) {
+    return { left: 14, top }
   }
+
+  return { left: (windowButtonPosition ?? WINDOW_BUTTON_FALLBACK).x + TITLEBAR_CONTROL_OFFSET_X, top }
 }

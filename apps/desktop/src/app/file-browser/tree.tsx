@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { type NodeApi, type NodeRendererProps, Tree, type TreeApi } from 'react-arborist'
 
+import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { ChevronDown, ChevronRight, FileText, FolderOpen, Loader2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
@@ -30,22 +31,25 @@ export function ProjectTree({
   const treeRef = useRef<TreeApi<TreeNode> | null>(null)
   const [size, setSize] = useState({ height: 0, width: 0 })
 
-  useEffect(() => {
+  const syncTreeSize = useCallback(() => {
     const el = containerRef.current
 
-    if (!el || typeof ResizeObserver === 'undefined') {
+    if (!el) {
       return
     }
 
-    const observer = new ResizeObserver(([entry]) => {
-      const { height, width } = entry.contentRect
-      setSize({ height, width })
+    const { height, width } = el.getBoundingClientRect()
+
+    setSize(prev => {
+      if (prev.height === height && prev.width === width) {
+        return prev
+      }
+
+      return { height, width }
     })
-
-    observer.observe(el)
-
-    return () => observer.disconnect()
   }, [])
+
+  useResizeObserver(syncTreeSize, containerRef)
 
   const handleToggle = useCallback(
     (id: string) => {
@@ -74,7 +78,7 @@ export function ProjectTree({
   )
 
   return (
-    <div className="min-h-0 flex-1 overflow-hidden px-2" ref={containerRef}>
+    <div className="min-h-0 flex-1 overflow-hidden" ref={containerRef}>
       {size.height > 0 && size.width > 0 ? (
         <Tree<TreeNode>
           childrenAccessor={node => (node.isDirectory ? (node.children ?? []) : null)}
@@ -88,7 +92,7 @@ export function ProjectTree({
           onActivate={handleActivate}
           onToggle={handleToggle}
           openByDefault={false}
-          padding={2}
+          padding={0}
           ref={treeRef}
           rowHeight={ROW_HEIGHT}
           width={size.width}
@@ -116,7 +120,7 @@ function ProjectTreeRow({
       aria-expanded={isFolder ? node.isOpen : undefined}
       aria-selected={node.isSelected}
       className={cn(
-        'group/row flex h-full cursor-pointer select-none items-center gap-1 rounded-sm px-1.5 text-sm font-medium leading-snug text-foreground/90 transition-colors hover:bg-[color-mix(in_srgb,var(--dt-midground)_8%,transparent)]',
+        'group/row flex h-full cursor-pointer select-none items-center gap-0.5 rounded-sm px-0 text-sm font-medium leading-snug text-foreground/90 transition-colors hover:bg-(--chrome-action-hover)',
         node.isSelected && 'bg-accent/65 text-foreground',
         isPlaceholder && 'pointer-events-none italic text-muted-foreground/70'
       )}
@@ -161,10 +165,12 @@ function ProjectTreeRow({
       ref={dragHandle}
       style={style}
     >
-      <span aria-hidden className={cn('flex w-3.5 items-center justify-center', !isFolder && 'opacity-0')}>
-        {isFolder && !isPlaceholder ? <Caret className="size-3 text-muted-foreground/70" /> : null}
-      </span>
-      <span aria-hidden className="flex w-3.5 items-center justify-center text-muted-foreground/85">
+      {isFolder && !isPlaceholder && (
+        <span aria-hidden className="flex w-2.5 items-center justify-center">
+          <Caret className="size-3 text-muted-foreground/70" />
+        </span>
+      )}
+      <span aria-hidden className="flex w-3 items-center justify-center text-muted-foreground/85">
         {isPlaceholder ? (
           <Loader2 className="size-3 animate-spin" />
         ) : isFolder ? (

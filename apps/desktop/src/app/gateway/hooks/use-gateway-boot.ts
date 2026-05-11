@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 
+import type { HermesConnection } from '@/global'
 import { HermesGateway } from '@/hermes'
 import {
   $desktopBoot,
@@ -10,7 +11,7 @@ import {
 } from '@/store/boot'
 import { setGateway } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
-import { setConnection, setGatewayState, setSessionsLoading } from '@/store/session'
+import { $connection, setConnection, setGatewayState, setSessionsLoading } from '@/store/session'
 import type { RpcEvent } from '@/types/hermes'
 
 interface GatewayBootOptions {
@@ -50,6 +51,11 @@ export function useGatewayBoot({
     let cancelled = false
     const desktop = window.hermesDesktop
 
+    const publish = (next: HermesConnection | null) => {
+      callbacksRef.current.onConnectionReady(next)
+      setConnection(next)
+    }
+
     if (!desktop) {
       failDesktopBoot('Desktop IPC bridge is unavailable.')
       setSessionsLoading(false)
@@ -75,6 +81,14 @@ export function useGatewayBoot({
 
     const offState = gateway.onState(st => void setGatewayState(st))
     const offEvent = gateway.onEvent(event => callbacksRef.current.handleGatewayEvent(event))
+
+    const offWindowState = desktop.onWindowStateChanged?.(payload => {
+      const current = $connection.get()
+
+      if (current) {
+        publish({ ...current, ...payload })
+      }
+    })
 
     const offExit = desktop.onBackendExit(() => {
       if ($desktopBoot.get().running || $desktopBoot.get().visible) {
@@ -102,8 +116,7 @@ export function useGatewayBoot({
           message: 'Connecting live desktop gateway',
           progress: 95
         })
-        callbacksRef.current.onConnectionReady(conn)
-        setConnection(conn)
+        publish(conn)
         await gateway.connect(conn.wsUrl)
 
         if (cancelled) {
@@ -145,9 +158,10 @@ export function useGatewayBoot({
       offState()
       offEvent()
       offExit()
+      offWindowState?.()
       offBootProgress()
       gateway.close()
-      callbacksRef.current.onConnectionReady(null)
+      publish(null)
       callbacksRef.current.onGatewayReady(null)
       setGateway(null)
     }

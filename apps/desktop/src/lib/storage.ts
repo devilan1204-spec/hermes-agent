@@ -16,6 +16,26 @@ export function persistBoolean(key: string, value: boolean) {
   }
 }
 
+export function storedString(key: string): null | string {
+  try {
+    return window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+export function persistString(key: string, value: null | string) {
+  try {
+    if (value === null) {
+      window.localStorage.removeItem(key)
+    } else {
+      window.localStorage.setItem(key, value)
+    }
+  } catch {
+    // Storage is best-effort.
+  }
+}
+
 export function storedStringArray(key: string): string[] {
   try {
     const value = window.localStorage.getItem(key)

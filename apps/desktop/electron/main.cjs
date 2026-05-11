@@ -20,11 +20,7 @@ const net = require('node:net')
 const path = require('node:path')
 const { fileURLToPath, pathToFileURL } = require('node:url')
 const { spawn } = require('node:child_process')
-const {
-  bundledRuntimeImportCheck,
-  isWindowsBinaryPathInWsl,
-  isWslEnvironment
-} = require('./bootstrap-platform.cjs')
+const { bundledRuntimeImportCheck, isWindowsBinaryPathInWsl, isWslEnvironment } = require('./bootstrap-platform.cjs')
 
 const USER_DATA_OVERRIDE = process.env.HERMES_DESKTOP_USER_DATA_DIR
 if (USER_DATA_OVERRIDE) {
@@ -87,6 +83,11 @@ const RUNTIME_MARKER = path.join(ACTIVE_HERMES_ROOT, '.hermes-desktop-runtime.js
 const FACTORY_HERMES_ROOT = path.join(process.resourcesPath, 'hermes-agent')
 
 const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'connection.json')
+const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
+// Branch we track for self-update. Flip to 'main' once the GUI work merges —
+// single field edit, no rebuild required. User can also override at runtime
+// via hermesDesktop.updates.setBranch().
+const DEFAULT_UPDATE_BRANCH = 'bb/gui'
 // desktop.log lives under HERMES_HOME/logs/ so it sits next to agent.log,
 // errors.log, gateway.log produced by hermes_logging.setup_logging — one log
 // directory per user, regardless of which UI surface produced the line.
@@ -469,6 +470,250 @@ function recentHermesLog() {
   return hermesLog.slice(-20).join('\n')
 }
 
+// ─── Self-update (git-pull against the running backend's hermes root) ──────
+
+function readDesktopUpdateConfig() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(DESKTOP_UPDATE_CONFIG_PATH, 'utf8'))
+    const branch = typeof parsed?.branch === 'string' ? parsed.branch.trim() : ''
+    return { branch: branch || DEFAULT_UPDATE_BRANCH }
+  } catch {
+    return { branch: DEFAULT_UPDATE_BRANCH }
+  }
+}
+
+function writeDesktopUpdateConfig(config) {
+  fs.mkdirSync(path.dirname(DESKTOP_UPDATE_CONFIG_PATH), { recursive: true })
+  fs.writeFileSync(DESKTOP_UPDATE_CONFIG_PATH, JSON.stringify(config, null, 2))
+}
+
+// Match the backend's source resolution but bias toward a real git checkout.
+// Dev → SOURCE_REPO_ROOT. Packaged/CLI install → ACTIVE_HERMES_ROOT.
+// HERMES_DESKTOP_HERMES_ROOT always wins so devs can pin a worktree.
+function resolveUpdateRoot() {
+  const candidates = [
+    process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT),
+    !IS_PACKAGED && isHermesSourceRoot(SOURCE_REPO_ROOT) ? SOURCE_REPO_ROOT : null,
+    isHermesSourceRoot(ACTIVE_HERMES_ROOT) ? ACTIVE_HERMES_ROOT : null
+  ].filter(Boolean)
+
+  return candidates.find(c => directoryExists(path.join(c, '.git'))) || candidates[0] || ACTIVE_HERMES_ROOT
+}
+
+function runGit(args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', IS_WINDOWS ? ['-c', 'windows.appendAtomically=false', ...args] : args, {
+      cwd: options.cwd,
+      env: { ...process.env, ...(options.env || {}), GIT_TERMINAL_PROMPT: '0' },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', chunk => {
+      const text = chunk.toString()
+      stdout += text
+      options.onLine?.('stdout', text)
+    })
+    child.stderr.on('data', chunk => {
+      const text = chunk.toString()
+      stderr += text
+      options.onLine?.('stderr', text)
+    })
+    child.once('error', reject)
+    child.once('exit', code => resolve({ code, stdout, stderr }))
+  })
+}
+
+const firstLine = text => (text || '').split('\n').find(Boolean) || ''
+
+function emitUpdateProgress(payload) {
+  const merged = { stage: 'idle', message: '', percent: null, error: null, ...payload, at: Date.now() }
+  rememberLog(`[updates] ${merged.stage}: ${merged.message || merged.error || ''}`)
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('hermes:updates:progress', merged)
+  }
+}
+
+async function checkUpdates() {
+  const updateRoot = resolveUpdateRoot()
+  const { branch } = readDesktopUpdateConfig()
+  const gitDir = path.join(updateRoot, '.git')
+  if (!directoryExists(gitDir)) {
+    return {
+      supported: false,
+      reason: 'not-a-git-checkout',
+      message: `${updateRoot} isn't a git checkout — desktop self-update only runs against a source install.`,
+      hermesRoot: updateRoot,
+      branch
+    }
+  }
+
+  const fetched = await runGit(['fetch', '--quiet', 'origin', branch], { cwd: updateRoot })
+  if (fetched.code !== 0) {
+    return {
+      supported: true,
+      branch,
+      error: 'fetch-failed',
+      message: firstLine(fetched.stderr) || 'git fetch failed.',
+      hermesRoot: updateRoot,
+      fetchedAt: Date.now()
+    }
+  }
+
+  const git = args => runGit(args, { cwd: updateRoot }).then(r => r.stdout.trim())
+  const [currentSha, targetSha, countStr, dirtyStr, currentBranch] = await Promise.all([
+    git(['rev-parse', 'HEAD']),
+    git(['rev-parse', `origin/${branch}`]),
+    git(['rev-list', `HEAD..origin/${branch}`, '--count']),
+    git(['status', '--porcelain']),
+    git(['rev-parse', '--abbrev-ref', 'HEAD'])
+  ])
+
+  const behind = Number.parseInt(countStr, 10) || 0
+  const commits = behind > 0 ? await readCommitLog(updateRoot, branch) : []
+
+  return {
+    supported: true,
+    branch,
+    currentBranch,
+    behind,
+    currentSha,
+    targetSha,
+    commits,
+    dirty: dirtyStr.length > 0,
+    hermesRoot: updateRoot,
+    fetchedAt: Date.now()
+  }
+}
+
+async function readCommitLog(cwd, branch) {
+  const SEP = '\x1f'
+  const REC = '\x1e'
+  const { stdout } = await runGit(
+    ['log', `HEAD..origin/${branch}`, `--pretty=format:%H${SEP}%s${SEP}%an${SEP}%at${REC}`, '-n', '40'],
+    { cwd }
+  )
+
+  return stdout
+    .split(REC)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const [sha, summary, author, at] = line.split(SEP)
+      return { sha, summary, author, at: Number.parseInt(at, 10) * 1000 }
+    })
+}
+
+let updateInFlight = false
+
+async function applyUpdates(opts = {}) {
+  if (updateInFlight) {
+    throw new Error('An update is already in progress.')
+  }
+  updateInFlight = true
+
+  const dirtyStrategy = opts.dirtyStrategy === 'force' || opts.dirtyStrategy === 'stash' ? opts.dirtyStrategy : 'abort'
+
+  try {
+    const updateRoot = resolveUpdateRoot()
+    const gitDir = path.join(updateRoot, '.git')
+    if (!directoryExists(gitDir)) {
+      const message = `${updateRoot} isn't a git checkout — cannot self-update.`
+      emitUpdateProgress({ stage: 'error', error: 'not-a-git-checkout', message })
+      throw new Error(message)
+    }
+
+    const { branch } = readDesktopUpdateConfig()
+
+    emitUpdateProgress({ stage: 'prepare', message: 'Checking working tree…', percent: 5 })
+    const dirtyResult = await runGit(['status', '--porcelain'], { cwd: updateRoot })
+    const isDirty = dirtyResult.stdout.trim().length > 0
+
+    let stashRef = null
+    if (isDirty) {
+      if (dirtyStrategy === 'abort') {
+        const message = 'Uncommitted changes detected. Choose how to handle them and try again.'
+        emitUpdateProgress({ stage: 'error', error: 'dirty-tree', message })
+        throw new Error(message)
+      }
+      if (dirtyStrategy === 'stash') {
+        emitUpdateProgress({ stage: 'prepare', message: 'Stashing local changes…', percent: 10 })
+        const stashed = await runGit(['stash', 'push', '-u', '-m', `hermes-desktop-auto-${Date.now()}`], {
+          cwd: updateRoot
+        })
+        if (stashed.code !== 0) {
+          const message = firstLine(stashed.stderr) || 'git stash failed.'
+          emitUpdateProgress({ stage: 'error', error: 'stash-failed', message })
+          throw new Error(message)
+        }
+        stashRef = 'stash@{0}'
+      }
+      // dirtyStrategy === 'force' → pull --ff-only will refuse if anything
+      // conflicts, surfacing a clean error rather than us guessing.
+    }
+
+    const pyprojectBefore = sha256OfFile(path.join(updateRoot, 'pyproject.toml'))
+
+    emitUpdateProgress({ stage: 'fetch', message: `Fetching origin/${branch}…`, percent: 20 })
+    const fetched = await runGit(['fetch', 'origin', branch], { cwd: updateRoot })
+    if (fetched.code !== 0) {
+      const message = firstLine(fetched.stderr) || 'git fetch failed.'
+      emitUpdateProgress({ stage: 'error', error: 'fetch-failed', message })
+      throw new Error(message)
+    }
+
+    emitUpdateProgress({ stage: 'pull', message: `Fast-forward merging origin/${branch}…`, percent: 45 })
+    const pulled = await runGit(['pull', '--ff-only', 'origin', branch], {
+      cwd: updateRoot,
+      onLine: (_stream, text) => {
+        const line = firstLine(text)
+        if (line) emitUpdateProgress({ stage: 'pull', message: line.slice(0, 200), percent: 50 })
+      }
+    })
+    if (pulled.code !== 0) {
+      const message = firstLine(pulled.stderr || pulled.stdout) || 'git pull failed.'
+      if (stashRef) {
+        await runGit(['stash', 'pop'], { cwd: updateRoot }).catch(() => {})
+      }
+      emitUpdateProgress({ stage: 'error', error: 'pull-failed', message })
+      throw new Error(message)
+    }
+
+    if (stashRef) {
+      emitUpdateProgress({ stage: 'pull', message: 'Restoring stashed changes…', percent: 60 })
+      const popped = await runGit(['stash', 'pop'], { cwd: updateRoot })
+      if (popped.code !== 0) {
+        emitUpdateProgress({
+          stage: 'pull',
+          message: 'Stash pop had conflicts — your changes are preserved in `git stash list`.',
+          percent: 60
+        })
+      }
+    }
+
+    // findPythonForRoot picks the venv beside the resolved checkout (.venv or
+    // venv), matching how the backend discovers its Python.
+    const pyprojectAfter = sha256OfFile(path.join(updateRoot, 'pyproject.toml'))
+    const pyprojectChanged = pyprojectBefore && pyprojectAfter && pyprojectBefore !== pyprojectAfter
+    const venvPython = pyprojectChanged ? findPythonForRoot(updateRoot) : null
+    if (venvPython && fileExists(venvPython)) {
+      emitUpdateProgress({ stage: 'pydeps', message: 'Updating Python dependencies…', percent: 75 })
+      await runProcess(venvPython, ['-m', 'pip', 'install', '-e', updateRoot, '--disable-pip-version-check'])
+    }
+
+    emitUpdateProgress({ stage: 'restart', message: 'Update complete. Restarting…', percent: 100 })
+    setTimeout(() => {
+      app.relaunch()
+      app.quit()
+    }, 1500)
+
+    return { ok: true, branch }
+  } finally {
+    updateInFlight = false
+  }
+}
+
 function readJson(filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'))
@@ -714,9 +959,7 @@ async function ensureRuntime(backend) {
   const expectedMarker = {
     runtimeSchemaVersion: RUNTIME_SCHEMA_VERSION,
     pyprojectHash: sha256OfFile(path.join(ACTIVE_HERMES_ROOT, 'pyproject.toml')),
-    factoryVersion: factoryAvailable
-      ? readPyprojectVersion(FACTORY_HERMES_ROOT) ?? app.getVersion()
-      : null
+    factoryVersion: factoryAvailable ? (readPyprojectVersion(FACTORY_HERMES_ROOT) ?? app.getVersion()) : null
   }
   const currentMarker = readJson(RUNTIME_MARKER)
   const depsFresh =
@@ -742,11 +985,7 @@ async function ensureRuntime(backend) {
 
     fs.writeFileSync(
       RUNTIME_MARKER,
-      JSON.stringify(
-        { ...expectedMarker, installedAt: new Date().toISOString() },
-        null,
-        2
-      )
+      JSON.stringify({ ...expectedMarker, installedAt: new Date().toISOString() }, null, 2)
     )
   } else {
     await advanceBootProgress('runtime.ready', 'Reusing existing Hermes runtime', 78)
@@ -807,7 +1046,15 @@ function sha256OfFile(filePath) {
 // Excludes .git, __pycache__, .pyc/.pyo, etc. — same set
 // stage-hermes-payload.mjs uses on the build side.
 async function syncTreeExcludingVenv(src, dst) {
-  const EXCLUDED = new Set(['.git', '.mypy_cache', '.pytest_cache', '.ruff_cache', '__pycache__', 'node_modules', '.DS_Store'])
+  const EXCLUDED = new Set([
+    '.git',
+    '.mypy_cache',
+    '.pytest_cache',
+    '.ruff_cache',
+    '__pycache__',
+    'node_modules',
+    '.DS_Store'
+  ])
   const srcVenv = path.join(src, 'venv')
   const venvPreserved = directoryExists(path.join(dst, 'venv'))
 
@@ -925,6 +1172,243 @@ function filenameFromUrl(rawUrl, fallback = 'image') {
   } catch {
     return fallback
   }
+}
+
+// Link title resolution — curl (tier 1) → hidden BrowserWindow (tier 2).
+const titleCache = new Map()
+const titleInflight = new Map()
+const TITLE_CACHE_LIMIT = 500
+const TITLE_BYTE_BUDGET = 96 * 1024
+const TITLE_TIMEOUT_MS = 5000
+const TITLE_MAX_REDIRECTS = 3
+// Browser-shaped UA — many bot-walled sites (GetYourGuide, Cloudflare-protected
+// pages) refuse anything that doesn't look like a real Chrome.
+const TITLE_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+const TITLE_ERROR_RE =
+  /\b(access denied|attention required|captcha|error|forbidden|just a moment|request blocked|too many requests)\b/i
+const HTML_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" }
+
+// Tier-2 renderer fallback config. Only invoked when curl came back empty or
+// matched TITLE_ERROR_RE — keeps cold/CDN-cached pages on the cheap path.
+const RENDER_TITLE_MAX_CONCURRENT = 2
+const RENDER_TITLE_TIMEOUT_MS = 8000
+const RENDER_TITLE_GRACE_MS = 700
+// Resource types we cancel before the network even fires — keeps the hidden
+// renderer fast and cuts third-party tracking noise.
+const RENDER_TITLE_BLOCKED_RESOURCES = new Set([
+  'cspReport',
+  'font',
+  'imageset',
+  'media',
+  'object',
+  'ping',
+  'stylesheet'
+])
+
+let linkTitleSession = null
+let renderTitleInFlight = 0
+const renderTitleQueue = []
+
+function canonicalTitleCacheKey(rawUrl) {
+  const value = String(rawUrl || '').trim()
+  if (!value) return ''
+
+  try {
+    const url = new URL(value)
+    const host = url.hostname.replace(/^www\./i, '').toLowerCase()
+    const pathname = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '') || '/'
+
+    return `${host}${pathname}${url.search || ''}`
+  } catch {
+    return value
+  }
+}
+
+function cacheTitle(key, title) {
+  if (titleCache.size >= TITLE_CACHE_LIMIT) titleCache.delete(titleCache.keys().next().value)
+  titleCache.set(key, title)
+}
+
+function decodeHtmlEntities(value) {
+  return value
+    .replace(/&(amp|lt|gt|quot|apos|nbsp|#39);/gi, (_, k) => HTML_ENTITIES[k.toLowerCase()] ?? '')
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16) || 32))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10) || 32))
+}
+
+function parseHtmlTitle(html) {
+  const raw = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
+  return raw ? decodeHtmlEntities(raw).replace(/\s+/g, ' ').trim() : ''
+}
+
+function fetchHtmlTitleWithCurl(rawUrl) {
+  return new Promise(resolve => {
+    const url = String(rawUrl || '').trim()
+    if (!url) return resolve('')
+
+    const args = [
+      '--silent',
+      '--show-error',
+      '--location',
+      '--max-redirs',
+      String(TITLE_MAX_REDIRECTS),
+      '--max-time',
+      String(Math.max(2, Math.ceil(TITLE_TIMEOUT_MS / 1000))),
+      '--connect-timeout',
+      '4',
+      '--user-agent',
+      TITLE_USER_AGENT,
+      '--header',
+      'Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
+      '--header',
+      'Accept-Language: en-US,en;q=0.7',
+      '--header',
+      'Accept-Encoding: identity',
+      '--raw',
+      url
+    ]
+    const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'ignore'] })
+    const chunks = []
+    let bytes = 0
+
+    child.stdout.on('data', chunk => {
+      if (bytes >= TITLE_BYTE_BUDGET) return
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      const remaining = TITLE_BYTE_BUDGET - bytes
+      const next = buffer.length > remaining ? buffer.subarray(0, remaining) : buffer
+      chunks.push(next)
+      bytes += next.length
+    })
+
+    child.on('error', () => resolve(''))
+    child.on('close', () => {
+      if (!chunks.length) return resolve('')
+      resolve(parseHtmlTitle(Buffer.concat(chunks).toString('utf8')))
+    })
+  })
+}
+
+function getLinkTitleSession() {
+  if (linkTitleSession || !app.isReady()) return linkTitleSession
+  linkTitleSession = session.fromPartition('hermes:link-titles', { cache: false })
+  linkTitleSession.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: RENDER_TITLE_BLOCKED_RESOURCES.has(details.resourceType) })
+  })
+  return linkTitleSession
+}
+
+function dequeueRenderTitle() {
+  while (renderTitleInFlight < RENDER_TITLE_MAX_CONCURRENT && renderTitleQueue.length) {
+    const item = renderTitleQueue.shift()
+    renderTitleInFlight += 1
+    runRenderTitleJob(item.url).then(title => {
+      renderTitleInFlight -= 1
+      item.resolve(title)
+      dequeueRenderTitle()
+    })
+  }
+}
+
+function runRenderTitleJob(rawUrl) {
+  return new Promise(resolve => {
+    if (!app.isReady()) return resolve('')
+
+    const partitionSession = getLinkTitleSession()
+    if (!partitionSession) return resolve('')
+
+    let settled = false
+    let window = null
+    let hardTimer = null
+    let graceTimer = null
+
+    const finish = title => {
+      if (settled) return
+      settled = true
+      if (hardTimer) clearTimeout(hardTimer)
+      if (graceTimer) clearTimeout(graceTimer)
+      const value = (title || '').replace(/\s+/g, ' ').trim()
+      try {
+        if (window && !window.isDestroyed()) window.destroy()
+      } catch {
+        // BrowserWindow may already be torn down; ignore.
+      }
+      resolve(value)
+    }
+
+    try {
+      window = new BrowserWindow({
+        show: false,
+        width: 1280,
+        height: 800,
+        webPreferences: {
+          backgroundThrottling: false,
+          contextIsolation: true,
+          javascript: true,
+          nodeIntegration: false,
+          sandbox: true,
+          session: partitionSession,
+          webSecurity: true
+        }
+      })
+    } catch {
+      return finish('')
+    }
+
+    const readTitle = () => window?.webContents?.getTitle?.() || ''
+    const scheduleGrace = () => {
+      if (graceTimer) clearTimeout(graceTimer)
+      graceTimer = setTimeout(() => finish(readTitle()), RENDER_TITLE_GRACE_MS)
+    }
+
+    hardTimer = setTimeout(() => finish(readTitle()), RENDER_TITLE_TIMEOUT_MS)
+
+    window.webContents.setUserAgent(TITLE_USER_AGENT)
+    window.webContents.on('page-title-updated', scheduleGrace)
+    window.webContents.on('did-finish-load', scheduleGrace)
+    window.webContents.on('did-fail-load', (_event, _code, _desc, _validatedURL, isMainFrame) => {
+      if (isMainFrame) finish('')
+    })
+
+    window
+      .loadURL(rawUrl, {
+        httpReferrer: 'https://www.google.com/',
+        userAgent: TITLE_USER_AGENT
+      })
+      .catch(() => finish(''))
+  })
+}
+
+function fetchHtmlTitleWithRenderer(rawUrl) {
+  return new Promise(resolve => {
+    renderTitleQueue.push({ resolve, url: rawUrl })
+    dequeueRenderTitle()
+  })
+}
+
+// Strips known error/captcha titles (e.g. "GetYourGuide – Error", "Just a
+// moment...") so they don't get cached as the resolved title.
+const usableTitle = value => (value && !TITLE_ERROR_RE.test(value) ? value : '')
+
+function fetchLinkTitle(rawUrl) {
+  const url = String(rawUrl || '').trim()
+  const key = canonicalTitleCacheKey(url)
+  if (!key) return Promise.resolve('')
+  if (titleCache.has(key)) return Promise.resolve(titleCache.get(key))
+  if (titleInflight.has(key)) return titleInflight.get(key)
+
+  const pending = fetchHtmlTitleWithCurl(url)
+    .catch(() => '')
+    .then(value => usableTitle((value || '').slice(0, 240)))
+    .then(async value => value || usableTitle(((await fetchHtmlTitleWithRenderer(url).catch(() => '')) || '').slice(0, 240)))
+    .then(clean => {
+      cacheTitle(key, clean)
+      titleInflight.delete(key)
+      return clean
+    })
+
+  titleInflight.set(key, pending)
+  return pending
 }
 
 async function resourceBufferFromUrl(rawUrl) {
@@ -1176,12 +1660,19 @@ async function waitForHermes(baseUrl, token) {
     }
   }
 
-  throw new Error(`Hermes dashboard did not become ready: ${lastError?.message || 'timeout'}`)
+  throw new Error(`Hermes backend did not become ready: ${lastError?.message || 'timeout'}`)
 }
 
 function getWindowButtonPosition() {
   if (!IS_MAC) return null
   return mainWindow?.getWindowButtonPosition?.() || WINDOW_BUTTON_POSITION
+}
+
+function getWindowState() {
+  return {
+    isFullscreen: Boolean(mainWindow?.isFullScreen?.()),
+    windowButtonPosition: getWindowButtonPosition()
+  }
 }
 
 function sendBackendExit(payload) {
@@ -1202,13 +1693,40 @@ function getAppIconPath() {
   return APP_ICON_PATHS.find(fileExists)
 }
 
+function sendOpenUpdatesRequested() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const { webContents } = mainWindow
+  if (!webContents || webContents.isDestroyed()) return
+  webContents.send('hermes:open-updates')
+  if (!mainWindow.isVisible()) mainWindow.show()
+  mainWindow.focus()
+}
+
+function sendWindowStateChanged(nextIsFullscreen) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const { webContents } = mainWindow
+  if (!webContents || webContents.isDestroyed()) return
+  const state = getWindowState()
+
+  if (typeof nextIsFullscreen === 'boolean') {
+    state.isFullscreen = nextIsFullscreen
+  }
+
+  webContents.send('hermes:window-state-changed', state)
+}
+
 function buildApplicationMenu() {
   const template = []
+  const checkForUpdatesItem = {
+    label: 'Check for Updates…',
+    click: () => sendOpenUpdatesRequested()
+  }
   if (IS_MAC) {
     template.push({
       label: APP_NAME,
       submenu: [
         { role: 'about', label: `About ${APP_NAME}` },
+        checkForUpdatesItem,
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -1271,6 +1789,11 @@ function buildApplicationMenu() {
     submenu: IS_MAC
       ? [{ role: 'minimize' }, { role: 'zoom' }, { role: 'front' }]
       : [{ role: 'minimize' }, { role: 'close' }]
+  })
+  template.push({
+    label: 'Help',
+    role: 'help',
+    submenu: [checkForUpdatesItem]
   })
 
   return Menu.buildFromTemplate(template)
@@ -1560,7 +2083,7 @@ function resolveRemoteBackend() {
     if (!rawEnvToken) {
       throw new Error(
         'HERMES_DESKTOP_REMOTE_URL is set but HERMES_DESKTOP_REMOTE_TOKEN is not. ' +
-        'Both must be provided to connect to a remote Hermes backend.'
+          'Both must be provided to connect to a remote Hermes backend.'
       )
     }
 
@@ -1586,7 +2109,7 @@ function resolveRemoteBackend() {
   if (!token) {
     throw new Error(
       'Remote Hermes gateway is selected, but no session token is saved. ' +
-      'Open Settings → Gateway and save a token, or switch back to Local.'
+        'Open Settings → Gateway and save a token, or switch back to Local.'
     )
   }
 
@@ -1603,12 +2126,13 @@ function resolveRemoteBackend() {
 
 async function testDesktopConnectionConfig(input = {}) {
   const config = coerceDesktopConnectionConfig(input)
-  const remote = config.mode === 'remote'
-    ? {
-        baseUrl: normalizeRemoteBaseUrl(config.remote.url),
-        token: decryptDesktopSecret(config.remote.token)
-      }
-    : resolveRemoteBackend() || (await startHermes())
+  const remote =
+    config.mode === 'remote'
+      ? {
+          baseUrl: normalizeRemoteBaseUrl(config.remote.url),
+          token: decryptDesktopSecret(config.remote.token)
+        }
+      : resolveRemoteBackend() || (await startHermes())
   const status = await fetchJson(`${remote.baseUrl}/api/status`, remote.token, { timeoutMs: 8_000 })
 
   return {
@@ -1665,7 +2189,7 @@ async function startHermes() {
         token: remote.token,
         wsUrl: remote.wsUrl,
         logs: hermesLog.slice(-80),
-        windowButtonPosition: getWindowButtonPosition()
+        ...getWindowState()
       }
     }
 
@@ -1727,12 +2251,12 @@ async function startHermes() {
       rejectBackendStart?.(error)
     })
     hermesProcess.once('exit', (code, signal) => {
-      rememberLog(`Hermes dashboard exited (${signal || code})`)
+      rememberLog(`Hermes backend exited (${signal || code})`)
       hermesProcess = null
       connectionPromise = null
       sendBackendExit({ code, signal })
       if (!backendReady) {
-        const message = `Hermes dashboard exited before it became ready (${signal || code}).`
+        const message = `Hermes backend exited before it became ready (${signal || code}).`
         updateBootProgress(
           {
             error: message,
@@ -1744,14 +2268,14 @@ async function startHermes() {
         )
         rejectBackendStart?.(
           new Error(
-            `Hermes dashboard exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
+            `Hermes backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
           )
         )
       }
     })
 
     const baseUrl = `http://127.0.0.1:${port}`
-    await advanceBootProgress('backend.wait', 'Waiting for Hermes dashboard to become ready', 90)
+    await advanceBootProgress('backend.wait', 'Waiting for Hermes backend to become ready', 90)
     await Promise.race([waitForHermes(baseUrl, token), backendStartFailed])
     backendReady = true
     updateBootProgress({
@@ -1769,7 +2293,7 @@ async function startHermes() {
       token,
       wsUrl: `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(token)}`,
       logs: hermesLog.slice(-80),
-      windowButtonPosition: getWindowButtonPosition()
+      ...getWindowState()
     }
   })().catch(error => {
     const message = error instanceof Error ? error.message : String(error)
@@ -1820,6 +2344,11 @@ function createWindow() {
     }
   }
 
+  mainWindow.on('will-enter-full-screen', () => sendWindowStateChanged(true))
+  mainWindow.on('enter-full-screen', () => sendWindowStateChanged(true))
+  mainWindow.on('will-leave-full-screen', () => sendWindowStateChanged(false))
+  mainWindow.on('leave-full-screen', () => sendWindowStateChanged(false))
+
   installPreviewShortcut(mainWindow)
   installDevToolsShortcut(mainWindow)
   installContextMenu(mainWindow)
@@ -1832,6 +2361,7 @@ function createWindow() {
 
   mainWindow.webContents.once('did-finish-load', () => {
     broadcastBootProgress()
+    sendWindowStateChanged()
     startHermes().catch(error => rememberLog(error.stack || error.message))
   })
 }
@@ -1968,6 +2498,8 @@ ipcMain.handle('hermes:stopPreviewFileWatch', (_event, id) => stopPreviewFileWat
 
 ipcMain.handle('hermes:openExternal', (_event, url) => shell.openExternal(url))
 
+ipcMain.handle('hermes:fetchLinkTitle', (_event, url) => fetchLinkTitle(url))
+
 // Always-hidden noise (covers non-git projects too — gitignore would catch
 // these anyway when present, but we want the same hygiene without one).
 const FS_READDIR_HIDDEN = new Set(['.git', '.hg', '.svn', 'node_modules', '__pycache__', '.next', '.venv', 'venv'])
@@ -2036,6 +2568,40 @@ ipcMain.handle('hermes:fs:gitRoot', async (_event, startPath) => {
     return findGitRoot(resolved)
   }
 })
+
+ipcMain.handle('hermes:updates:check', async () =>
+  checkUpdates().catch(error => ({
+    supported: true,
+    branch: readDesktopUpdateConfig().branch,
+    error: 'check-failed',
+    message: error?.message || String(error),
+    fetchedAt: Date.now()
+  }))
+)
+
+ipcMain.handle('hermes:updates:apply', async (_event, payload) =>
+  applyUpdates(payload || {}).catch(error => ({
+    ok: false,
+    error: 'apply-failed',
+    message: error?.message || String(error)
+  }))
+)
+
+ipcMain.handle('hermes:updates:branch:get', async () => readDesktopUpdateConfig())
+
+ipcMain.handle('hermes:updates:branch:set', async (_event, name) => {
+  const branch = typeof name === 'string' && name.trim() ? name.trim() : DEFAULT_UPDATE_BRANCH
+  writeDesktopUpdateConfig({ branch })
+  return { branch }
+})
+
+ipcMain.handle('hermes:version', async () => ({
+  appVersion: app.getVersion(),
+  electronVersion: process.versions.electron,
+  nodeVersion: process.versions.node,
+  platform: process.platform,
+  hermesRoot: resolveUpdateRoot()
+}))
 
 app.whenReady().then(() => {
   if (IS_MAC) {

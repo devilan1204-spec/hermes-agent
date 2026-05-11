@@ -32,10 +32,7 @@ export function OverlaySearchInput({
     <div className={cn('relative', containerClassName)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 z-1 size-3.5 -translate-y-1/2 text-muted-foreground/80" />
       <Input
-        className={cn(
-          'relative z-0 h-8.5 rounded-full border border-[color-mix(in_srgb,var(--dt-border)_60%,transparent)] bg-[color-mix(in_srgb,var(--dt-card)_85%,transparent)] py-2 pl-8 pr-12 text-sm shadow-[inset_0_0.0625rem_0_color-mix(in_srgb,white_38%,transparent)] focus-visible:border-[color-mix(in_srgb,var(--dt-ring)_70%,transparent)] focus-visible:bg-background dark:border-[color-mix(in_srgb,var(--dt-border)_48%,transparent)] dark:bg-[color-mix(in_srgb,var(--dt-card)_96%,var(--dt-background))] dark:shadow-[inset_0_0.0625rem_0_color-mix(in_srgb,white_10%,transparent)]',
-          inputClassName
-        )}
+        className={cn('relative z-0 h-8 rounded-lg py-2 pl-8 pr-12 text-sm', inputClassName)}
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
         ref={inputRef}

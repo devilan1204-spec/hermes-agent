@@ -27,8 +27,9 @@ export type OnboardingFlow =
   | { message: string; provider?: OAuthProvider; start?: OAuthStartResponse; status: 'error' }
 
 export interface DesktopOnboardingState {
-  /** null until the first runtime check resolves; lets the overlay render
-   *  during boot without flickering for already-configured users. */
+  /** null until the first runtime check resolves. Seeded from localStorage so
+   *  returning users skip the boot overlay entirely instead of flashing it
+   *  every reload. */
   configured: boolean | null
   flow: OnboardingFlow
   mode: OnboardingMode
@@ -42,17 +43,46 @@ export interface OnboardingContext {
   requestGateway: <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>
 }
 
+const CONFIGURED_CACHE_KEY = 'hermes-desktop-onboarded-v1'
+const POLL_MS = 2000
+const COPY_FLASH_MS = 1500
+
+function readCachedConfigured(): boolean | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    return window.localStorage.getItem(CONFIGURED_CACHE_KEY) === '1' ? true : null
+  } catch {
+    return null
+  }
+}
+
+function writeCachedConfigured(value: boolean) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    if (value) {
+      window.localStorage.setItem(CONFIGURED_CACHE_KEY, '1')
+    } else {
+      window.localStorage.removeItem(CONFIGURED_CACHE_KEY)
+    }
+  } catch {
+    // localStorage unavailable — degrade silently.
+  }
+}
+
 const INITIAL: DesktopOnboardingState = {
-  configured: null,
+  configured: readCachedConfigured(),
   flow: { status: 'idle' },
   mode: 'oauth',
   providers: null,
   reason: null,
   requested: false
 }
-
-const POLL_MS = 2000
-const COPY_FLASH_MS = 1500
 
 export const $desktopOnboarding = atom<DesktopOnboardingState>(INITIAL)
 
@@ -114,7 +144,15 @@ export function requestDesktopOnboarding(reason = 'No inference provider is conf
 
 export function completeDesktopOnboarding() {
   clearPoll()
-  $desktopOnboarding.set({ ...INITIAL, configured: true })
+  writeCachedConfigured(true)
+  $desktopOnboarding.set({
+    configured: true,
+    flow: { status: 'idle' },
+    mode: 'oauth',
+    providers: null,
+    reason: null,
+    requested: false
+  })
 }
 
 export function setOnboardingMode(mode: OnboardingMode) {
@@ -129,6 +167,7 @@ export async function refreshOnboarding(ctx: OnboardingContext) {
     return true
   }
 
+  writeCachedConfigured(false)
   patch({ configured: false })
 
   if ($desktopOnboarding.get().providers !== null) {

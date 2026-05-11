@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import { Activity, AlertCircle, Layers3, Loader2, type LucideIcon, RefreshCw, Sparkles } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -7,6 +7,7 @@ import { $desktopActionTasks, buildRailTasks, type RailTask, type RailTaskStatus
 import { $previewServerRestart } from '@/store/preview'
 import { $sessions, $workingSessionIds } from '@/store/session'
 
+import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { OverlayCard } from '../overlays/overlay-chrome'
 import { OverlayMain, OverlayNavItem, OverlaySidebar, OverlaySplitLayout } from '../overlays/overlay-split-layout'
 import { OverlayView } from '../overlays/overlay-view'
@@ -26,6 +27,8 @@ const SECTIONS: readonly SectionDef[] = [
   { description: 'Past spawn snapshots, replay, and diff', icon: RefreshCw, id: 'history', label: 'History' }
 ]
 
+const SECTION_IDS = SECTIONS.map(s => s.id) as readonly AgentsSection[]
+
 const STATUS_TONE: Record<RailTaskStatus, string> = {
   error: 'text-destructive',
   running: 'text-foreground',
@@ -44,7 +47,7 @@ interface AgentsViewProps {
 }
 
 export function AgentsView({ initialSection = 'tree', onClose }: AgentsViewProps) {
-  const [section, setSection] = useState<AgentsSection>(initialSection)
+  const [section, setSection] = useRouteEnumParam('section', SECTION_IDS, initialSection)
 
   const sessions = useStore($sessions)
   const workingSessionIds = useStore($workingSessionIds)

@@ -29,7 +29,7 @@ cd apps/desktop
 npm run dev
 ```
 
-`npm run dev` starts Vite on `127.0.0.1:5174`, launches Electron, and lets Electron boot the Hermes dashboard backend on an open port in `9120-9199`. This path is for UI iteration and may still show Electron/dev identities in OS prompts.
+`npm run dev` starts Vite on `127.0.0.1:5174`, launches Electron, and lets Electron boot the Hermes backend (`hermes dashboard --no-open --tui`) on an open port in `9120-9199`. This path is for UI iteration and may still show Electron/dev identities in OS prompts.
 
 Useful overrides:
 

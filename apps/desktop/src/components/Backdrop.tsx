@@ -2,6 +2,8 @@ import { useGpuTier } from '@nous-research/ui/hooks/use-gpu-tier'
 import { Leva, useControls } from 'leva'
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 
+import { ThemeControls } from './ThemeControls'
+
 const BLEND_MODES = [
   'normal',
   'multiply',
@@ -24,7 +26,9 @@ const BLEND_MODES = [
 type BlendMode = (typeof BLEND_MODES)[number]
 
 function binaryNoiseDataUrl(tile: number, density: number, size: number, color: string): string {
-  if (typeof document === 'undefined') return ''
+  if (typeof document === 'undefined') {
+    return ''
+  }
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const physTile = Math.round(tile * dpr)
@@ -35,7 +39,10 @@ function binaryNoiseDataUrl(tile: number, density: number, size: number, color: 
   canvas.height = physTile
 
   const ctx = canvas.getContext('2d')
-  if (!ctx) return ''
+
+  if (!ctx) {
+    return ''
+  }
 
   ctx.fillStyle = color
 
@@ -55,21 +62,30 @@ export function Backdrop() {
   const [controlsOpen, setControlsOpen] = useState(false)
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return
+    if (!import.meta.env.DEV) {
+      return
+    }
 
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
+
       const editing =
         target?.isContentEditable ||
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLSelectElement
 
-      if (editing || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
-      if (event.shiftKey && event.code === 'KeyY') setControlsOpen(open => !open)
+      if (editing || event.repeat || event.altKey || event.ctrlKey || event.metaKey) {
+        return
+      }
+
+      if (event.shiftKey && event.code === 'KeyY') {
+        setControlsOpen(open => !open)
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
+
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
@@ -145,7 +161,9 @@ export function Backdrop() {
 
   return (
     <>
-      <Leva hidden={!import.meta.env.DEV || !controlsOpen} collapsed titleBar={{ title: 'backdrop', drag: true }} />
+      <Leva collapsed hidden={!import.meta.env.DEV || !controlsOpen} titleBar={{ title: 'backdrop', drag: true }} />
+
+      {import.meta.env.DEV && <ThemeControls />}
 
       {statue.enabled && (
         <div
@@ -164,7 +182,7 @@ export function Backdrop() {
             style={{
               height: `${statue.scale}dvh`,
               objectPosition: statue.objectPosition,
-              filter: `${statue.invert ? 'invert(1) ' : ''}saturate(${statue.saturate}) brightness(${statue.brightness})`
+              filter: `invert(calc(${statue.invert ? 1 : 0} * var(--backdrop-invert-mul, 1))) saturate(${statue.saturate}) brightness(${statue.brightness})`
             }}
           />
         </div>

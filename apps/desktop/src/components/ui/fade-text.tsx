@@ -1,6 +1,7 @@
 import type { ComponentProps, CSSProperties } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { cn } from '@/lib/utils'
 
 interface FadeTextProps extends Omit<ComponentProps<'span'>, 'children'> {
@@ -26,23 +27,21 @@ export function FadeText({ children, className, fadeWidth = '3rem', style, ...re
   const ref = useRef<HTMLSpanElement>(null)
   const [overflowing, setOverflowing] = useState(false)
 
-  useEffect(() => {
+  const measureOverflow = useCallback(() => {
     const el = ref.current
 
     if (!el) {
       return
     }
 
-    const measure = () => {
-      setOverflowing(el.scrollWidth - el.clientWidth > 1)
-    }
+    setOverflowing(el.scrollWidth - el.clientWidth > 1)
+  }, [])
 
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
+  useResizeObserver(measureOverflow, ref)
 
-    return () => observer.disconnect()
-  }, [children])
+  useEffect(() => {
+    measureOverflow()
+  }, [children, measureOverflow])
 
   const maskStyle: CSSProperties = overflowing
     ? {

@@ -1,17 +1,9 @@
 /**
- * Built-in desktop themes.
- *
- * Names match the CLI skins and dashboard theme presets so users get
- * a consistent visual identity across surfaces.
- *
+ * Built-in desktop themes. Names match the CLI skins / dashboard presets.
  * Add new themes here — no code changes needed elsewhere.
  */
 
 import type { DesktopTheme, DesktopThemeTypography } from './types'
-
-// ---------------------------------------------------------------------------
-// Shared defaults
-// ---------------------------------------------------------------------------
 
 const SYSTEM_SANS =
   'ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif'
@@ -19,137 +11,81 @@ const SYSTEM_SANS =
 const SYSTEM_MONO =
   'ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Monaco, Consolas, "Liberation Mono", monospace'
 
-export const DEFAULT_TYPOGRAPHY: DesktopThemeTypography = {
-  fontSans: SYSTEM_SANS,
-  fontMono: SYSTEM_MONO
-}
+export const DEFAULT_TYPOGRAPHY: DesktopThemeTypography = { fontSans: SYSTEM_SANS, fontMono: SYSTEM_MONO }
 
-// ---------------------------------------------------------------------------
-// Built-in themes
-// ---------------------------------------------------------------------------
+const NOUS_BLUE = '#0053FD'
+const PSYCHE_BLUE = '#1540B1'
+const PSYCHE_WARM = '#FFE6CB'
 
-/** Hermes light — premium warm white with restrained antique gold. */
-export const nousLightTheme: DesktopTheme = {
-  name: 'nous-light',
-  label: 'Hermes Light',
-  description: 'Warm white with antique gold — premium and restrained',
-  colors: {
-    background: '#FAF8F5',
-    foreground: '#1A1610',
-    card: '#FFFFFF',
-    cardForeground: '#1A1610',
-    muted: '#F3EFE8',
-    mutedForeground: '#7A6E60',
-    popover: '#FFFFFF',
-    popoverForeground: '#1A1610',
-    primary: '#A0782A',
-    primaryForeground: '#ffffff',
-    secondary: '#EDE8DF',
-    secondaryForeground: '#1A1610',
-    accent: '#EDE8DF',
-    accentForeground: '#1A1610',
-    border: '#E3DDCF',
-    input: '#D8D1C3',
-    ring: '#A0782A',
-    midground: '#A0782A',
-    destructive: '#b94a3a',
-    destructiveForeground: '#ffffff',
-    sidebarBackground: '#F5F2EC',
-    sidebarBorder: '#E3DDCF',
-    userBubble: '#EDE8DF',
-    userBubbleBorder: '#E3DDCF'
-  }
-}
+const tint = (pct: number) => `color-mix(in srgb, ${NOUS_BLUE} ${pct}%, #FFFFFF)`
+const tintTransparent = (pct: number) => `color-mix(in srgb, ${NOUS_BLUE} ${pct}%, transparent)`
 
-/** Optional Hermes gold skin for people who want the classic TUI accent. */
-export const hermesGoldTheme: DesktopTheme = {
-  name: 'gold',
-  label: 'Gold',
-  description: 'Classic Hermes gold accent',
-  colors: {
-    ...nousLightTheme.colors,
-    primary: '#d4af37',
-    primaryForeground: '#1a1404',
-    secondary: '#f6efd5',
-    secondaryForeground: '#5a4310',
-    accent: '#fbf3d4',
-    accentForeground: '#5a4310',
-    ring: '#d4af37',
-    midground: '#d4af37',
-    userBubble: '#f6efd5'
-  }
-}
-
-const NOUS_LENS_BLUE = '#0053FD'
-
-/** Nous — bright white with electric blue from the NousNet identity system. */
+/**
+ * Nous — canonical Hermes/Nous identity. Replaces the historical trio of
+ * `nous-light`, `default`, and `gold`. Light = bright Nous blue on white;
+ * dark = Hermes lens-blue with cream foreground.
+ */
 export const nousTheme: DesktopTheme = {
   name: 'nous',
   label: 'Nous',
-  description: 'Design-system white with electric Nous blue and subtle grain',
+  description: 'Bright Nous blue in light mode, Hermes blue in dark mode',
   colors: {
     background: '#FFFFFF',
     foreground: '#17171A',
     card: '#FFFFFF',
     cardForeground: '#17171A',
-    muted: `color-mix(in srgb, ${NOUS_LENS_BLUE} 5%, #FFFFFF)`,
+    muted: tint(5),
     mutedForeground: '#666678',
     popover: '#FFFFFF',
     popoverForeground: '#17171A',
-    primary: NOUS_LENS_BLUE,
+    primary: NOUS_BLUE,
     primaryForeground: '#FFFFFF',
-    secondary: `color-mix(in srgb, ${NOUS_LENS_BLUE} 7%, #FFFFFF)`,
+    secondary: tint(7),
     secondaryForeground: '#242432',
-    accent: `color-mix(in srgb, ${NOUS_LENS_BLUE} 10%, #FFFFFF)`,
+    accent: tint(10),
     accentForeground: '#202030',
-    border: `color-mix(in srgb, ${NOUS_LENS_BLUE} 22%, transparent)`,
-    input: `color-mix(in srgb, ${NOUS_LENS_BLUE} 30%, transparent)`,
-    ring: NOUS_LENS_BLUE,
-    midground: NOUS_LENS_BLUE,
+    border: tintTransparent(22),
+    input: tintTransparent(30),
+    ring: NOUS_BLUE,
+    midground: NOUS_BLUE,
     destructive: '#C72E4D',
     destructiveForeground: '#FFFFFF',
-    sidebarBackground: `color-mix(in srgb, ${NOUS_LENS_BLUE} 2.5%, #FFFFFF)`,
-    sidebarBorder: `color-mix(in srgb, ${NOUS_LENS_BLUE} 18%, transparent)`,
-    userBubble: `color-mix(in srgb, ${NOUS_LENS_BLUE} 6%, #FFFFFF)`,
-    userBubbleBorder: `color-mix(in srgb, ${NOUS_LENS_BLUE} 24%, transparent)`
+    sidebarBackground: tint(2.5),
+    sidebarBorder: tintTransparent(18),
+    userBubble: tint(6),
+    userBubbleBorder: tintTransparent(24)
+  },
+  darkColors: {
+    background: '#0D2F86',
+    foreground: PSYCHE_WARM,
+    card: '#12378F',
+    cardForeground: PSYCHE_WARM,
+    muted: '#183F9A',
+    mutedForeground: '#B5C7F3',
+    popover: '#123A96',
+    popoverForeground: PSYCHE_WARM,
+    primary: PSYCHE_WARM,
+    primaryForeground: '#0D2F86',
+    secondary: '#1B45A4',
+    secondaryForeground: '#E0E8FF',
+    accent: PSYCHE_BLUE,
+    accentForeground: '#F0F4FF',
+    border: '#3158AD',
+    input: '#0B2566',
+    ring: PSYCHE_WARM,
+    midground: NOUS_BLUE,
+    composerRing: PSYCHE_WARM,
+    destructive: '#C0473A',
+    destructiveForeground: '#FEF2F2',
+    sidebarBackground: '#09286F',
+    sidebarBorder: '#234A9C',
+    userBubble: '#143B91',
+    userBubbleBorder: '#3A63BD'
   },
   typography: {
     fontSans: SYSTEM_SANS,
     fontMono: `"Courier Prime", ${SYSTEM_MONO}`,
     fontUrl: 'https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap'
-  }
-}
-
-/** Classic Hermes dark teal. */
-export const defaultTheme: DesktopTheme = {
-  name: 'default',
-  label: 'Hermes Teal',
-  description: 'Classic dark teal — the canonical Hermes look',
-  colors: {
-    background: '#0d1a1a',
-    foreground: '#f0e8d8',
-    card: '#111f1f',
-    cardForeground: '#f0e8d8',
-    muted: '#172828',
-    mutedForeground: '#8aada6',
-    popover: '#142222',
-    popoverForeground: '#f0e8d8',
-    primary: '#f0e8d8',
-    primaryForeground: '#0d1a1a',
-    secondary: '#1e3030',
-    secondaryForeground: '#c8ddd8',
-    accent: '#1b2e2e',
-    accentForeground: '#e0d4c0',
-    border: '#1e3232',
-    input: '#1e3232',
-    ring: '#6bbfb5',
-    midground: '#6bbfb5',
-    destructive: '#c0473a',
-    destructiveForeground: '#fef2f2',
-    sidebarBackground: '#0a1616',
-    sidebarBorder: '#172424',
-    userBubble: '#1a2e2e',
-    userBubbleBorder: '#2a4a44'
   }
 }
 
@@ -333,15 +269,8 @@ export const slateTheme: DesktopTheme = {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Registry
-// ---------------------------------------------------------------------------
-
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
-  'nous-light': nousLightTheme,
-  default: defaultTheme,
   nous: nousTheme,
-  gold: hermesGoldTheme,
   midnight: midnightTheme,
   ember: emberTheme,
   mono: monoTheme,
@@ -350,3 +279,6 @@ export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
 }
 
 export const BUILTIN_THEME_LIST = Object.values(BUILTIN_THEMES)
+
+/** Skin used when nothing is persisted or the persisted name is retired. */
+export const DEFAULT_SKIN_NAME = 'nous'

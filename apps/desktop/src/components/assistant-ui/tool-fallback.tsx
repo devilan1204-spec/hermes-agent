@@ -6,14 +6,16 @@ import { type ReactNode, useEffect, useMemo, useRef } from 'react'
 
 import { useElapsedSeconds } from '@/components/assistant-ui/activity-timer'
 import { ActivityTimerText } from '@/components/assistant-ui/activity-timer-text'
+import { CompactMarkdown } from '@/components/assistant-ui/compact-markdown'
+import { DisclosureRow } from '@/components/assistant-ui/disclosure-row'
 import { PreviewAttachment } from '@/components/assistant-ui/preview-attachment'
 import { ZoomableImage } from '@/components/assistant-ui/zoomable-image'
 import { CopyButton } from '@/components/ui/copy-button'
 import { FadeText } from '@/components/ui/fade-text'
+import { normalizeExternalUrl, PrettyLink, LinkifiedText as SharedLinkifiedText, urlSlugTitleLabel } from '@/lib/external-link'
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronRight,
   Command,
   FileText,
   Globe,
@@ -58,6 +60,7 @@ interface ToolView {
   previewTarget?: string
   rawArgs: string
   rawResult: string
+  searchHits?: SearchResultRow[]
   status: ToolStatus
   subtitle: string
   title: string
@@ -124,7 +127,6 @@ const STATUS_ICON_CLASS: Record<ToolStatus, string> = {
   warning: 'bg-amber-500/14 text-amber-700 dark:text-amber-300'
 }
 
-const DISPLAY_URL_RE = /https?:\/\/[^\s<>"'`]+[^\s<>"'`.,;:!?]/g
 const INLINE_CODE_SPLIT_RE = /(`[^`\n]+`)/g
 const CITATION_MARKER_RE = /(?<=[\p{L}\p{N})\].,!?:;"'”’])\[(?:\d+(?:\s*,\s*\d+)*)\](?!\()/gu
 const BACKTICK_NOISE_RE = /`{3,}/g
@@ -336,51 +338,23 @@ function looksRedundant(title: string, detail: string): boolean {
 function cleanVisibleText(text: string): string {
   return text
     .split(INLINE_CODE_SPLIT_RE)
-    .map(part => (part.startsWith('`') ? part : part.replace(BACKTICK_NOISE_RE, '').replace(CITATION_MARKER_RE, '')))
+    .map(part =>
+      part.startsWith('`')
+        ? part
+        : part
+            .replace(BACKTICK_NOISE_RE, '')
+            .replace(CITATION_MARKER_RE, '')
+            .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, href: string) => {
+              const normalized = normalizeExternalUrl(href)
+
+              return `${label} ${normalized}`
+            })
+    )
     .join('')
 }
 
-function openExternal(url: string) {
-  void window.hermesDesktop?.openExternal(url)
-}
-
 function LinkifiedText({ className, text }: { className?: string; text: string }) {
-  const cleanText = cleanVisibleText(text)
-  const nodes: ReactNode[] = []
-  let cursor = 0
-
-  for (const match of cleanText.matchAll(DISPLAY_URL_RE)) {
-    const url = match[0]
-    const index = match.index ?? 0
-
-    if (index > cursor) {
-      nodes.push(cleanText.slice(cursor, index))
-    }
-
-    nodes.push(
-      <a
-        className="font-medium text-foreground underline underline-offset-4 decoration-midground/55 wrap-anywhere hover:decoration-midground"
-        href={url}
-        key={`${url}-${index}`}
-        onClick={event => {
-          event.stopPropagation()
-          event.preventDefault()
-          openExternal(url)
-        }}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        {url}
-      </a>
-    )
-    cursor = index + url.length
-  }
-
-  if (cursor < cleanText.length) {
-    nodes.push(cleanText.slice(cursor))
-  }
-
-  return <span className={className}>{nodes.length ? nodes : cleanText}</span>
+  return <SharedLinkifiedText className={className} pretty text={cleanVisibleText(text)} />
 }
 
 function summarizeBrowserSnapshot(snapshot: string): string {
@@ -526,7 +500,7 @@ function friendlyJsonSummary(value: unknown, depth = 0): string {
   return ''
 }
 
-function extractSearchResults(result: unknown): SearchResultRow[] {
+function extractSearchResults(result: unknown, limit = 6): SearchResultRow[] {
   const list = collectResultItems(result)
 
   return list
@@ -540,7 +514,7 @@ function extractSearchResults(result: unknown): SearchResultRow[] {
       }
     })
     .filter(hit => hit.title || hit.url)
-    .slice(0, 3)
+    .slice(0, limit)
 }
 
 function toolErrorText(part: ToolPart, result: Record<string, unknown>): string {
@@ -804,10 +778,13 @@ function toolDetailText(
   }
 
   if (part.toolName === 'web_search') {
+    // Structured render takes over for search results — see view.searchHits.
+    // The text fallback below is kept only for the case where extraction
+    // fails entirely so the user still sees something useful.
     const hits = extractSearchResults(part.result)
 
     if (hits.length) {
-      return hits.map(hit => [hit.title, hit.url, hit.snippet].filter(Boolean).join('\n')).join('\n\n')
+      return ''
     }
   }
 
@@ -900,6 +877,14 @@ function toolCopyPayload(part: ToolPart, view: ToolView): { label: string; text:
   }
 
   if (part.toolName === 'web_search') {
+    if (view.searchHits?.length) {
+      const text = view.searchHits
+        .map(hit => [hit.title, hit.url, hit.snippet].filter(Boolean).join('\n'))
+        .join('\n\n')
+
+      return { label: 'Copy results', text }
+    }
+
     const query = firstStringField(args, ['search_term', 'query']) || contextValue(args)
 
     if (query) {
@@ -994,6 +979,9 @@ function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
         .join('\n\n')
     : detailBody
 
+  const searchHits =
+    part.toolName === 'web_search' && status !== 'error' ? extractSearchResults(part.result) : undefined
+
   return {
     detail,
     detailLabel: error ? 'Error details' : toolDetailLabel(part.toolName),
@@ -1004,6 +992,7 @@ function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
     previewTarget: toolPreviewTarget(part.toolName, argsRecord, resultRecord),
     rawArgs: prettyJson(part.args),
     rawResult: prettyJson(part.result),
+    searchHits: searchHits?.length ? searchHits : undefined,
     status,
     subtitle,
     title,
@@ -1110,6 +1099,35 @@ function statusGlyph(status: ToolStatus): ReactNode {
   return <CheckCircle2 aria-label="Done" className="size-3.5 shrink-0 text-emerald-600/85 dark:text-emerald-400/85" />
 }
 
+function SearchResultsList({ hits }: { hits: SearchResultRow[] }) {
+  return (
+    <ol className="m-0 grid list-none gap-2.5 p-0">
+      {hits.map((hit, index) => {
+        const key = `${hit.url || hit.title}-${index}`
+        const trimmedTitle = hit.title.trim()
+
+        return (
+          <li className="grid min-w-0 gap-0.5" key={key}>
+            {hit.url ? (
+              <PrettyLink
+                className="block max-w-full text-[0.78rem] leading-snug"
+                fallbackLabel={trimmedTitle || urlSlugTitleLabel(hit.url)}
+                href={hit.url}
+                label={trimmedTitle || undefined}
+              />
+            ) : (
+              <span className="text-[0.78rem] font-medium leading-snug text-foreground/85">{trimmedTitle}</span>
+            )}
+            {hit.snippet && (
+              <p className="m-0 line-clamp-3 text-[0.7rem] leading-snug text-muted-foreground/85">{hit.snippet}</p>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
 interface ToolEntryProps {
   embedded?: boolean
   part: ToolPart
@@ -1166,10 +1184,13 @@ function ToolEntry({ embedded = false, part }: ToolEntryProps) {
     view.status !== 'error' &&
     (part.toolName === 'terminal' || part.toolName === 'execute_code' || part.toolName === 'read_file')
 
+  const hasSearchHits = Boolean(view.searchHits?.length)
+
   const hasExpandableContent = Boolean(
     (view.previewTarget && isPreviewableTarget(view.previewTarget)) ||
     view.imageUrl ||
     showDetail ||
+    hasSearchHits ||
     toolViewMode === 'technical'
   )
 
@@ -1179,98 +1200,66 @@ function ToolEntry({ embedded = false, part }: ToolEntryProps) {
   const showStatusGlyph = isPending || view.status === 'error' || view.status === 'warning'
   const copyAction = useMemo(() => toolCopyPayload(part, view), [part, view])
 
+  const trailing =
+    isPending && !embedded ? (
+      <ActivityTimerText
+        className="text-[0.625rem] tabular-nums text-muted-foreground/55"
+        seconds={elapsed}
+      />
+    ) : !isPending && copyAction.text ? (
+      <CopyButton appearance="tool-row" label={copyAction.label} stopPropagation text={copyAction.text} />
+    ) : undefined
+
   return (
     <div className="min-w-0 max-w-full overflow-hidden text-sm text-muted-foreground" data-slot="tool-block">
-      <div
-        className={cn(
-          'group/tool-row relative flex w-full max-w-full min-w-0 items-start rounded-md text-muted-foreground transition-colors',
-          hasExpandableContent &&
-            'hover:bg-[color-mix(in_srgb,var(--dt-midground)_8%,transparent)] hover:text-foreground'
-        )}
+      <DisclosureRow
+        onToggle={hasExpandableContent ? () => setToolDisclosureOpen(disclosureId, !open) : undefined}
+        open={open}
+        trailing={trailing}
       >
-        <button
-          aria-expanded={hasExpandableContent ? open : undefined}
-          className={cn(
-            'grid w-full min-w-0 grid-cols-[var(--message-text-indent)_minmax(0,1fr)] items-start py-0.5 pr-2 text-left',
-            hasExpandableContent ? 'cursor-pointer' : 'cursor-default'
-          )}
-          disabled={!hasExpandableContent}
-          onClick={hasExpandableContent ? () => setToolDisclosureOpen(disclosureId, !open) : undefined}
-          type="button"
-        >
-          <span className="flex h-[1.1rem] items-center justify-center">
-            {hasExpandableContent ? (
-              <ChevronRight
-                className={cn(
-                  'size-3 text-midground/55 transition-transform group-hover/tool-row:text-midground',
-                  open && 'rotate-90'
-                )}
-              />
-            ) : (
-              <span aria-hidden="true" className="size-3" />
-            )}
-          </span>
-          <span className="min-w-0">
-            <span className="flex min-w-0 items-baseline gap-1.5">
-              {showStatusGlyph && (
-                <span className="flex h-[1.1rem] shrink-0 items-center">
-                  {statusGlyph(isPending ? 'running' : view.status)}
-                </span>
-              )}
-              <FadeText
-                className={cn(
-                  'text-[0.78rem] font-medium leading-[1.1rem] text-foreground/85',
-                  isPending && 'shimmer text-foreground/55',
-                  view.status === 'error' && 'text-destructive',
-                  view.status === 'warning' && 'text-amber-700 dark:text-amber-300'
-                )}
-              >
-                {view.title}
-              </FadeText>
-              {!isPending && view.durationLabel && (
-                <span className="shrink-0 text-[0.625rem] tabular-nums text-midground/60 tracking-[0.04em]">
-                  {view.durationLabel}
-                </span>
-              )}
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          {showStatusGlyph && (
+            <span className="flex h-[1.1rem] shrink-0 items-center">
+              {statusGlyph(isPending ? 'running' : view.status)}
             </span>
-            {subtitleText &&
-              (subtitleIsSingleLine ? (
-                <FadeText
-                  className={cn(
-                    'text-[0.7rem] leading-[1.05rem] text-muted-foreground/70',
-                    isTerminalLike && 'font-mono text-[0.68rem]'
-                  )}
-                >
-                  {subtitleText}
-                </FadeText>
-              ) : (
-                <span
-                  className={cn(
-                    'line-clamp-2 block whitespace-pre-wrap text-[0.7rem] leading-[1.05rem] text-muted-foreground/70',
-                    isTerminalLike && 'font-mono text-[0.68rem]'
-                  )}
-                >
-                  {subtitleText}
-                </span>
-              ))}
-          </span>
-        </button>
-        {isPending && !embedded && (
-          <ActivityTimerText
-            className="flex h-[1.1rem] shrink-0 items-center pr-2 text-[0.625rem] tabular-nums text-muted-foreground/55"
-            seconds={elapsed}
-          />
-        )}
-        {!isPending && copyAction.text && (
-          <CopyButton
-            appearance="tool-row"
-            className="absolute right-1 top-0.5"
-            label={copyAction.label}
-            stopPropagation
-            text={copyAction.text}
-          />
-        )}
-      </div>
+          )}
+          <FadeText
+            className={cn(
+              'text-[0.78rem] font-medium leading-[1.1rem] text-foreground/85',
+              isPending && 'shimmer text-foreground/55',
+              view.status === 'error' && 'text-destructive',
+              view.status === 'warning' && 'text-amber-700 dark:text-amber-300'
+            )}
+          >
+            {view.title}
+          </FadeText>
+          {!isPending && view.durationLabel && (
+            <span className="shrink-0 text-[0.625rem] tabular-nums text-midground/60 tracking-[0.04em]">
+              {view.durationLabel}
+            </span>
+          )}
+        </span>
+        {subtitleText &&
+          (subtitleIsSingleLine ? (
+            <FadeText
+              className={cn(
+                'text-[0.7rem] leading-[1.05rem] text-muted-foreground/70',
+                isTerminalLike && 'font-mono text-[0.68rem]'
+              )}
+            >
+              {subtitleText}
+            </FadeText>
+          ) : (
+            <span
+              className={cn(
+                'line-clamp-2 block whitespace-pre-wrap text-[0.7rem] leading-[1.05rem] text-muted-foreground/70',
+                isTerminalLike && 'font-mono text-[0.68rem]'
+              )}
+            >
+              {subtitleText}
+            </span>
+          ))}
+      </DisclosureRow>
       {open && (
         <div className={cn(TOOL_DETAIL_INDENT_CLASS, 'mt-2 grid min-w-0 max-w-full gap-2 overflow-hidden pb-2')}>
           {!embedded && view.previewTarget && isPreviewableTarget(view.previewTarget) && (
@@ -1279,6 +1268,16 @@ function ToolEntry({ embedded = false, part }: ToolEntryProps) {
           {view.imageUrl && (
             <div className="max-w-72 overflow-hidden rounded-lg border border-border/70">
               <ZoomableImage alt="Tool output" className="h-auto w-full object-cover" src={view.imageUrl} />
+            </div>
+          )}
+          {hasSearchHits && view.searchHits && (
+            <div className="max-w-full text-xs leading-relaxed text-muted-foreground/90">
+              {view.detailLabel && (
+                <p className="mb-1 text-[0.66rem] font-medium uppercase tracking-[0.06em] text-muted-foreground/65">
+                  {view.detailLabel}
+                </p>
+              )}
+              <SearchResultsList hits={view.searchHits} />
             </div>
           )}
           {showDetail &&
@@ -1312,7 +1311,7 @@ function ToolEntry({ embedded = false, part }: ToolEntryProps) {
                     {view.detail}
                   </pre>
                 ) : (
-                  <LinkifiedText className="whitespace-pre-wrap wrap-anywhere" text={view.detail} />
+                  <CompactMarkdown text={view.detail} />
                 )}
               </div>
             ))}
@@ -1436,68 +1435,50 @@ function ToolGroup({ parts }: { parts: ToolPart[] }) {
 
   return (
     <div className="min-w-0 max-w-full overflow-hidden" data-slot="tool-block">
-      <div className="group/tool-row relative flex w-full max-w-full min-w-0 items-start rounded-md text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground">
-        <button
-          aria-expanded={open}
-          className="grid w-full min-w-0 cursor-pointer grid-cols-[var(--message-text-indent)_minmax(0,1fr)] items-start py-0.5 pr-2 text-left"
-          onClick={() => setToolDisclosureOpen(disclosureId, !open)}
-          type="button"
-        >
-          <span className="flex h-[1.1rem] items-center justify-center">
-            <ChevronRight
-              className={cn(
-                'size-3 text-muted-foreground/55 transition-transform group-hover/tool-row:text-muted-foreground/85',
-                open && 'rotate-90'
-              )}
-            />
-          </span>
-          <span className="min-w-0">
-            <span className="flex min-w-0 items-baseline gap-1.5">
-              {showGroupStatusGlyph && (
-                <span className="flex h-[1.1rem] shrink-0 items-center">{statusGlyph(status)}</span>
-              )}
-              <FadeText
-                className={cn(
-                  'text-[0.78rem] font-medium leading-[1.1rem] text-foreground/85',
-                  status === 'error' && 'text-destructive',
-                  status === 'warning' && 'text-amber-700 dark:text-amber-300'
-                )}
-              >
-                {groupTitle(parts)}
-              </FadeText>
-              {totalDurationLabel && (
-                <span className="shrink-0 text-[0.625rem] tabular-nums text-muted-foreground/55">
-                  {totalDurationLabel}
-                </span>
-              )}
+      <DisclosureRow
+        onToggle={() => setToolDisclosureOpen(disclosureId, !open)}
+        open={open}
+        trailing={
+          !isRunning && groupCopyText ? (
+            <CopyButton appearance="tool-row" label="Copy activity" stopPropagation text={groupCopyText} />
+          ) : undefined
+        }
+      >
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          {showGroupStatusGlyph && (
+            <span className="flex h-[1.1rem] shrink-0 items-center">{statusGlyph(status)}</span>
+          )}
+          <FadeText
+            className={cn(
+              'text-[0.78rem] font-medium leading-[1.1rem] text-foreground/85',
+              status === 'error' && 'text-destructive',
+              status === 'warning' && 'text-amber-700 dark:text-amber-300'
+            )}
+          >
+            {groupTitle(parts)}
+          </FadeText>
+          {totalDurationLabel && (
+            <span className="shrink-0 text-[0.625rem] tabular-nums text-muted-foreground/55">
+              {totalDurationLabel}
             </span>
-            {tailSummary && (
-              <FadeText className="text-[0.7rem] leading-[1.05rem] text-muted-foreground/70">
-                {tailSummary.replace(/\n+/g, ' · ')}
-              </FadeText>
-            )}
-            {statusSummary && (
-              <FadeText
-                className={cn(
-                  'text-[0.68rem] leading-[1.05rem]',
-                  status === 'warning' ? 'text-amber-700/80 dark:text-amber-300/85' : 'text-destructive/85'
-                )}
-              >
-                {statusSummary}
-              </FadeText>
-            )}
-          </span>
-        </button>
-        {!isRunning && groupCopyText && (
-          <CopyButton
-            appearance="tool-row"
-            className="absolute right-1 top-0.5"
-            label="Copy activity"
-            stopPropagation
-            text={groupCopyText}
-          />
+          )}
+        </span>
+        {tailSummary && (
+          <FadeText className="text-[0.7rem] leading-[1.05rem] text-muted-foreground/70">
+            {tailSummary.replace(/\n+/g, ' · ')}
+          </FadeText>
         )}
-      </div>
+        {statusSummary && (
+          <FadeText
+            className={cn(
+              'text-[0.68rem] leading-[1.05rem]',
+              status === 'warning' ? 'text-amber-700/80 dark:text-amber-300/85' : 'text-destructive/85'
+            )}
+          >
+            {statusSummary}
+          </FadeText>
+        )}
+      </DisclosureRow>
       {previewTargets.length > 0 && (
         <div className={cn(TOOL_DETAIL_INDENT_CLASS, 'mt-2 grid min-w-0 max-w-full gap-2 overflow-hidden')}>
           {previewTargets.map(target => (

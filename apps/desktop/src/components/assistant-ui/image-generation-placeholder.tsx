@@ -1,4 +1,6 @@
-import { type FC, useEffect, useRef } from 'react'
+import { type FC, useCallback, useEffect, useRef } from 'react'
+
+import { useResizeObserver } from '@/hooks/use-resize-observer'
 
 type Rgb = { r: number; g: number; b: number }
 
@@ -225,6 +227,19 @@ const DiffusionCanvas: FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const sizeRef = useRef({ width: 0, height: 0 })
 
+  const fitToContainer = useCallback(() => {
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+
+    if (!canvas || !ctx) {
+      return
+    }
+
+    sizeRef.current = fitCanvas(canvas, ctx)
+  }, [])
+
+  useResizeObserver(fitToContainer, canvasRef)
+
   useEffect(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
@@ -233,13 +248,7 @@ const DiffusionCanvas: FC = () => {
       return
     }
 
-    const resize = () => {
-      sizeRef.current = fitCanvas(canvas, ctx)
-    }
-
-    const observer = new ResizeObserver(resize)
-    observer.observe(canvas)
-    resize()
+    sizeRef.current = fitCanvas(canvas, ctx)
 
     let frame = requestAnimationFrame(function draw(now) {
       const { width, height } = sizeRef.current
@@ -250,7 +259,6 @@ const DiffusionCanvas: FC = () => {
 
     return () => {
       cancelAnimationFrame(frame)
-      observer.disconnect()
     }
   }, [])
 

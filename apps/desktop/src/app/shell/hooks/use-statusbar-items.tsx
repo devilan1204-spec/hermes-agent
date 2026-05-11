@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import type { CommandCenterSection } from '@/app/command-center'
 import { GatewayMenuPanel } from '@/app/shell/gateway-menu-panel'
 import { restartGateway } from '@/hermes'
-import { Activity, AlertCircle, Command, Cpu, FolderOpen, GitBranch, Loader2, Sparkles } from '@/lib/icons'
+import { Activity, AlertCircle, Command, Cpu, FolderOpen, GitBranch, Hash, Loader2, Sparkles } from '@/lib/icons'
 import { compactPath, contextBarLabel, LiveDuration, usageContextLabel } from '@/lib/statusbar'
 import { cn } from '@/lib/utils'
 import { $desktopActionTasks } from '@/store/activity'
@@ -22,6 +22,7 @@ import {
   $workingSessionIds,
   setModelPickerOpen
 } from '@/store/session'
+import { $desktopVersion, $updateApply, $updateStatus, setUpdateOverlayOpen } from '@/store/updates'
 import type { StatusResponse } from '@/types/hermes'
 
 import type { StatusbarItem } from '../statusbar-controls'
@@ -62,6 +63,9 @@ export function useStatusbarItems({
   const sessionStartedAt = useStore($sessionStartedAt)
   const turnStartedAt = useStore($turnStartedAt)
   const workingSessionIds = useStore($workingSessionIds)
+  const updateStatus = useStore($updateStatus)
+  const updateApply = useStore($updateApply)
+  const desktopVersion = useStore($desktopVersion)
 
   const contextUsage = useMemo(() => usageContextLabel(currentUsage), [currentUsage])
   const contextBar = useMemo(() => contextBarLabel(currentUsage), [currentUsage])
@@ -114,10 +118,54 @@ export function useStatusbarItems({
 
   const gatewayUp = Boolean(statusSnapshot?.gateway_running)
 
+  const versionItem = useMemo<StatusbarItem>(() => {
+    const appVersion = desktopVersion?.appVersion
+    const sha = updateStatus?.currentSha?.slice(0, 7) ?? null
+    const behind = updateStatus?.behind ?? 0
+    const applying = updateApply.applying || updateApply.stage === 'restart'
+    const base = appVersion ? `v${appVersion}` : sha ?? 'unknown'
+    const behindHint = !applying && behind > 0 ? ` (+${behind})` : ''
+    const label = applying
+      ? updateApply.stage === 'restart'
+        ? `${base} · restart`
+        : `${base} · update`
+      : `${base}${behindHint}`
+
+    const tooltip = [
+      applying ? updateApply.message || 'Update in progress' : null,
+      !applying && behind > 0 && `${behind} commit${behind === 1 ? '' : 's'} behind ${updateStatus?.branch ?? '…'}`,
+      appVersion && `Hermes Desktop v${appVersion}`,
+      sha && `commit ${sha}`,
+      updateStatus?.branch && `branch ${updateStatus.branch}`
+    ]
+      .filter(Boolean)
+      .join(' · ')
+
+    return {
+      className: !applying && behind > 0 ? 'text-primary hover:text-primary' : undefined,
+      detail: appVersion && sha && !applying ? sha : undefined,
+      hidden: !appVersion && !sha,
+      icon: applying ? <Loader2 className="size-3 animate-spin" /> : <Hash className="size-3" />,
+      id: 'version',
+      label,
+      onSelect: () => setUpdateOverlayOpen(true),
+      title: tooltip || undefined,
+      variant: 'action'
+    }
+  }, [
+    desktopVersion?.appVersion,
+    updateApply.applying,
+    updateApply.message,
+    updateApply.stage,
+    updateStatus?.behind,
+    updateStatus?.branch,
+    updateStatus?.currentSha
+  ])
+
   const coreLeftStatusbarItems = useMemo<readonly StatusbarItem[]>(
     () => [
       {
-        className: `h-6 w-6 justify-center px-0${commandCenterOpen ? ' bg-accent/55 text-foreground' : ''}`,
+        className: `w-7 justify-center px-0${commandCenterOpen ? ' bg-accent/55 text-foreground' : ''}`,
         icon: <Command className="size-3.5" />,
         id: 'command-center',
         onSelect: toggleCommandCenter,
@@ -220,7 +268,8 @@ export function useStatusbarItems({
         label: currentBranch,
         title: currentBranch ? `Current branch: ${currentBranch}` : undefined,
         variant: 'text'
-      }
+      },
+      versionItem
     ],
     [
       browseSessionCwd,
@@ -232,7 +281,8 @@ export function useStatusbarItems({
       currentModel,
       currentProvider,
       sessionStartedAt,
-      turnStartedAt
+      turnStartedAt,
+      versionItem
     ]
   )
 
