@@ -1342,6 +1342,26 @@ def _pin_kanban_board_env() -> None:
         pass
 
 
+def _sync_bundled_skills_quietly() -> None:
+    """Seed ``~/.hermes/skills/`` with the bundled skill library on first launch.
+
+    Called from any CLI entrypoint that the user might use as their first
+    interaction with Hermes — chat, dashboard (the desktop GUI's backend),
+    and gateway. The skills_sync module is manifest-based and idempotent:
+    skipped skills cost ~milliseconds, so calling this repeatedly is fine.
+
+    Failures are swallowed because skills are an enhancement, not a hard
+    dependency. Hermes still functions without them; the user just sees an
+    empty skills library.
+    """
+    try:
+        from tools.skills_sync import sync_skills
+
+        sync_skills(quiet=True)
+    except Exception:
+        pass
+
+
 def cmd_chat(args):
     """Run interactive chat CLI."""
     use_tui = getattr(args, "tui", False) or os.environ.get("HERMES_TUI") == "1"
@@ -1421,12 +1441,7 @@ def cmd_chat(args):
         pass
 
     # Sync bundled skills on every CLI launch (fast -- skips unchanged skills)
-    try:
-        from tools.skills_sync import sync_skills
-
-        sync_skills(quiet=True)
-    except Exception:
-        pass
+    _sync_bundled_skills_quietly()
 
     # --yolo: bypass all dangerous command approvals
     if getattr(args, "yolo", False):
@@ -1504,6 +1519,8 @@ def cmd_chat(args):
 
 def cmd_gateway(args):
     """Gateway management commands."""
+    _sync_bundled_skills_quietly()
+
     from hermes_cli.gateway import gateway_command
 
     gateway_command(args)
@@ -8972,6 +8989,12 @@ def cmd_dashboard(args):
         )
         print(f"Import error: {e}")
         sys.exit(1)
+
+    # Seed bundled skills on first dashboard launch so the desktop GUI's
+    # skills picker / agent skill discovery sees the bundled library.
+    # cmd_chat does this in its own pre-dispatch block; the dashboard
+    # backend is the desktop's primary entrypoint and needs the same.
+    _sync_bundled_skills_quietly()
 
     if "HERMES_WEB_DIST" not in os.environ:
         if not _build_web_ui(PROJECT_ROOT / "apps" / "dashboard", fatal=True):
