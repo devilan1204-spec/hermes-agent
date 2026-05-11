@@ -14,6 +14,37 @@ const LOCAL_PREVIEW_ONLY_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|
 const URL_ONLY_LINE_RE = /^\s*https?:\/\/\S+\s*$/i
 const CITATION_MARKER_RE = /(?<=[\p{L}\p{N})\].,!?:;"'”’])\[(?:\d+(?:\s*,\s*\d+)*)\](?!\()/gu
 
+/**
+ * Returns true when `body` contains a line that's exactly `marker` (modulo
+ * leading/trailing horizontal whitespace) — i.e. an unambiguous close fence
+ * for an opening fence with the same marker.
+ *
+ * Implemented with string comparisons (not RegExp) so that input-derived
+ * `marker` values can never bleed into a regex pattern. This matters for
+ * CodeQL's `js/incomplete-hostname-regexp` dataflow, which would otherwise
+ * trace test-fixture URLs from the input through `marker` into the regex
+ * source, even though `marker` is captured by `(`{3,}|~{3,})` and can only
+ * ever be backticks or tildes.
+ */
+function hasCloseFenceLine(body: string, marker: string): boolean {
+  const lines = body.split('\n')
+  // Original regex required `\n` immediately before the close fence, so the
+  // first line of `body` (which has no preceding newline within `body`)
+  // cannot itself be the close fence.
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i]
+    let lo = 0
+    let hi = line.length
+    while (lo < hi && (line[lo] === ' ' || line[lo] === '\t')) lo += 1
+    while (hi > lo && (line[hi - 1] === ' ' || line[hi - 1] === '\t')) hi -= 1
+    if (line.slice(lo, hi) === marker) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function scrubBacktickNoise(text: string): string {
   const balancedFenceRe = /(^|\n)([ \t]*)(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)\n[ \t]*\3[ \t]*(?=\n|$)/g
   const protectedRanges: { end: number; start: number }[] = []
@@ -32,14 +63,8 @@ function scrubBacktickNoise(text: string): string {
     const marker = match[2] || '```'
     const info = match[3] || ''
     const body = match[4] || ''
-    // `marker` is captured by `(`{3,}|~{3,})` above, so its only meta-character
-    // is the backtick or tilde. Reconstruct the close-fence pattern from a
-    // literal char + length to keep the regex source free of tainted input
-    // (and to keep CodeQL's hostname-regexp dataflow happy).
-    const fenceChar = marker[0] === '~' ? '\\~' : '`'
-    const closeRe = new RegExp(`\\n[ \\t]*${fenceChar}{${marker.length}}[ \\t]*(?=\\n|$)`)
 
-    if (!closeRe.test(body) && sanitizeLanguageTag(info) && !isLikelyProseFence(info, body)) {
+    if (!hasCloseFenceLine(body, marker) && sanitizeLanguageTag(info) && !isLikelyProseFence(info, body)) {
       protectedRanges.push({ end: text.length, start })
 
       break
