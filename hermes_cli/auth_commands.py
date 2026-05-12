@@ -482,10 +482,10 @@ def auth_status_command(args) -> None:
         # Avoid echoing provider error strings here. OAuth libraries and
         # provider responses can include token-like fields in exception text,
         # and this command may be copied into bug reports.
-        print(f"{provider}: logged out")
+        print("Authentication: logged out")
         return
 
-    print(f"{provider}: logged in")
+    print("Authentication: logged in")
     if status.get("expires_at") or status.get("expires_at_ms"):
         print("  token: present (expiry available)")
     if status.get("has_refresh_token"):
