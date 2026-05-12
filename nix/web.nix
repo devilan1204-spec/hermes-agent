@@ -5,7 +5,7 @@ let
   npmDeps = pkgs.fetchNpmDeps {
     inherit src;
     npmRoot = "dashboard";
-    hash = "sha256-HWB1piIPglTXbzQHXFYHLgVZIbDb60esupXSQGa1+lI=";
+    hash = "sha256-jJsVp3Dz+6/GaruxcUSby+G1vVB+nHHlu1tFWE9wQZQ=";
   };
 
   npm = hermesNpmLib.mkNpmPassthru { folder = "apps/dashboard"; attr = "web"; pname = "hermes-web"; };
