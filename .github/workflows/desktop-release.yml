@@ -203,7 +203,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=16384
         run: |
           set -euo pipefail
-          npm --prefix apps/desktop exec electron-builder -- \
+          npm --prefix apps/desktop run builder -- \
             ${{ matrix.build_args }} \
             --publish never \
             --config.extraMetadata.version="${DESKTOP_VERSION}" \
