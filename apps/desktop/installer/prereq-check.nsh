@@ -172,7 +172,7 @@ Function HermesPrereqPageCreate
   Pop $0
 
   ; --- Python panel (REQUIRED) ---
-  ${NSD_CreateGroupBox} 0u 18u 100% 26u "Python 3.11+  (required)"
+  ${NSD_CreateGroupBox} 0u 18u 100% 30u "Python 3.11+  (required)"
   Pop $0
   ${If} $HermesHasPython == "1"
     ${NSD_CreateLabel} 8u 28u 95% 10u "Detected on your system."
@@ -181,7 +181,7 @@ Function HermesPrereqPageCreate
     ${If} $HermesHasWinget == "1"
       ${NSD_CreateLabel} 8u 27u 95% 9u "Not detected."
       Pop $HermesPyStatusLabel
-      ${NSD_CreateCheckbox} 8u 36u 95% 9u "Install Python 3.11"
+      ${NSD_CreateCheckbox} 8u 37u 95% 9u "Install Python 3.11"
       Pop $HermesPyCheckbox
       ${NSD_Check} $HermesPyCheckbox
     ${Else}
@@ -191,39 +191,39 @@ Function HermesPrereqPageCreate
   ${EndIf}
 
   ; --- Git panel (REQUIRED) ---
-  ${NSD_CreateGroupBox} 0u 48u 100% 26u "Git for Windows  (required, provides Git Bash)"
+  ${NSD_CreateGroupBox} 0u 50u 100% 30u "Git for Windows  (required, provides Git Bash)"
   Pop $0
   ${If} $HermesHasGit == "1"
-    ${NSD_CreateLabel} 8u 58u 95% 10u "Detected on your system."
+    ${NSD_CreateLabel} 8u 60u 95% 10u "Detected on your system."
     Pop $HermesGitStatusLabel
   ${Else}
     ${If} $HermesHasWinget == "1"
-      ${NSD_CreateLabel} 8u 57u 95% 9u "Not detected. Required by Hermes' terminal tool."
+      ${NSD_CreateLabel} 8u 59u 95% 9u "Not detected. Required by Hermes' terminal tool."
       Pop $HermesGitStatusLabel
-      ${NSD_CreateCheckbox} 8u 66u 95% 9u "Install Git for Windows"
+      ${NSD_CreateCheckbox} 8u 69u 95% 9u "Install Git for Windows"
       Pop $HermesGitCheckbox
       ${NSD_Check} $HermesGitCheckbox
     ${Else}
-      ${NSD_CreateLabel} 8u 57u 95% 14u "Not detected. Install manually from https://git-scm.com/download/win and re-run this installer."
+      ${NSD_CreateLabel} 8u 59u 95% 14u "Not detected. Install manually from https://git-scm.com/download/win and re-run this installer."
       Pop $HermesGitStatusLabel
     ${EndIf}
   ${EndIf}
 
   ; --- ripgrep panel (RECOMMENDED) ---
-  ${NSD_CreateGroupBox} 0u 78u 100% 26u "ripgrep  (recommended for fast file search)"
+  ${NSD_CreateGroupBox} 0u 82u 100% 30u "ripgrep  (recommended for fast file search)"
   Pop $0
   ${If} $HermesHasRipgrep == "1"
-    ${NSD_CreateLabel} 8u 88u 95% 10u "Detected on your system."
+    ${NSD_CreateLabel} 8u 92u 95% 10u "Detected on your system."
     Pop $HermesRgStatusLabel
   ${Else}
     ${If} $HermesHasWinget == "1"
-      ${NSD_CreateLabel} 8u 87u 95% 9u "Not detected. Hermes will fall back to slower grep/find."
+      ${NSD_CreateLabel} 8u 91u 95% 9u "Not detected. Hermes will fall back to slower grep/find."
       Pop $HermesRgStatusLabel
-      ${NSD_CreateCheckbox} 8u 96u 95% 9u "Install ripgrep"
+      ${NSD_CreateCheckbox} 8u 101u 95% 9u "Install ripgrep"
       Pop $HermesRgCheckbox
       ${NSD_Check} $HermesRgCheckbox
     ${Else}
-      ${NSD_CreateLabel} 8u 87u 95% 14u "Not detected. Install manually from https://github.com/BurntSushi/ripgrep#installation if you want fast .gitignore-aware search."
+      ${NSD_CreateLabel} 8u 91u 95% 14u "Not detected. Install manually from https://github.com/BurntSushi/ripgrep#installation if you want fast .gitignore-aware search."
       Pop $HermesRgStatusLabel
     ${EndIf}
   ${EndIf}
@@ -231,7 +231,7 @@ Function HermesPrereqPageCreate
   ; --- Footer (UAC notice when Git install will run) ---
   ${If} $HermesHasGit == "0"
   ${AndIf} $HermesHasWinget == "1"
-    ${NSD_CreateLabel} 0u 108u 100% 18u "Note: Git for Windows requires administrator approval. The UAC prompt may appear behind this window — check your taskbar."
+    ${NSD_CreateLabel} 0u 116u 100% 18u "Note: Git for Windows requires administrator approval. The UAC prompt may appear behind this window — check your taskbar."
     Pop $HermesFooterLabel
   ${EndIf}
 
