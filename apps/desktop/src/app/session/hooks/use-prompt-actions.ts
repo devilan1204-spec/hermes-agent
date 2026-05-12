@@ -18,6 +18,7 @@ import {
   isDesktopSlashCommand
 } from '@/lib/desktop-slash-commands'
 import { triggerHaptic } from '@/lib/haptics'
+import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import {
   $composerAttachments,
   addComposerAttachment,
@@ -49,9 +50,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 function isProviderSetupError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
 
-  return /No inference provider configured|OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|set an API key/i.test(
-    message
-  )
+  return isProviderSetupErrorMessage(message)
 }
 
 interface PromptActionsOptions {

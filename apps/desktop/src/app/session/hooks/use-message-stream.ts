@@ -15,6 +15,7 @@ import {
 } from '@/lib/chat-messages'
 import { coerceGatewayText, coerceThinkingText, normalizePersonalityValue } from '@/lib/chat-runtime'
 import { triggerHaptic } from '@/lib/haptics'
+import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { setClarifyRequest } from '@/store/clarify'
 import { notify } from '@/store/notifications'
 import { requestDesktopOnboarding } from '@/store/onboarding'
@@ -34,9 +35,6 @@ import { recordToolDiff } from '@/store/tool-diffs'
 import type { RpcEvent } from '@/types/hermes'
 
 import type { ClientSessionState } from '../../types'
-
-const PROVIDER_SETUP_ERROR_RE =
-  /No inference provider configured|no_provider_configured|OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|set an API key/i
 
 interface MessageStreamOptions {
   activeSessionIdRef: MutableRefObject<string | null>
@@ -598,7 +596,7 @@ export function useMessageStream({
         }
       } else if (event.type === 'error') {
         const errorMessage = payload?.message || 'Hermes reported an error'
-        const looksLikeProviderSetup = PROVIDER_SETUP_ERROR_RE.test(errorMessage)
+        const looksLikeProviderSetup = isProviderSetupErrorMessage(errorMessage)
 
         if (looksLikeProviderSetup) {
           requestDesktopOnboarding(errorMessage)

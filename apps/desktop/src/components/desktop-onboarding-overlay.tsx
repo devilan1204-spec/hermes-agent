@@ -5,6 +5,7 @@ import { ModelPickerDialog } from '@/components/model-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Check, ChevronLeft, ChevronRight, ExternalLink, KeyRound, Loader2, Sparkles } from '@/lib/icons'
+import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { cn } from '@/lib/utils'
 import { $desktopBoot, type DesktopBootState } from '@/store/boot'
 import {
@@ -137,7 +138,8 @@ export function DesktopOnboardingOverlay({ enabled, onCompleted, requestGateway 
   }
 
   const { flow } = onboarding
-  const reason = onboarding.reason?.trim() || null
+  const rawReason = onboarding.reason?.trim() || null
+  const reason = rawReason && !isProviderSetupErrorMessage(rawReason) ? rawReason : null
   const ready = enabled && onboarding.configured === false
   const showPicker = flow.status === 'idle' || flow.status === 'success'
 
