@@ -28,6 +28,7 @@ const CITATION_MARKER_RE = /(?<=[\p{L}\p{N})\].,!?:;"'”’])\[(?:\d+(?:\s*,\s*
  */
 function hasCloseFenceLine(body: string, marker: string): boolean {
   const lines = body.split('\n')
+
   // Original regex required `\n` immediately before the close fence, so the
   // first line of `body` (which has no preceding newline within `body`)
   // cannot itself be the close fence.
@@ -35,8 +36,15 @@ function hasCloseFenceLine(body: string, marker: string): boolean {
     const line = lines[i]
     let lo = 0
     let hi = line.length
-    while (lo < hi && (line[lo] === ' ' || line[lo] === '\t')) lo += 1
-    while (hi > lo && (line[hi - 1] === ' ' || line[hi - 1] === '\t')) hi -= 1
+
+    while (lo < hi && (line[lo] === ' ' || line[lo] === '\t')) {
+      lo += 1
+    }
+
+    while (hi > lo && (line[hi - 1] === ' ' || line[hi - 1] === '\t')) {
+      hi -= 1
+    }
+
     if (line.slice(lo, hi) === marker) {
       return true
     }
@@ -122,7 +130,9 @@ function normalizeVisibleProse(text: string): string {
     .map(part =>
       part.startsWith('`')
         ? part
-        : autoLinkRawUrls(part.replace(/`{3,}/g, '').replace(LOCAL_PREVIEW_URL_RE, '$1').replace(CITATION_MARKER_RE, ''))
+        : autoLinkRawUrls(
+            part.replace(/`{3,}/g, '').replace(LOCAL_PREVIEW_URL_RE, '$1').replace(CITATION_MARKER_RE, '')
+          )
     )
     .join('')
 }

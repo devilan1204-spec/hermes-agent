@@ -204,7 +204,14 @@ export function ExternalLinkIcon({ className }: { className?: string }) {
   return <ArrowUpRight aria-hidden className={cn('ml-1 inline size-[0.78em] align-[-0.08em] opacity-70', className)} />
 }
 
-export function ExternalLink({ children, className, href, onClick, showExternalIcon = true, ...rest }: ExternalLinkProps) {
+export function ExternalLink({
+  children,
+  className,
+  href,
+  onClick,
+  showExternalIcon = true,
+  ...rest
+}: ExternalLinkProps) {
   const target = normalizeExternalUrl(href)
 
   return (

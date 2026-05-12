@@ -110,37 +110,37 @@ function StatusbarItemView({ item, navigate }: { item: StatusbarItem; navigate: 
             : (item.menuItems ?? [])
                 .filter(menuItem => !menuItem.hidden)
                 .map(menuItem => (
-              <DropdownMenuItem
-                className={cn('gap-2 text-foreground focus:bg-accent [&_svg]:size-4', menuItem.className)}
-                disabled={menuItem.disabled}
-                key={menuItem.id}
-                onSelect={() => {
-                  if (menuItem.to) {
-                    navigate(menuItem.to)
-                  }
+                  <DropdownMenuItem
+                    className={cn('gap-2 text-foreground focus:bg-accent [&_svg]:size-4', menuItem.className)}
+                    disabled={menuItem.disabled}
+                    key={menuItem.id}
+                    onSelect={() => {
+                      if (menuItem.to) {
+                        navigate(menuItem.to)
+                      }
 
-                  menuItem.onSelect?.()
-                }}
-              >
-                {menuItem.href ? (
-                  <a
-                    className="inline-flex w-full items-center gap-2"
-                    href={menuItem.href}
-                    rel="noreferrer"
-                    target="_blank"
-                    title={menuItem.title ?? menuItem.label}
+                      menuItem.onSelect?.()
+                    }}
                   >
-                    {menuItem.icon}
-                    <span className="truncate">{menuItem.label}</span>
-                  </a>
-                ) : (
-                  <>
-                    {menuItem.icon}
-                    <span className="truncate">{menuItem.label}</span>
-                  </>
-                )}
-              </DropdownMenuItem>
-            ))}
+                    {menuItem.href ? (
+                      <a
+                        className="inline-flex w-full items-center gap-2"
+                        href={menuItem.href}
+                        rel="noreferrer"
+                        target="_blank"
+                        title={menuItem.title ?? menuItem.label}
+                      >
+                        {menuItem.icon}
+                        <span className="truncate">{menuItem.label}</span>
+                      </a>
+                    ) : (
+                      <>
+                        {menuItem.icon}
+                        <span className="truncate">{menuItem.label}</span>
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                ))}
         </DropdownMenuContent>
       </DropdownMenu>
     )

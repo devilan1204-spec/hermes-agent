@@ -6,28 +6,36 @@ import { parseTodos, type TodoItem, type TodoStatus } from '@/lib/todos'
 import { cn } from '@/lib/utils'
 
 export function todosFromMessageContent(content: unknown): TodoItem[] {
-  if (!Array.isArray(content)) {return []}
+  if (!Array.isArray(content)) {
+    return []
+  }
 
   let latest: null | TodoItem[] = null
 
   for (const part of content) {
-    if (!part || typeof part !== 'object') {continue}
+    if (!part || typeof part !== 'object') {
+      continue
+    }
     const row = part as Record<string, unknown>
 
-    if (row.type !== 'tool-call' || row.toolName !== 'todo') {continue}
+    if (row.type !== 'tool-call' || row.toolName !== 'todo') {
+      continue
+    }
     const parsed = parseTodos(row.result) ?? parseTodos(row.args)
 
-    if (parsed !== null) {latest = parsed}
+    if (parsed !== null) {
+      latest = parsed
+    }
   }
 
   return latest ?? []
 }
 
 const headerLabel = (todos: readonly TodoItem[]): string =>
-  todos.find(t => t.status === 'in_progress')?.content
-  ?? todos.find(t => t.status === 'pending')?.content
-  ?? todos.at(-1)?.content
-  ?? 'Tasks'
+  todos.find(t => t.status === 'in_progress')?.content ??
+  todos.find(t => t.status === 'pending')?.content ??
+  todos.at(-1)?.content ??
+  'Tasks'
 
 const Checkmark: FC<{ status: TodoStatus; label: string }> = ({ status, label }) => {
   if (status === 'in_progress') {
@@ -49,7 +57,8 @@ const Checkmark: FC<{ status: TodoStatus; label: string }> = ({ status, label })
       checked={checked}
       className={cn(
         'size-[1.1rem] shrink-0 rounded-full border-border/80 pointer-events-none disabled:cursor-default disabled:opacity-100',
-        checked && 'data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground [&_[data-slot=checkbox-indicator]_svg]:size-3',
+        checked &&
+          'data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground [&_[data-slot=checkbox-indicator]_svg]:size-3',
         status === 'cancelled' && 'border-muted-foreground/40'
       )}
       disabled
@@ -58,7 +67,9 @@ const Checkmark: FC<{ status: TodoStatus; label: string }> = ({ status, label })
 }
 
 export const HoistedTodoPanel: FC<{ todos: TodoItem[] }> = ({ todos }) => {
-  if (!todos.length) {return null}
+  if (!todos.length) {
+    return null
+  }
   const label = headerLabel(todos)
 
   return (
@@ -67,7 +78,10 @@ export const HoistedTodoPanel: FC<{ todos: TodoItem[] }> = ({ todos }) => {
       data-slot="aui_todo-hoisted"
     >
       <header className="px-3 pt-3 pb-2">
-        <span className="block max-w-full truncate text-[0.85rem] font-semibold leading-tight tracking-tight text-foreground" title={label}>
+        <span
+          className="block max-w-full truncate text-[0.85rem] font-semibold leading-tight tracking-tight text-foreground"
+          title={label}
+        >
           {label}
         </span>
       </header>
@@ -83,9 +97,7 @@ export const HoistedTodoPanel: FC<{ todos: TodoItem[] }> = ({ todos }) => {
             key={todo.id}
           >
             <Checkmark label={todo.content} status={todo.status} />
-            <span className="min-w-0 wrap-anywhere text-[0.8rem] leading-[1.2rem] text-foreground">
-              {todo.content}
-            </span>
+            <span className="min-w-0 wrap-anywhere text-[0.8rem] leading-[1.2rem] text-foreground">{todo.content}</span>
           </li>
         ))}
       </ul>

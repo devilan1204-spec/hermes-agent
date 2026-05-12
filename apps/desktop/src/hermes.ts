@@ -31,6 +31,8 @@ import type {
   ToolsetInfo
 } from '@/types/hermes'
 
+const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 30_000
+
 export type {
   ActionResponse,
   ActionStatusResponse,
@@ -79,7 +81,7 @@ export class HermesGateway extends JsonRpcGatewayClient {
       connectErrorMessage: 'Could not connect to Hermes gateway',
       createRequestId: nextId => nextId,
       notConnectedErrorMessage: 'Hermes gateway is not connected',
-      requestTimeoutMs: 0
+      requestTimeoutMs: DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS
     })
   }
 }
@@ -242,11 +244,7 @@ export function startOAuthLogin(providerId: string): Promise<OAuthStartResponse>
   })
 }
 
-export function submitOAuthCode(
-  providerId: string,
-  sessionId: string,
-  code: string
-): Promise<OAuthSubmitResponse> {
+export function submitOAuthCode(providerId: string, sessionId: string, code: string): Promise<OAuthSubmitResponse> {
   return window.hermesDesktop.api<OAuthSubmitResponse>({
     path: `/api/providers/oauth/${encodeURIComponent(providerId)}/submit`,
     method: 'POST',

@@ -22,8 +22,11 @@ export function useRouteEnumParam<T extends string>(
     (next: T) => {
       const params = new URLSearchParams(search)
 
-      if (next === fallback) {params.delete(key)}
-      else {params.set(key, next)}
+      if (next === fallback) {
+        params.delete(key)
+      } else {
+        params.set(key, next)
+      }
 
       const qs = params.toString()
       navigate({ hash, pathname, search: qs ? `?${qs}` : '' }, { replace: true })

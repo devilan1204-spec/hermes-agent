@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ChatMessagePart } from './chat-messages'
 import {
   appendAssistantTextPart,
   chatMessageText,
@@ -218,10 +219,321 @@ describe('upsertToolPart', () => {
       'complete'
     )
 
-    const completedResult = completed[0] && 'result' in completed[0] ? (completed[0].result as Record<string, unknown>) : {}
+    const completedResult =
+      completed[0] && 'result' in completed[0] ? (completed[0].result as Record<string, unknown>) : {}
     const clearedResult = cleared[0] && 'result' in cleared[0] ? (cleared[0].result as Record<string, unknown>) : {}
 
     expect(completedResult.todos).toEqual([{ content: 'Boil water', id: 'boil', status: 'in_progress' }])
     expect(clearedResult.todos).toEqual([])
+  })
+
+  it('keeps parallel same-name tools distinct without explicit ids', () => {
+    const startedTokyo = upsertToolPart(
+      [],
+      {
+        context: 'tokyo weather',
+        name: 'web_search'
+      },
+      'running'
+    )
+
+    const startedReykjavik = upsertToolPart(
+      startedTokyo,
+      {
+        context: 'reykjavik weather',
+        name: 'web_search'
+      },
+      'running'
+    )
+
+    const completedTokyo = upsertToolPart(
+      startedReykjavik,
+      {
+        context: 'tokyo weather',
+        message: 'tokyo done',
+        name: 'web_search',
+        summary: 'Did 5 searches'
+      },
+      'complete'
+    )
+
+    const completedBoth = upsertToolPart(
+      completedTokyo,
+      {
+        context: 'reykjavik weather',
+        message: 'reykjavik done',
+        name: 'web_search',
+        summary: 'Did 5 searches'
+      },
+      'complete'
+    )
+
+    const webParts = completedBoth.filter(
+      (part): part is Extract<ChatMessagePart, { type: 'tool-call' }> =>
+        part.type === 'tool-call' && part.toolName === 'web_search'
+    )
+
+    const contexts = webParts.map(part => String((part.args as Record<string, unknown>)?.context || ''))
+
+    const summaries = webParts.map(part => {
+      if (!('result' in part) || !part.result || typeof part.result !== 'object') {
+        return ''
+      }
+
+      return String((part.result as Record<string, unknown>).summary || '')
+    })
+
+    expect(webParts).toHaveLength(2)
+    expect(contexts).toEqual(['tokyo weather', 'reykjavik weather'])
+    expect(summaries).toEqual(['Did 5 searches', 'Did 5 searches'])
+  })
+
+  it('preserves query args when completion payload omits context', () => {
+    const started = upsertToolPart(
+      [],
+      {
+        context: 'auckland weather today and tomorrow forecast',
+        name: 'web_search',
+        tool_id: 'search-1'
+      },
+      'running'
+    )
+
+    const completed = upsertToolPart(
+      started,
+      {
+        duration_s: 1.1,
+        name: 'web_search',
+        summary: 'Did 5 searches in 1.1s',
+        tool_id: 'search-1'
+      },
+      'complete'
+    )
+
+    const [part] = completed
+
+    expect(part?.type).toBe('tool-call')
+    expect((part as Extract<ChatMessagePart, { type: 'tool-call' }>).args).toMatchObject({
+      context: 'auckland weather today and tomorrow forecast'
+    })
+    expect((part as Extract<ChatMessagePart, { type: 'tool-call' }>).result).toMatchObject({
+      summary: 'Did 5 searches in 1.1s'
+    })
+  })
+
+  it('does not append phantom same-name tool rows for id-less progress updates', () => {
+    const startedA = upsertToolPart(
+      [],
+      {
+        context: 'reykjavik weather today and tomorrow forecast',
+        name: 'web_search'
+      },
+      'running'
+    )
+
+    const startedB = upsertToolPart(
+      startedA,
+      {
+        context: 'kathmandu weather today and tomorrow forecast',
+        name: 'web_search'
+      },
+      'running'
+    )
+
+    const progressed = upsertToolPart(
+      startedB,
+      {
+        name: 'web_search'
+      },
+      'running'
+    )
+
+    const webParts = progressed.filter(
+      (part): part is Extract<ChatMessagePart, { type: 'tool-call' }> =>
+        part.type === 'tool-call' && part.toolName === 'web_search'
+    )
+
+    expect(webParts).toHaveLength(2)
+  })
+
+  it('matches id-less live starts with later identified completions', () => {
+    const started = upsertToolPart(
+      [],
+      {
+        context: 'asuncion paraguay weather today and tomorrow forecast',
+        name: 'web_search'
+      },
+      'running'
+    )
+
+    const completed = upsertToolPart(
+      started,
+      {
+        context: 'asuncion paraguay weather today and tomorrow forecast',
+        duration_s: 1.1,
+        name: 'web_search',
+        summary: 'Did 5 searches in 1.1s',
+        tool_id: 'search-asuncion'
+      },
+      'complete'
+    )
+
+    const webParts = completed.filter(
+      (part): part is Extract<ChatMessagePart, { type: 'tool-call' }> =>
+        part.type === 'tool-call' && part.toolName === 'web_search'
+    )
+
+    expect(webParts).toHaveLength(1)
+    expect(webParts[0].toolCallId).toBe('search-asuncion')
+    expect(webParts[0].result).toMatchObject({ summary: 'Did 5 searches in 1.1s' })
+  })
+
+  it('matches id-less live starts with later identified progress updates', () => {
+    const started = upsertToolPart(
+      [],
+      {
+        context: 'reykjavik tashkent uzbekistan weather today and tomorrow forecast',
+        name: 'web_search'
+      },
+      'running'
+    )
+
+    const progressed = upsertToolPart(
+      started,
+      {
+        context: 'reykjavik tashkent uzbekistan weather today and tomorrow forecast',
+        name: 'web_search',
+        tool_id: 'search-reykjavik'
+      },
+      'running'
+    )
+
+    const webParts = progressed.filter(
+      (part): part is Extract<ChatMessagePart, { type: 'tool-call' }> =>
+        part.type === 'tool-call' && part.toolName === 'web_search'
+    )
+
+    expect(webParts).toHaveLength(1)
+    expect(webParts[0].toolCallId).toBe('search-reykjavik')
+  })
+
+  it('reconciles preview-first progress rows with later stable-id starts', () => {
+    const progressA = upsertToolPart(
+      [],
+      {
+        name: 'web_search',
+        preview: 'tokyo weather'
+      },
+      'running'
+    )
+
+    const progressB = upsertToolPart(
+      progressA,
+      {
+        name: 'web_search',
+        preview: 'reykjavik weather'
+      },
+      'running'
+    )
+
+    const startedA = upsertToolPart(
+      progressB,
+      {
+        args: { query: 'tokyo weather' },
+        name: 'web_search',
+        tool_id: 'search-tokyo'
+      },
+      'running'
+    )
+
+    const startedB = upsertToolPart(
+      startedA,
+      {
+        args: { query: 'reykjavik weather' },
+        name: 'web_search',
+        tool_id: 'search-reykjavik'
+      },
+      'running'
+    )
+
+    const completedA = upsertToolPart(
+      startedB,
+      {
+        name: 'web_search',
+        summary: 'Did 5 searches',
+        tool_id: 'search-tokyo'
+      },
+      'complete'
+    )
+
+    const completedB = upsertToolPart(
+      completedA,
+      {
+        name: 'web_search',
+        summary: 'Did 5 searches',
+        tool_id: 'search-reykjavik'
+      },
+      'complete'
+    )
+
+    const webParts = completedB
+      .filter(
+        (part): part is Extract<ChatMessagePart, { type: 'tool-call' }> =>
+          part.type === 'tool-call' && part.toolName === 'web_search'
+      )
+      .map(part => ({
+        id: part.toolCallId,
+        query: String((part.args as Record<string, unknown>)?.query || ''),
+        summary:
+          part.result && typeof part.result === 'object'
+            ? String((part.result as Record<string, unknown>).summary || '')
+            : ''
+      }))
+
+    expect(webParts).toEqual([
+      { id: 'search-tokyo', query: 'tokyo weather', summary: 'Did 5 searches' },
+      { id: 'search-reykjavik', query: 'reykjavik weather', summary: 'Did 5 searches' }
+    ])
+  })
+
+  it('uses structured live tool args for titles before hydrate', () => {
+    const started = upsertToolPart(
+      [],
+      {
+        args: { search_term: 'reykjavik bishkek kyrgyzstan weather today and tomorrow forecast' },
+        name: 'web_search',
+        tool_id: 'search-bishkek'
+      },
+      'running'
+    )
+
+    const [part] = started
+
+    expect(part?.type).toBe('tool-call')
+    expect((part as Extract<ChatMessagePart, { type: 'tool-call' }>).args).toMatchObject({
+      search_term: 'reykjavik bishkek kyrgyzstan weather today and tomorrow forecast'
+    })
+  })
+
+  it('keeps structured live tool results before hydrate', () => {
+    const completed = upsertToolPart(
+      [],
+      {
+        args: { query: 'suva weather' },
+        name: 'web_search',
+        result: { data: { web: [{ title: 'Suva forecast', url: 'https://example.test', description: 'Sunny' }] } },
+        summary: 'Did 1 search in 0.5s',
+        tool_id: 'search-suva'
+      },
+      'complete'
+    )
+
+    const [part] = completed
+
+    expect(part?.type).toBe('tool-call')
+    expect((part as Extract<ChatMessagePart, { type: 'tool-call' }>).result).toMatchObject({
+      data: { web: [{ title: 'Suva forecast' }] },
+      summary: 'Did 1 search in 0.5s'
+    })
   })
 })

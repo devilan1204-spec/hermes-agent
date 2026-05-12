@@ -1,9 +1,6 @@
-import './liquid-glass-overrides.css'
-
 import type { Unstable_TriggerAdapter, Unstable_TriggerItem } from '@assistant-ui/core'
 import { ComposerPrimitive, useAui, useAuiState } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
-import LiquidGlass from 'liquid-glass-react'
 import {
   type ClipboardEvent,
   type FormEvent,
@@ -20,7 +17,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { chatMessageText } from '@/lib/chat-messages'
 import { contextPath } from '@/lib/chat-runtime'
-import { DATA_IMAGE_URL_RE, dataUrlToBlob } from '@/lib/embedded-images'
+import { DATA_IMAGE_URL_RE } from '@/lib/embedded-images'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import { $composerAttachments, $composerDraft } from '@/store/composer'
@@ -45,117 +42,16 @@ import {
   RICH_INPUT_SLOT
 } from './rich-editor'
 import { SkinSlashPopover } from './skin-slash-popover'
+import { detectTrigger, extractClipboardImageBlobs, textBeforeCaret, type TriggerState } from './text-utils'
 import { ComposerTriggerPopover } from './trigger-popover'
 import type { ChatBarProps } from './types'
 import { UrlDialog } from './url-dialog'
 import { VoiceActivity, VoicePlaybackActivity } from './voice-activity'
 
-function extractClipboardImageBlobs(clipboard: DataTransfer): Blob[] {
-  const blobs: Blob[] = []
-  const seen = new Set<Blob>()
-
-  const push = (blob: Blob | null) => {
-    if (!blob || blob.size === 0 || seen.has(blob)) {
-      return
-    }
-
-    seen.add(blob)
-    blobs.push(blob)
-  }
-
-  if (clipboard.items?.length) {
-    for (const item of clipboard.items) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
-        push(item.getAsFile())
-      }
-    }
-  }
-
-  if (clipboard.files?.length) {
-    for (let i = 0; i < clipboard.files.length; i += 1) {
-      const file = clipboard.files.item(i)
-
-      if (file && file.type.startsWith('image/')) {
-        push(file)
-      }
-    }
-  }
-
-  if (blobs.length > 0) {
-    return blobs
-  }
-
-  const text = clipboard.getData('text/plain').trim()
-
-  if (DATA_IMAGE_URL_RE.test(text)) {
-    push(dataUrlToBlob(text))
-  }
-
-  if (blobs.length === 0) {
-    const html = clipboard.getData('text/html')
-
-    if (html) {
-      const matches = html.matchAll(/<img\b[^>]*?\bsrc\s*=\s*["'](data:image\/[^"']+)["']/gi)
-
-      for (const match of matches) {
-        push(dataUrlToBlob(match[1]))
-      }
-    }
-  }
-
-  return blobs
-}
-
 const COMPOSER_STACK_BREAKPOINT_PX = 320
 
-const COMPOSER_GLASS = {
-  fadeBackground: 'linear-gradient(to bottom, transparent, color-mix(in srgb, var(--dt-background) 10%, transparent))',
-  liquidKey: ['standard', '0.950', '0.072', '0', '46', '0.00', '128'].join(':'),
-  showLibraryRims: false,
-  liquid: {
-    aberrationIntensity: 0.95,
-    blurAmount: 0.072,
-    cornerRadius: 0,
-    displacementScale: 46,
-    elasticity: 0,
-    mode: 'standard' as const,
-    saturation: 128
-  }
-}
-
-interface TriggerState {
-  kind: '@' | '/'
-  query: string
-  tokenLength: number
-}
-
-const TRIGGER_RE = /(?:^|[\s])([@/])([^\s@/]*)$/
-
-/** Caret-anchored text before the cursor, or null if the selection isn't a collapsed caret inside `editor`. */
-function textBeforeCaret(editor: HTMLDivElement): string | null {
-  const sel = window.getSelection()
-  const range = sel?.rangeCount ? sel.getRangeAt(0) : null
-
-  if (!range?.collapsed || !editor.contains(range.commonAncestorContainer)) {
-    return null
-  }
-
-  const before = range.cloneRange()
-  before.selectNodeContents(editor)
-  before.setEnd(range.startContainer, range.startOffset)
-
-  return before.toString()
-}
-
-function detectTrigger(textBefore: string): TriggerState | null {
-  const match = TRIGGER_RE.exec(textBefore)
-
-  if (!match) {
-    return null
-  }
-
-  return { kind: match[1] as '@' | '/', query: match[2], tokenLength: 1 + match[2].length }
-}
+const COMPOSER_FADE_BACKGROUND =
+  'linear-gradient(to bottom, transparent, color-mix(in srgb, var(--dt-background) 10%, transparent))'
 
 export function ChatBar({
   busy,
@@ -186,7 +82,6 @@ export function ChatBar({
   const composerRef = useRef<HTMLFormElement | null>(null)
   const composerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<HTMLDivElement | null>(null)
-  const glassShellRef = useRef<HTMLDivElement | null>(null)
   const draftRef = useRef(draft)
   const urlInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -931,38 +826,9 @@ export function ChatBar({
           <SkinSlashPopover draft={draft} onSelect={selectSkinSlashCommand} />
           <div
             className="pointer-events-none absolute inset-0 rounded-[inherit]"
-            style={{ background: COMPOSER_GLASS.fadeBackground }}
+            style={{ background: COMPOSER_FADE_BACKGROUND }}
           />
           <div className="relative w-full rounded-[inherit]">
-            <div
-              className={cn(
-                'composer-liquid-shell-wrap absolute -inset-px isolate overflow-hidden rounded-[calc(var(--radius-2xl)+1px)] transition-opacity duration-200 ease-out',
-                scrolledUp
-                  ? 'opacity-30 group-hover/composer:opacity-100 group-focus-within/composer:opacity-100'
-                  : 'opacity-100'
-              )}
-              data-glass-frame="true"
-              data-show-library-rims={COMPOSER_GLASS.showLibraryRims ? 'true' : undefined}
-              data-slot="composer-liquid-shell-wrap"
-              ref={glassShellRef}
-            >
-              <LiquidGlass
-                aberrationIntensity={COMPOSER_GLASS.liquid.aberrationIntensity}
-                blurAmount={COMPOSER_GLASS.liquid.blurAmount}
-                className="composer-liquid-shell pointer-events-none absolute inset-0 h-full w-full"
-                cornerRadius={COMPOSER_GLASS.liquid.cornerRadius}
-                displacementScale={COMPOSER_GLASS.liquid.displacementScale}
-                elasticity={COMPOSER_GLASS.liquid.elasticity}
-                key={COMPOSER_GLASS.liquidKey}
-                mode={COMPOSER_GLASS.liquid.mode}
-                mouseContainer={composerRef}
-                padding="0"
-                saturation={COMPOSER_GLASS.liquid.saturation}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
-              >
-                <span className="block h-full w-full" />
-              </LiquidGlass>
-            </div>
             <div
               className={cn(
                 'relative z-4 isolate rounded-[inherit] border border-[color-mix(in_srgb,var(--dt-composer-ring)_calc(18%*var(--composer-ring-strength)),var(--dt-input))] shadow-composer transition-[border-color,box-shadow] duration-200 ease-out',
@@ -983,9 +849,7 @@ export function ChatBar({
                   '[-webkit-backdrop-filter:blur(0.75rem)_saturate(1.12)]',
                   'transition-[background-color] duration-150 ease-out',
                   'group-data-[thread-scrolled-up]/composer:bg-[color-mix(in_srgb,var(--dt-card)_48%,transparent)]',
-                  'group-focus-within/composer:bg-[var(--dt-card)]',
-                  'group-focus-within/composer:[backdrop-filter:none]',
-                  'group-focus-within/composer:[-webkit-backdrop-filter:none]'
+                  'group-focus-within/composer:bg-[color-mix(in_srgb,var(--dt-card)_85%,transparent)]'
                 )}
               />
               {dragActive && (
@@ -1057,9 +921,7 @@ export function ChatBarFallback() {
             '[-webkit-backdrop-filter:blur(0.75rem)_saturate(1.12)]',
             'transition-[background-color] duration-150 ease-out',
             'group-data-[thread-scrolled-up]/composer:bg-[color-mix(in_srgb,var(--dt-card)_48%,transparent)]',
-            'group-focus-within/composer:bg-[var(--dt-card)]',
-            'group-focus-within/composer:[backdrop-filter:none]',
-            'group-focus-within/composer:[-webkit-backdrop-filter:none]'
+            'group-focus-within/composer:bg-[color-mix(in_srgb,var(--dt-card)_85%,transparent)]'
           )}
         />
       </div>

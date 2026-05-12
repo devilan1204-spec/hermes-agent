@@ -46,19 +46,12 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   })
 }
 
-interface SetupStatus {
-  provider_configured?: boolean
-}
-
-interface RuntimeCheck {
-  error?: string
-  ok?: boolean
-}
-
 function isProviderSetupError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
 
-  return /No inference provider configured|OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|set an API key/i.test(message)
+  return /No inference provider configured|OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|set an API key/i.test(
+    message
+  )
 }
 
 interface PromptActionsOptions {
@@ -197,25 +190,24 @@ export function usePromptActions({
     async (rawText: string) => {
       const visibleText = rawText.trim()
       const attachments = $composerAttachments.get()
-
       const contextRefs = attachments
-        .map(attachment => attachment.refText)
+        .map(a => a.refText)
         .filter(Boolean)
         .join('\n')
-
-      const hasImageAttachment = attachments.some(attachment => attachment.kind === 'image')
-      const attachmentRefs = attachments.map(attachmentDisplayText).filter((ref): ref is string => Boolean(ref))
+      const hasImage = attachments.some(a => a.kind === 'image')
+      const attachmentRefs = attachments.map(attachmentDisplayText).filter((r): r is string => Boolean(r))
 
       const text =
-        [contextRefs, visibleText].filter(Boolean).join('\n\n') ||
-        (hasImageAttachment ? 'What do you see in this image?' : '')
+        [contextRefs, visibleText].filter(Boolean).join('\n\n') || (hasImage ? 'What do you see in this image?' : '')
 
       if (!text || busyRef.current) {
         return
       }
 
+      const optimisticId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
       const userMessage: ChatMessage = {
-        id: `user-${Date.now()}`,
+        id: optimisticId,
         role: 'user',
         parts: [textPart(visibleText || (attachmentRefs.length ? '' : attachments.map(a => a.label).join(', ')))],
         attachmentRefs
@@ -227,60 +219,79 @@ export function usePromptActions({
         setAwaitingResponse(false)
       }
 
+      // Idempotent optimistic insert — re-running with the resolved sessionId
+      // after createBackendSessionForSend just overwrites with the same id.
+      const seedOptimistic = (sid: string) =>
+        updateSessionState(
+          sid,
+          state => ({
+            ...state,
+            messages: state.messages.some(m => m.id === optimisticId)
+              ? state.messages
+              : [...state.messages, userMessage],
+            busy: true,
+            awaitingResponse: true,
+            pendingBranchGroup: null,
+            sawAssistantPayload: false,
+            interrupted: false
+          }),
+          selectedStoredSessionIdRef.current
+        )
+
+      const dropOptimistic = (sid: null | string) => {
+        if (!sid) {
+          setMessages(current => current.filter(m => m.id !== optimisticId))
+
+          return
+        }
+
+        updateSessionState(
+          sid,
+          state => ({
+            ...state,
+            messages: state.messages.filter(m => m.id !== optimisticId),
+            busy: false,
+            awaitingResponse: false,
+            pendingBranchGroup: null
+          }),
+          selectedStoredSessionIdRef.current
+        )
+      }
+
       busyRef.current = true
       setBusy(true)
       setAwaitingResponse(true)
       clearNotifications()
 
-      const [setup, runtime] = await Promise.all([
-        requestGateway<SetupStatus>('setup.status').catch(() => null),
-        requestGateway<RuntimeCheck>('setup.runtime_check').catch(() => null)
-      ])
+      let sessionId: null | string = activeSessionId
 
-      const runtimeReady = runtime?.ok !== undefined ? Boolean(runtime?.ok) : setup?.provider_configured !== false
-
-      if (!runtimeReady) {
-        releaseBusy()
-        requestDesktopOnboarding(
-          runtime?.error || 'Add a provider credential before sending your first message.'
-        )
-
-        return
+      if (sessionId) {
+        seedOptimistic(sessionId)
+      } else {
+        setMessages(current => [...current, userMessage])
       }
-
-      let sessionId = activeSessionId
 
       if (!sessionId) {
         try {
           sessionId = await createBackendSessionForSend()
         } catch (err) {
+          dropOptimistic(null)
           releaseBusy()
           notifyError(err, 'Session unavailable')
 
           return
         }
+
+        if (!sessionId) {
+          dropOptimistic(null)
+          releaseBusy()
+          notify({ kind: 'error', title: 'Session unavailable', message: 'Could not create a new session' })
+
+          return
+        }
+
+        seedOptimistic(sessionId)
       }
-
-      if (!sessionId) {
-        releaseBusy()
-        notify({ kind: 'error', title: 'Session unavailable', message: 'Could not create a new session' })
-
-        return
-      }
-
-      updateSessionState(
-        sessionId,
-        state => ({
-          ...state,
-          messages: [...state.messages, userMessage],
-          busy: true,
-          awaitingResponse: true,
-          pendingBranchGroup: null,
-          sawAssistantPayload: false,
-          interrupted: false
-        }),
-        selectedStoredSessionIdRef.current
-      )
 
       try {
         await syncImageAttachmentsForSubmit(sessionId, attachments)

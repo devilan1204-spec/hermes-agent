@@ -17,6 +17,10 @@ interface StatusDotProps extends ComponentProps<'span'> {
 
 export function StatusDot({ className, tone, ...props }: StatusDotProps) {
   return (
-    <span aria-hidden="true" className={cn('inline-block size-1.5 rounded-full', TONE_BG[tone], className)} {...props} />
+    <span
+      aria-hidden="true"
+      className={cn('inline-block size-1.5 rounded-full', TONE_BG[tone], className)}
+      {...props}
+    />
   )
 }

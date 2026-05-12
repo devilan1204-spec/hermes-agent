@@ -23,10 +23,16 @@ export type GatewayEventPayload = {
   rendered?: string
   status?: string
   message?: string
+  id?: string
   name?: string
   tool_id?: string
+  tool_call_id?: string
+  args?: unknown
+  arguments?: unknown
   context?: string
+  input?: unknown
   preview?: string
+  result?: unknown
   summary?: string
   error?: string | boolean
   inline_diff?: string
@@ -209,7 +215,135 @@ export function hasToolPart(message: ChatMessage): boolean {
 }
 
 function toolId(payload: GatewayEventPayload | undefined): string {
-  return payload?.tool_id || payload?.name || `tool-${Date.now()}`
+  return payload?.tool_id || payload?.tool_call_id || payload?.id || ''
+}
+
+let liveToolCounter = 0
+
+function nextLiveToolId(name: string): string {
+  liveToolCounter += 1
+
+  return `live-tool:${name}:${liveToolCounter}`
+}
+
+function firstStringField(record: Record<string, unknown>, keys: readonly string[]): string {
+  for (const key of keys) {
+    const value = record[key]
+
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return ''
+}
+
+function normalizeToolMatchValue(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+function collectToolMatchValues(query: string, context: string, preview: string): string[] {
+  return [...new Set([query, context, preview].map(normalizeToolMatchValue).filter(Boolean))]
+}
+
+function toolPayloadMatchValues(payload: GatewayEventPayload | undefined): string[] {
+  const payloadArgs = liveToolArgs(payload)
+  const query = firstStringField(payloadArgs, ['search_term', 'query'])
+  const context = typeof payload?.context === 'string' ? payload.context.trim() : ''
+  const preview = typeof payload?.preview === 'string' ? payload.preview.trim() : ''
+
+  return collectToolMatchValues(query, context, preview)
+}
+
+function toolPartMatchValues(part: ChatMessagePart): string[] {
+  if (part.type !== 'tool-call' || !part.args || typeof part.args !== 'object') {
+    return []
+  }
+
+  const args = part.args as Record<string, unknown>
+  const query = firstStringField(args, ['search_term', 'query'])
+  const context = typeof args.context === 'string' ? args.context.trim() : ''
+  const preview = typeof args.preview === 'string' ? args.preview.trim() : ''
+
+  return collectToolMatchValues(query, context, preview)
+}
+
+function hasToolMatchOverlap(left: string[], right: string[]): boolean {
+  if (!left.length || !right.length) {
+    return false
+  }
+
+  const rightSet = new Set(right)
+
+  return left.some(value => rightSet.has(value))
+}
+
+function findToolPartIndex(
+  parts: ChatMessagePart[],
+  name: string,
+  stableId: string,
+  payload: GatewayEventPayload | undefined,
+  phase: 'running' | 'complete'
+): number {
+  const matchValues = toolPayloadMatchValues(payload)
+  const overlaps = (index: number) => hasToolMatchOverlap(matchValues, toolPartMatchValues(parts[index]))
+
+  if (stableId) {
+    const stableIndex = parts.findIndex(part => part.type === 'tool-call' && part.toolCallId === stableId)
+
+    if (stableIndex >= 0) {
+      return stableIndex
+    }
+
+    // Some live streams start without an id, then complete with one. Fall
+    // through to pending same-name/context matching so the completion updates
+    // the synthetic live row instead of appending a duplicate completed row.
+    if (phase === 'running' && !matchValues.length) {
+      return -1
+    }
+  }
+
+  const pendingIndices = parts
+    .map((part, index) => ({ part, index }))
+    .filter(({ part }) => part.type === 'tool-call' && part.toolName === name && part.result === undefined)
+    .map(({ index }) => index)
+
+  if (pendingIndices.length === 0) {
+    return -1
+  }
+
+  if (matchValues.length) {
+    const contextualIndex = pendingIndices.find(overlaps)
+
+    if (contextualIndex !== undefined) {
+      return contextualIndex
+    }
+  }
+
+  if (pendingIndices.length === 1) {
+    const [singlePendingIndex] = pendingIndices
+
+    if (phase === 'running' && matchValues.length && !overlaps(singlePendingIndex)) {
+      return stableId ? singlePendingIndex : -1
+    }
+
+    return singlePendingIndex
+  }
+
+  // Completion events without stable IDs frequently arrive after multiple
+  // same-name starts (parallel tool calls). Resolve them oldest-first so we
+  // don't collapse an entire burst into a single row.
+  if (phase === 'complete') {
+    return pendingIndices[0]
+  }
+
+  if (stableId) {
+    return pendingIndices[0]
+  }
+
+  // For progress/running events with no stable id, update the most-recent
+  // pending same-name tool instead of creating a phantom extra row.
+  return pendingIndices.at(-1) ?? -1
 }
 
 // Carry todo state across sparse progress payloads: if this todo event lacks
@@ -221,27 +355,43 @@ function carryTodos(payload: GatewayEventPayload | undefined, ...prev: unknown[]
     return next === null ? undefined : { todos: next }
   }
 
-  if (payload?.name !== 'todo') {return undefined}
+  if (payload?.name !== 'todo') {
+    return undefined
+  }
 
   for (const p of prev) {
     const carried = parseTodos(recordFromUnknown(p)?.todos)
 
-    if (carried !== null) {return { todos: carried }}
+    if (carried !== null) {
+      return { todos: carried }
+    }
   }
 
   return undefined
 }
 
 function toolArgs(payload: GatewayEventPayload | undefined, prevArgs?: unknown): Record<string, unknown> {
+  const prev = parseMaybeJsonObject(prevArgs)
+  const eventArgs = liveToolArgs(payload)
+
   return {
+    ...prev,
+    ...eventArgs,
     ...(payload?.context ? { context: payload.context } : {}),
     ...(payload?.preview ? { preview: payload.preview } : {}),
     ...carryTodos(payload, prevArgs)
   }
 }
 
-function toolResult(payload: GatewayEventPayload | undefined, prevResult?: unknown, prevArgs?: unknown): Record<string, unknown> {
+function toolResult(
+  payload: GatewayEventPayload | undefined,
+  prevResult?: unknown,
+  prevArgs?: unknown
+): Record<string, unknown> {
+  const parsedResult = parseMaybeJsonObject(payload?.result)
+
   return {
+    ...parsedResult,
     ...(payload?.inline_diff ? { inline_diff: payload.inline_diff } : {}),
     ...(payload?.summary ? { summary: payload.summary } : {}),
     ...(payload?.message ? { message: payload.message } : {}),
@@ -257,18 +407,21 @@ export function upsertToolPart(
   payload: GatewayEventPayload | undefined,
   phase: 'running' | 'complete'
 ): ChatMessagePart[] {
-  const id = toolId(payload)
+  const stableId = toolId(payload)
   const name = payload?.name || 'tool'
   const next = [...parts]
 
-  const index = next.findIndex(
-    part => part.type === 'tool-call' && ((part.toolCallId && part.toolCallId === id) || part.toolName === name)
-  )
+  const index = findToolPartIndex(next, name, stableId, payload, phase)
 
   const prev = index >= 0 ? next[index] : null
   const prevArgs = prev && 'args' in prev ? prev.args : undefined
   const prevResult = prev && 'result' in prev ? prev.result : undefined
   const args = toolArgs(payload, prevArgs)
+
+  const id =
+    stableId ||
+    (prev && 'toolCallId' in prev && typeof prev.toolCallId === 'string' ? prev.toolCallId : '') ||
+    nextLiveToolId(name)
 
   const base = {
     type: 'tool-call' as const,
@@ -279,7 +432,9 @@ export function upsertToolPart(
     ...(phase === 'complete' && { result: toolResult(payload, prevResult, prevArgs), isError: Boolean(payload?.error) })
   } satisfies ChatMessagePart
 
-  if (index === -1) {return [...next, base]}
+  if (index === -1) {
+    return [...next, base]
+  }
   next[index] = { ...next[index], ...base }
 
   return next
@@ -317,6 +472,28 @@ function firstNonEmptyObject(...values: unknown[]): Record<string, unknown> {
   }
 
   return {}
+}
+
+function liveToolArgs(payload: GatewayEventPayload | undefined): Record<string, unknown> {
+  const direct = firstNonEmptyObject(payload?.args, payload?.arguments)
+  const input = firstNonEmptyObject(payload?.input)
+  const fn = recordFromUnknown(input.function)
+
+  const nested = firstNonEmptyObject(
+    input.args,
+    input.arguments,
+    input.parameters,
+    input.input,
+    fn?.arguments,
+    fn?.args,
+    fn?.parameters
+  )
+
+  return {
+    ...input,
+    ...nested,
+    ...direct
+  }
 }
 
 function parseStoredToolResult(content: unknown): unknown {

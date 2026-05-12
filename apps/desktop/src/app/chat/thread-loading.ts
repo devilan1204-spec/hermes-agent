@@ -1,5 +1,7 @@
 import type { ChatMessage } from '@/lib/chat-messages'
 
+export type ThreadLoadingState = 'response' | 'session'
+
 export function lastVisibleMessageIsUser(messages: ChatMessage[]): boolean {
   const lastVisible = [...messages].reverse().find(message => !message.hidden)
 
@@ -11,7 +13,7 @@ export function threadLoadingState(
   busy: boolean,
   awaitingResponse: boolean,
   lastVisibleIsUser: boolean
-) {
+): ThreadLoadingState | undefined {
   if (loadingSession) {
     return 'session'
   }

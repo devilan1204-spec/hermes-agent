@@ -10,6 +10,7 @@ import { setCurrentSessionPreviewTarget } from '@/store/preview'
 import { $currentCwd } from '@/store/session'
 
 import { SidebarPanelLabel } from '../shell/sidebar-label'
+
 import { ProjectTree } from './tree'
 import { useProjectTree } from './use-project-tree'
 

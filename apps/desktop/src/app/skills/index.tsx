@@ -379,10 +379,7 @@ function CategoryButton({
       type="button"
     >
       <span
-        className={cn(
-          'underline-offset-4 decoration-current',
-          active ? 'font-medium underline' : 'hover:underline'
-        )}
+        className={cn('underline-offset-4 decoration-current', active ? 'font-medium underline' : 'hover:underline')}
       >
         {label}
       </span>

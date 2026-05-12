@@ -149,6 +149,7 @@ export interface HermesApiRequest {
   path: string
   method?: string
   body?: unknown
+  timeoutMs?: number
 }
 
 export interface HermesNotification {

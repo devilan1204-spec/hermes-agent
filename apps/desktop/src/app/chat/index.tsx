@@ -2,8 +2,7 @@ import {
   type AppendMessage,
   AssistantRuntimeProvider,
   ExportedMessageRepository,
-  type ThreadMessage,
-  useExternalStoreRuntime
+  type ThreadMessage
 } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
@@ -18,6 +17,7 @@ import { getGlobalModelOptions, type HermesGateway } from '@/hermes'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
 import { ChevronDown } from '@/lib/icons'
+import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { cn } from '@/lib/utils'
 import { $pinnedSessionIds } from '@/store/layout'
 import {
@@ -70,6 +70,55 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onTranscribeAudio?: (audio: Blob) => Promise<string>
 }
 
+interface ChatHeaderProps {
+  activeSessionId: null | string
+  isRoutedSessionView: boolean
+  onDeleteSelectedSession: () => void
+  onToggleSelectedPin: () => void
+  selectedSessionId: null | string
+}
+
+function ChatHeader({
+  activeSessionId,
+  isRoutedSessionView,
+  onDeleteSelectedSession,
+  onToggleSelectedPin,
+  selectedSessionId
+}: ChatHeaderProps) {
+  const sessions = useStore($sessions)
+  const pinnedSessionIds = useStore($pinnedSessionIds)
+  const activeStoredSession = sessions.find(session => session.id === selectedSessionId) || null
+  const title = activeStoredSession ? sessionTitle(activeStoredSession) : ''
+  const selectedIsPinned = selectedSessionId ? pinnedSessionIds.includes(selectedSessionId) : false
+
+  return (
+    <header className={cn(titlebarHeaderBaseClass, isRoutedSessionView && titlebarHeaderShadowClass)}>
+      <div className="min-w-0 flex-1">
+        {title && (
+          <SessionActionsMenu
+            align="start"
+            onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
+            onPin={selectedSessionId ? onToggleSelectedPin : undefined}
+            pinned={selectedIsPinned}
+            sessionId={selectedSessionId || activeSessionId || ''}
+            sideOffset={8}
+            title={title}
+          >
+            <Button
+              className="pointer-events-auto h-7 min-w-0 gap-1.5 rounded-lg px-1 py-0 text-foreground hover:bg-accent/70 data-[state=open]:bg-accent/70 [-webkit-app-region:no-drag]"
+              type="button"
+              variant="ghost"
+            >
+              <h2 className="max-w-[62vw] truncate text-base font-semibold leading-none tracking-tight">{title}</h2>
+              <ChevronDown className="shrink-0 text-foreground/75" size={16} />
+            </Button>
+          </SessionActionsMenu>
+        )}
+      </div>
+    </header>
+  )
+}
+
 export function ChatView({
   className,
   gateway,
@@ -107,13 +156,9 @@ export function ChatView({
   const introPersonality = useStore($introPersonality)
   const introSeed = useStore($introSeed)
   const messages = useStore($messages)
-  const pinnedSessionIds = useStore($pinnedSessionIds)
   const selectedSessionId = useStore($selectedStoredSessionId)
-  const sessions = useStore($sessions)
   const runtimeMessageCacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
-  const activeStoredSession = sessions.find(session => session.id === selectedSessionId) || null
   const isRoutedSessionView = Boolean(routeSessionId(location.pathname))
-  const selectedIsPinned = selectedSessionId ? pinnedSessionIds.includes(selectedSessionId) : false
 
   const showIntro =
     freshDraftReady && !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0
@@ -127,7 +172,6 @@ export function ChatView({
   const threadLoading = threadLoadingState(loadingSession, busy, awaitingResponse, lastVisibleMessageIsUser(messages))
   const showChatBar = !loadingSession
   const threadKey = selectedSessionId || activeSessionId || (isRoutedSessionView ? location.pathname : 'new')
-  const title = activeStoredSession ? sessionTitle(activeStoredSession) : ''
 
   const modelOptionsQuery = useQuery<ModelOptionsResponse>({
     queryKey: ['model-options', activeSessionId || 'global'],
@@ -207,7 +251,7 @@ export function ChatView({
     return ExportedMessageRepository.fromBranchableArray(items, { headId })
   }, [messages])
 
-  const runtime = useExternalStoreRuntime<ThreadMessage>({
+  const runtime = useIncrementalExternalStoreRuntime<ThreadMessage>({
     messageRepository: runtimeMessageRepository,
     isRunning: busy,
     setMessages: onThreadMessagesChange,
@@ -227,30 +271,13 @@ export function ChatView({
         className
       )}
     >
-      <header className={cn(titlebarHeaderBaseClass, isRoutedSessionView && titlebarHeaderShadowClass)}>
-        <div className="min-w-0 flex-1">
-          {title && (
-            <SessionActionsMenu
-              align="start"
-              onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
-              onPin={selectedSessionId ? onToggleSelectedPin : undefined}
-              pinned={selectedIsPinned}
-              sessionId={selectedSessionId || activeSessionId || ''}
-              sideOffset={8}
-              title={title}
-            >
-              <Button
-                className="pointer-events-auto h-7 min-w-0 gap-1.5 rounded-lg px-1 py-0 text-foreground hover:bg-accent/70 data-[state=open]:bg-accent/70 [-webkit-app-region:no-drag]"
-                type="button"
-                variant="ghost"
-              >
-                <h2 className="max-w-[62vw] truncate text-base font-semibold leading-none tracking-tight">{title}</h2>
-                <ChevronDown className="shrink-0 text-foreground/75" size={16} />
-              </Button>
-            </SessionActionsMenu>
-          )}
-        </div>
-      </header>
+      <ChatHeader
+        activeSessionId={activeSessionId}
+        isRoutedSessionView={isRoutedSessionView}
+        onDeleteSelectedSession={onDeleteSelectedSession}
+        onToggleSelectedPin={onToggleSelectedPin}
+        selectedSessionId={selectedSessionId}
+      />
 
       <NotificationStack />
 

@@ -395,11 +395,7 @@ describe('assistant-ui streaming renderer', () => {
 
   it('renders archived todos after turn completion regardless of pending state', () => {
     const first = render(
-      <TodoHarness
-        message={assistantTodoMessage([
-          { content: 'Boil water', id: 'boil', status: 'pending' }
-        ], false)}
-      />
+      <TodoHarness message={assistantTodoMessage([{ content: 'Boil water', id: 'boil', status: 'pending' }], false)} />
     )
 
     const ui = within(first.container)
@@ -410,9 +406,7 @@ describe('assistant-ui streaming renderer', () => {
 
     const second = render(
       <TodoHarness
-        message={assistantTodoMessage([
-          { content: 'Serve latte', id: 'serve', status: 'completed' }
-        ], false)}
+        message={assistantTodoMessage([{ content: 'Serve latte', id: 'serve', status: 'completed' }], false)}
       />
     )
 

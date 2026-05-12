@@ -1,4 +1,4 @@
-import { type MutableRefObject, useEffect } from 'react'
+import { type MutableRefObject, useEffect, useRef } from 'react'
 
 import { isNewChatRoute } from '@/app/routes'
 
@@ -55,8 +55,17 @@ export function useRouteResume({
   selectedStoredSessionIdRef,
   startFreshSessionDraft
 }: RouteResumeOptions) {
+  const lastPathnameRef = useRef<string | null>(null)
+  const wasGatewayOpenRef = useRef(false)
+
   useEffect(() => {
-    if (currentView !== 'chat' || gatewayState !== 'open') {
+    const gatewayOpen = gatewayState === 'open'
+    const pathnameChanged = lastPathnameRef.current !== locationPathname
+    const gatewayBecameOpen = !wasGatewayOpenRef.current && gatewayOpen
+    lastPathnameRef.current = locationPathname
+    wasGatewayOpenRef.current = gatewayOpen
+
+    if (currentView !== 'chat' || !gatewayOpen) {
       return
     }
 
@@ -68,7 +77,12 @@ export function useRouteResume({
         Boolean(cachedRuntime) &&
         cachedRuntime === activeSessionIdRef.current
 
-      if (!alreadyActive) {
+      // Resume only when the route meaningfully changed (or gateway just opened).
+      // This avoids a transient /:sid re-resume during "new chat" state clears
+      // before the pathname updates from /:sid -> /.
+      const shouldResume = pathnameChanged || gatewayBecameOpen
+
+      if (!alreadyActive && shouldResume && !creatingSessionRef.current) {
         void resumeSession(routedSessionId, true)
       }
 

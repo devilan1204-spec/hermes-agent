@@ -63,7 +63,8 @@ describe('external link helpers', () => {
     const bridge = vi.fn().mockResolvedValue('El Yunque Tour Water Slide, Rope Swing & Pickup')
     installDesktopBridge({ fetchLinkTitle: bridge as unknown as Window['hermesDesktop']['fetchLinkTitle'] })
 
-    const url = 'https://www.expedia.com/things-to-do/puerto-rico-el-yunque-rainforest-adventure-with-transport.a46272756.activity-details'
+    const url =
+      'https://www.expedia.com/things-to-do/puerto-rico-el-yunque-rainforest-adventure-with-transport.a46272756.activity-details'
 
     const [first, second] = await Promise.all([fetchLinkTitle(url), fetchLinkTitle(url)])
 
@@ -95,11 +96,7 @@ describe('external link helpers', () => {
     const openExternal = vi.fn().mockResolvedValue(undefined)
     installDesktopBridge({ openExternal: openExternal as unknown as Window['hermesDesktop']['openExternal'] })
 
-    render(
-      <ExternalLink href="https://example.com/path/to/resource">
-        Example link
-      </ExternalLink>
-    )
+    render(<ExternalLink href="https://example.com/path/to/resource">Example link</ExternalLink>)
 
     fireEvent.click(screen.getByRole('link', { name: 'Example link' }))
     expect(openExternal).toHaveBeenCalledWith('https://example.com/path/to/resource')
@@ -108,11 +105,7 @@ describe('external link helpers', () => {
   it('shows a trailing external-link icon', () => {
     installDesktopBridge()
 
-    render(
-      <ExternalLink href="https://example.com/path/to/resource">
-        Example link
-      </ExternalLink>
-    )
+    render(<ExternalLink href="https://example.com/path/to/resource">Example link</ExternalLink>)
 
     const link = screen.getByRole('link', { name: 'Example link' })
     expect(link.querySelector('svg')).toBeTruthy()
@@ -125,9 +118,7 @@ describe('external link helpers', () => {
     const url =
       'https://www.getyourguide.com/culebra-island-l145468/from-fajardo-full-day-cordillera-islands-catamaran-tour-t19894/'
 
-    render(
-      <LinkifiedText text={`Read ${url}`} />
-    )
+    render(<LinkifiedText text={`Read ${url}`} />)
 
     const link = screen.getByTitle(url)
     expect(link.textContent).toContain('From Fajardo Full Day Cordillera Islands Catamaran Tour')
@@ -152,7 +143,8 @@ describe('external link helpers', () => {
   it('ignores error-like fetched titles and falls back to slug label', async () => {
     const bridge = vi.fn().mockResolvedValue('GetYourGuide – Error')
     installDesktopBridge({ fetchLinkTitle: bridge as unknown as Window['hermesDesktop']['fetchLinkTitle'] })
-    const url = 'https://www.getyourguide.com/culebra-island-l145468/from-fajardo-full-day-cordillera-islands-catamaran-tour-t19894/'
+    const url =
+      'https://www.getyourguide.com/culebra-island-l145468/from-fajardo-full-day-cordillera-islands-catamaran-tour-t19894/'
 
     render(<PrettyLink href={url} />)
 
@@ -168,6 +160,8 @@ describe('external link helpers', () => {
     render(<LinkifiedText text="Source expedia.com/things-to-do/puerto-rico-el-yunque-rainforest-adventure" />)
 
     const link = screen.getByRole('link')
-    expect(link.getAttribute('href')).toBe('https://expedia.com/things-to-do/puerto-rico-el-yunque-rainforest-adventure')
+    expect(link.getAttribute('href')).toBe(
+      'https://expedia.com/things-to-do/puerto-rico-el-yunque-rainforest-adventure'
+    )
   })
 })

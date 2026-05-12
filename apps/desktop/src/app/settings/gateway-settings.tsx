@@ -46,7 +46,9 @@ function ModeCard({
     <button
       className={cn(
         'rounded-2xl border p-4 text-left transition',
-        active ? 'border-primary bg-primary/10 ring-2 ring-primary/15' : 'border-border bg-background/60 hover:bg-muted/40',
+        active
+          ? 'border-primary bg-primary/10 ring-2 ring-primary/15'
+          : 'border-border bg-background/60 hover:bg-muted/40',
         disabled && 'cursor-not-allowed opacity-50'
       )}
       disabled={disabled}
@@ -179,7 +181,12 @@ export function GatewaySettings() {
   }
 
   if (!window.hermesDesktop?.getConnectionConfig) {
-    return <EmptyState description="The desktop IPC bridge does not expose gateway settings." title="Gateway settings unavailable" />
+    return (
+      <EmptyState
+        description="The desktop IPC bridge does not expose gateway settings."
+        title="Gateway settings unavailable"
+      />
+    )
   }
 
   return (
@@ -191,8 +198,8 @@ export function GatewaySettings() {
           {state.envOverride ? <Pill tone="primary">env override</Pill> : null}
         </div>
         <p className="mt-2 max-w-2xl text-xs leading-5 text-muted-foreground">
-          Hermes Desktop starts its own local gateway by default. Use a remote gateway when you want this app to
-          control an already-running Hermes backend on another machine or behind a trusted proxy.
+          Hermes Desktop starts its own local gateway by default. Use a remote gateway when you want this app to control
+          an already-running Hermes backend on another machine or behind a trusted proxy.
         </p>
       </div>
 
@@ -249,7 +256,9 @@ export function GatewaySettings() {
               className={cn('h-8 font-mono', CONTROL_TEXT)}
               disabled={state.envOverride}
               onChange={event => setRemoteToken(event.target.value)}
-              placeholder={state.remoteTokenSet ? `Existing token ${state.remoteTokenPreview ?? 'saved'}` : 'Paste session token'}
+              placeholder={
+                state.remoteTokenSet ? `Existing token ${state.remoteTokenPreview ?? 'saved'}` : 'Paste session token'
+              }
               type="password"
               value={remoteToken}
             />
@@ -262,7 +271,11 @@ export function GatewaySettings() {
       {lastTest ? <div className="mt-4 text-xs text-primary">{lastTest}</div> : null}
 
       <div className="mt-6 flex flex-wrap justify-end gap-3">
-        <Button disabled={state.envOverride || testing || !canUseRemote} onClick={() => void testRemote()} variant="outline">
+        <Button
+          disabled={state.envOverride || testing || !canUseRemote}
+          onClick={() => void testRemote()}
+          variant="outline"
+        >
           {testing ? <Loader2 className="size-4 animate-spin" /> : null}
           Test remote
         </Button>

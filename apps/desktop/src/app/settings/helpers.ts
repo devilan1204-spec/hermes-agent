@@ -43,11 +43,12 @@ function safeSet(target: Record<string, unknown>, key: string, value: unknown): 
   if (key === '__proto__' || key === 'constructor' || key === 'prototype' || !key) {
     throw new Error(`Unsafe config key: ${key}`)
   }
+
   Object.defineProperty(target, key, {
     value,
     writable: true,
     enumerable: true,
-    configurable: true,
+    configurable: true
   })
 }
 

@@ -78,11 +78,17 @@ const HINT_BY_STATE: Record<string, string> = {
 const stateLabel = (state?: null | string) => (state ? STATE_LABELS[state] || state.replace(/_/g, ' ') : 'Unknown')
 
 function stateTone({ enabled, state }: MessagingPlatformInfo): StatusTone {
-  if (!enabled) {return 'muted'}
+  if (!enabled) {
+    return 'muted'
+  }
 
-  if (state === 'connected') {return 'good'}
+  if (state === 'connected') {
+    return 'good'
+  }
 
-  if (state === 'fatal' || state === 'startup_failed') {return 'bad'}
+  if (state === 'fatal' || state === 'startup_failed') {
+    return 'bad'
+  }
 
   return 'warn'
 }
@@ -511,9 +517,7 @@ function PlatformDetail({
 
           <section>
             <SectionTitle>Get your credentials</SectionTitle>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              {introCopy(platform)}
-            </p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{introCopy(platform)}</p>
             <div className="mt-3">
               <Button asChild size="sm" variant="outline">
                 <a href={platform.docs_url} rel="noreferrer" target="_blank">
@@ -572,9 +576,7 @@ function PlatformDetail({
                 type="button"
               >
                 <span>Advanced ({hiddenCount})</span>
-                <ChevronDown
-                  className={cn('size-3.5 transition-transform', !showAdvanced && '-rotate-90')}
-                />
+                <ChevronDown className={cn('size-3.5 transition-transform', !showAdvanced && '-rotate-90')} />
               </button>
               {showAdvanced && (
                 <div className="mt-3 space-y-4">
@@ -632,7 +634,8 @@ const PLATFORM_INTRO: Record<string, string> = {
   mattermost:
     'On your Mattermost server, create a bot account or personal access token, then paste the server URL and token here.',
   matrix: 'Sign in to your homeserver with the bot account, then copy the access token, user ID, and homeserver URL.',
-  signal: 'Run a signal-cli REST bridge somewhere reachable, then point Hermes at the URL and the registered phone number.',
+  signal:
+    'Run a signal-cli REST bridge somewhere reachable, then point Hermes at the URL and the registered phone number.',
   whatsapp:
     'Start the WhatsApp bridge that ships with Hermes, scan the QR code on first run, then enable the platform.',
   bluebubbles:
@@ -642,8 +645,7 @@ const PLATFORM_INTRO: Record<string, string> = {
   email:
     'Use a dedicated mailbox. For Gmail/Workspace, create an app password and use imap.gmail.com / smtp.gmail.com.',
   sms: 'Get your Twilio Account SID and Auth Token from the Twilio console, plus a phone number that can send SMS.',
-  dingtalk:
-    'Create a DingTalk app in the developer console, then copy the Client ID (App key) and Client Secret here.',
+  dingtalk: 'Create a DingTalk app in the developer console, then copy the Client ID (App key) and Client Secret here.',
   feishu:
     'Create a Feishu / Lark app, configure the bot capability, and copy the App ID, App secret, and event encryption keys.',
   wecom:
@@ -655,7 +657,8 @@ const PLATFORM_INTRO: Record<string, string> = {
   qqbot: 'Register an app on the QQ Open Platform (q.qq.com) and copy the App ID and Client Secret.',
   api_server:
     'Expose Hermes as an OpenAI-compatible API. Set an auth key, then point Open WebUI / LobeChat / etc. at the host:port.',
-  webhook: 'Run an HTTP server that other tools (GitHub, GitLab, custom apps) can POST to. Use the secret to verify signatures.'
+  webhook:
+    'Run an HTTP server that other tools (GitHub, GitLab, custom apps) can POST to. Use the secret to verify signatures.'
 }
 
 const introCopy = (platform: MessagingPlatformInfo) => PLATFORM_INTRO[platform.id] || platform.description
@@ -717,16 +720,15 @@ function MessagingField({
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h4 className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{children}</h4>
-  )
+  return <h4 className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{children}</h4>
 }
 
 function PlatformHint({ platform }: { platform: MessagingPlatformInfo }) {
-  if (!platform.enabled || platform.state === 'connected') {return null}
+  if (!platform.enabled || platform.state === 'connected') {
+    return null
+  }
 
-  const hint =
-    HINT_BY_STATE[platform.state || ''] || (platform.gateway_running ? null : HINT_BY_STATE.gateway_stopped)
+  const hint = HINT_BY_STATE[platform.state || ''] || (platform.gateway_running ? null : HINT_BY_STATE.gateway_stopped)
 
   return hint ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{hint}</p> : null
 }
@@ -748,7 +750,10 @@ function StatePill({ children, tone }: { children: string; tone: StatusTone }) {
 function SetupPill({ active, children }: { active: boolean; children: string }) {
   return (
     <span
-      className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[0.66rem] font-medium', PILL_TONE[active ? 'good' : 'muted'])}
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[0.66rem] font-medium',
+        PILL_TONE[active ? 'good' : 'muted']
+      )}
     >
       {children}
     </span>

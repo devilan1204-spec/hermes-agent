@@ -8,6 +8,7 @@ import {
   startOAuthLogin,
   submitOAuthCode
 } from '@/hermes'
+import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { notify, notifyError } from '@/store/notifications'
 import type { OAuthProvider, OAuthStartResponse } from '@/types/hermes'
 
@@ -46,6 +47,7 @@ export interface OnboardingContext {
 const CONFIGURED_CACHE_KEY = 'hermes-desktop-onboarded-v1'
 const POLL_MS = 2000
 const COPY_FLASH_MS = 1500
+const DEFAULT_ONBOARDING_REASON = 'No inference provider is configured.'
 
 function readCachedConfigured(): boolean | null {
   if (typeof window === 'undefined') {
@@ -87,6 +89,7 @@ const INITIAL: DesktopOnboardingState = {
 export const $desktopOnboarding = atom<DesktopOnboardingState>(INITIAL)
 
 let pollTimer: number | null = null
+let providersRefreshPromise: null | Promise<void> = null
 
 const errMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -104,42 +107,61 @@ function clearPoll() {
   }
 }
 
-async function safeReq<T>(ctx: OnboardingContext, method: string, fallback: T): Promise<T> {
-  try {
-    return await ctx.requestGateway<T>(method)
-  } catch {
-    return fallback
-  }
-}
-
-async function checkRuntime(ctx: OnboardingContext) {
-  const [status, runtime] = await Promise.all([
-    safeReq<{ provider_configured?: boolean }>(ctx, 'setup.status', {}),
-    safeReq<{ error?: string; ok?: boolean }>(ctx, 'setup.runtime_check', { ok: false })
-  ])
-
-  return runtime.ok !== undefined ? Boolean(runtime.ok) : Boolean(status.provider_configured)
+async function checkRuntime(ctx: OnboardingContext): Promise<RuntimeReadinessResult> {
+  return evaluateRuntimeReadiness(ctx.requestGateway, {
+    defaultReason: DEFAULT_ONBOARDING_REASON,
+    unknownReady: false
+  })
 }
 
 function notifyReady(provider: string) {
   notify({ kind: 'success', title: 'Hermes is ready', message: `${provider} connected.` })
 }
 
-async function reloadAndConnect(ctx: OnboardingContext, providerName: string, onFail: () => void) {
+async function reloadAndConnect(ctx: OnboardingContext, providerName: string, onFail: (reason: null | string) => void) {
   await ctx.requestGateway('reload.env').catch(() => undefined)
-  const ok = await checkRuntime(ctx)
+  const runtime = await checkRuntime(ctx)
 
-  if (ok) {
+  if (runtime.ready) {
     notifyReady(providerName)
     completeDesktopOnboarding()
     ctx.onCompleted?.()
   } else {
-    onFail()
+    onFail(runtime.reason)
   }
 }
 
-export function requestDesktopOnboarding(reason = 'No inference provider is configured.') {
-  patch({ reason, requested: true })
+function providerResolutionFailure(reason: null | string) {
+  const detail = reason?.trim()
+
+  return detail
+    ? `Connected, but Hermes still cannot resolve a usable provider. ${detail}`
+    : 'Connected, but Hermes still cannot resolve a usable provider.'
+}
+
+async function refreshProviders() {
+  if (providersRefreshPromise) {
+    await providersRefreshPromise
+
+    return
+  }
+
+  providersRefreshPromise = (async () => {
+    try {
+      const { providers } = await listOAuthProviders()
+      patch({ mode: providers.length > 0 ? 'oauth' : 'apikey', providers })
+    } catch {
+      patch({ mode: 'apikey', providers: [] })
+    } finally {
+      providersRefreshPromise = null
+    }
+  })()
+
+  await providersRefreshPromise
+}
+
+export function requestDesktopOnboarding(reason = DEFAULT_ONBOARDING_REASON) {
+  patch({ reason: reason.trim() || DEFAULT_ONBOARDING_REASON, requested: true })
 }
 
 export function completeDesktopOnboarding() {
@@ -160,26 +182,26 @@ export function setOnboardingMode(mode: OnboardingMode) {
 }
 
 export async function refreshOnboarding(ctx: OnboardingContext) {
-  if (await checkRuntime(ctx)) {
+  const runtime = await checkRuntime(ctx)
+
+  if (runtime.ready) {
     completeDesktopOnboarding()
     ctx.onCompleted?.()
 
     return true
   }
 
-  writeCachedConfigured(false)
-  patch({ configured: false })
+  const state = $desktopOnboarding.get()
+  const reason = runtime.reason || state.reason || DEFAULT_ONBOARDING_REASON
 
-  if ($desktopOnboarding.get().providers !== null) {
+  writeCachedConfigured(false)
+  patch({ configured: false, reason })
+
+  if (state.providers !== null && !state.requested) {
     return false
   }
 
-  try {
-    const { providers } = await listOAuthProviders()
-    patch({ providers, mode: providers.length > 0 ? 'oauth' : 'apikey' })
-  } catch {
-    patch({ providers: [], mode: 'apikey' })
-  }
+  await refreshProviders()
 
   return false
 }
@@ -219,11 +241,11 @@ async function pollDevice(provider: OAuthProvider, start: DeviceStart, ctx: Onbo
     if (status === 'approved') {
       clearPoll()
       setFlow({ status: 'success', provider })
-      await reloadAndConnect(ctx, provider.name, () =>
+      await reloadAndConnect(ctx, provider.name, reason =>
         setFlow({
           status: 'error',
           provider,
-          message: 'Connected, but Hermes still cannot resolve a usable provider.'
+          message: providerResolutionFailure(reason)
         })
       )
     } else if (status !== 'pending') {
@@ -259,11 +281,11 @@ export async function submitOnboardingCode(ctx: OnboardingContext) {
 
     if (resp.ok && resp.status === 'approved') {
       setFlow({ status: 'success', provider })
-      await reloadAndConnect(ctx, provider.name, () =>
+      await reloadAndConnect(ctx, provider.name, reason =>
         setFlow({
           status: 'error',
           provider,
-          message: 'Connected, but Hermes still cannot resolve a usable provider.'
+          message: providerResolutionFailure(reason)
         })
       )
     } else {
@@ -338,11 +360,13 @@ export async function recheckExternalSignin(ctx: OnboardingContext) {
   }
 
   const { provider } = flow
-  await reloadAndConnect(ctx, provider.name, () =>
+  await reloadAndConnect(ctx, provider.name, reason =>
     setFlow({
       status: 'error',
       provider,
-      message: `Hermes still cannot reach ${provider.name}. Run \`${provider.cli_command}\` in a terminal first.`
+      message:
+        reason?.trim() ||
+        `Hermes still cannot reach ${provider.name}. Run \`${provider.cli_command}\` in a terminal first.`
     })
   )
 }
@@ -357,12 +381,19 @@ export async function saveOnboardingApiKey(envKey: string, value: string, label:
   try {
     await setEnvVar(envKey, trimmed)
     let stillFailing = false
-    await reloadAndConnect(ctx, label, () => {
+    let runtimeFailure: null | string = null
+    await reloadAndConnect(ctx, label, reason => {
       stillFailing = true
+      runtimeFailure = reason
     })
 
     if (stillFailing) {
-      return { ok: false, message: `Saved, but Hermes still cannot reach ${label}. Double-check the value.` }
+      const failureDetail = (runtimeFailure ?? '').trim()
+
+      return {
+        ok: false,
+        message: failureDetail || `Saved, but Hermes still cannot reach ${label}. Double-check the value.`
+      }
     }
 
     return { ok: true }

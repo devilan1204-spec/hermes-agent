@@ -859,10 +859,7 @@ function LocationCell({ artifact }: { artifact: ArtifactRecord; ctx: CellCtx }) 
   return (
     <div className="group/location flex min-w-0 items-center gap-1.5">
       <div
-        className={cn(
-          'min-w-0 flex-1 truncate text-xs text-muted-foreground/85',
-          isLink ? 'font-medium' : 'font-mono'
-        )}
+        className={cn('min-w-0 flex-1 truncate text-xs text-muted-foreground/85', isLink ? 'font-medium' : 'font-mono')}
         title={artifact.value}
       >
         {value}

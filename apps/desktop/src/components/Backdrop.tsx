@@ -30,7 +30,10 @@ function binaryNoiseDataUrl(tile: number, density: number, size: number, color: 
     return ''
   }
 
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  // Cap at 1.5x to match the design-language overlay perf work (PR #14):
+  // with `image-rendering: pixelated` there's no visible win above 1.5x, and
+  // a full retina (2x) PNG is ~78% larger to keep resident in compositor memory.
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
   const physTile = Math.round(tile * dpr)
   const block = Math.max(1, Math.round(size * dpr))
 
@@ -165,7 +168,7 @@ export function Backdrop() {
 
       {import.meta.env.DEV && <ThemeControls />}
 
-      {statue.enabled && (
+      {statue.enabled && gpuTier > 0 && (
         <div
           aria-hidden
           className="pointer-events-none fixed inset-0 z-2"

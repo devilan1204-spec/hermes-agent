@@ -13,7 +13,9 @@ const isStatus = (v: unknown): v is TodoStatus => (STATUSES as readonly string[]
 
 function parseArray(value: unknown[]): TodoItem[] {
   return value.flatMap(item => {
-    if (!isRecord(item) || !isStatus(item.status)) {return []}
+    if (!isRecord(item) || !isStatus(item.status)) {
+      return []
+    }
     const id = String(item.id ?? '').trim()
     const content = String(item.content ?? '').trim()
 
@@ -22,15 +24,25 @@ function parseArray(value: unknown[]): TodoItem[] {
 }
 
 function parse(value: unknown, depth: number): null | TodoItem[] {
-  if (depth > 2) {return null}
-
-  if (Array.isArray(value)) {return parseArray(value)}
-
-  if (typeof value === 'string' && value.trim()) {
-    try { return parse(JSON.parse(value), depth + 1) } catch { return null }
+  if (depth > 2) {
+    return null
   }
 
-  if (isRecord(value) && Object.hasOwn(value, 'todos')) {return parse(value.todos, depth + 1)}
+  if (Array.isArray(value)) {
+    return parseArray(value)
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      return parse(JSON.parse(value), depth + 1)
+    } catch {
+      return null
+    }
+  }
+
+  if (isRecord(value) && Object.hasOwn(value, 'todos')) {
+    return parse(value.todos, depth + 1)
+  }
 
   return null
 }

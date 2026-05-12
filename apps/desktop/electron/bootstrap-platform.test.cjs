@@ -3,11 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
-const {
-  bundledRuntimeImportCheck,
-  isWindowsBinaryPathInWsl,
-  isWslEnvironment
-} = require('./bootstrap-platform.cjs')
+const { bundledRuntimeImportCheck, isWindowsBinaryPathInWsl, isWslEnvironment } = require('./bootstrap-platform.cjs')
 
 test('isWslEnvironment detects WSL2 env vars on linux', () => {
   assert.equal(isWslEnvironment({ WSL_DISTRO_NAME: 'Ubuntu' }, 'linux'), true)

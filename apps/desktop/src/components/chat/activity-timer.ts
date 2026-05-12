@@ -6,10 +6,14 @@ import { useEffect, useRef, useState } from 'react'
 const startedAtByKey = new Map<string, number>()
 
 function startedAt(key?: string): number {
-  if (!key) {return Date.now()}
+  if (!key) {
+    return Date.now()
+  }
   const existing = startedAtByKey.get(key)
 
-  if (existing !== undefined) {return existing}
+  if (existing !== undefined) {
+    return existing
+  }
   const now = Date.now()
   startedAtByKey.set(key, now)
 
@@ -17,7 +21,9 @@ function startedAt(key?: string): number {
 }
 
 export function formatElapsed(seconds: number): string {
-  if (seconds < 60) {return `${seconds}s`}
+  if (seconds < 60) {
+    return `${seconds}s`
+  }
 
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
@@ -33,9 +39,13 @@ export function useElapsedSeconds(active = true, timerKey?: string): number {
   }
 
   useEffect(() => {
-    if (!active) {return}
+    if (!active) {
+      return
+    }
 
-    if (timerKey) {start.current = startedAt(timerKey)}
+    if (timerKey) {
+      start.current = startedAt(timerKey)
+    }
 
     const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - start.current) / 1000)))
     tick()

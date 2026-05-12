@@ -101,7 +101,10 @@ export function parseCommitHeader(raw: string): ParsedCommit {
 }
 
 function tidySubject(subject: string): string {
-  const cleaned = subject.replace(/\s+/g, ' ').replace(/[.;,\s]+$/, '').trim()
+  const cleaned = subject
+    .replace(/\s+/g, ' ')
+    .replace(/[.;,\s]+$/, '')
+    .trim()
 
   if (!cleaned) {
     return cleaned

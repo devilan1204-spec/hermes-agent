@@ -1,4 +1,4 @@
-import { atom } from 'nanostores'
+import { atom, computed, type ReadableAtom } from 'nanostores'
 
 import { persistBoolean, storedBoolean } from '@/lib/storage'
 
@@ -14,12 +14,24 @@ export const $toolViewMode = atom<ToolViewMode>(
   storedBoolean(TOOL_VIEW_TECHNICAL_STORAGE_KEY, false) ? 'technical' : 'product'
 )
 export const $toolDisclosureStates = atom<ToolDisclosureStates>(loadToolDisclosureStates())
+const disclosureOpenCache = new Map<string, ReadableAtom<boolean | undefined>>()
 
 $toolViewMode.subscribe(mode => persistBoolean(TOOL_VIEW_TECHNICAL_STORAGE_KEY, mode === 'technical'))
 $toolDisclosureStates.subscribe(persistToolDisclosureStates)
 
 export function setToolViewMode(mode: ToolViewMode) {
   $toolViewMode.set(mode)
+}
+
+export function $toolDisclosureOpen(id: string): ReadableAtom<boolean | undefined> {
+  let cached = disclosureOpenCache.get(id)
+
+  if (!cached) {
+    cached = computed($toolDisclosureStates, states => states[id])
+    disclosureOpenCache.set(id, cached)
+  }
+
+  return cached
 }
 
 function loadToolDisclosureStates(): ToolDisclosureStates {

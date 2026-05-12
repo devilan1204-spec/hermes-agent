@@ -1591,12 +1591,12 @@ def _on_tool_start(sid: str, tool_call_id: str, name: str, args: dict):
         _emit(
             "tool.start",
             sid,
-            {"tool_id": tool_call_id, "name": name, "context": _tool_ctx(name, args)},
+            {"tool_id": tool_call_id, "name": name, "args": args, "context": _tool_ctx(name, args)},
         )
 
 
 def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result: str):
-    payload = {"tool_id": tool_call_id, "name": name}
+    payload = {"tool_id": tool_call_id, "name": name, "args": args}
     session = _sessions.get(sid)
     snapshot = None
     started_at = None
@@ -1606,6 +1606,10 @@ def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result
     duration_s = time.time() - started_at if started_at else None
     if duration_s is not None:
         payload["duration_s"] = duration_s
+    try:
+        payload["result"] = json.loads(result)
+    except Exception:
+        payload["result"] = result
     summary = _tool_summary(name, result, duration_s)
     if summary:
         payload["summary"] = summary
@@ -1645,7 +1649,9 @@ def _on_tool_progress(
     if not _tool_progress_enabled(sid):
         return
     if event_type == "tool.started" and name:
-        _emit("tool.progress", sid, {"name": name, "preview": preview or ""})
+        # `_on_tool_start` already emits the authoritative `tool.start` with
+        # the stable tool id and args. Emitting another id-less progress row
+        # here makes the desktop live view diverge from hydrated history.
         return
     if event_type == "reasoning.available" and preview:
         _emit("reasoning.available", sid, {"text": str(preview)})

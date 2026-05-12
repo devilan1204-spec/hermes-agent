@@ -60,6 +60,7 @@ export function AppShell({
   const viewportFullscreen = useSyncExternalStore(subscribeWindowSize, viewportIsFullscreen, () => false)
   const isFullscreen = Boolean(connection?.isFullscreen) || viewportFullscreen
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
+
   const titlebarContentInset = sidebarOpen
     ? 0
     : titlebarControls.left + TITLEBAR_HEIGHT + Math.round(TITLEBAR_HEIGHT / 2)

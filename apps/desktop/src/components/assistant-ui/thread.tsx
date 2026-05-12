@@ -18,7 +18,7 @@ import { ClarifyTool } from '@/components/assistant-ui/clarify-tool'
 import { DirectiveContent, DirectiveText } from '@/components/assistant-ui/directive-text'
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
 import { HoistedTodoPanel, todosFromMessageContent } from '@/components/assistant-ui/todo-tool'
-import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
+import { ToolFallback, ToolGroupSlot } from '@/components/assistant-ui/tool-fallback'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
@@ -51,6 +51,7 @@ import {
   XIcon
 } from '@/lib/icons'
 import { extractPreviewTargets } from '@/lib/preview-targets'
+import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { playSpeechText, stopVoicePlayback } from '@/lib/voice-playback'
 import { notifyError } from '@/store/notifications'
@@ -365,7 +366,8 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
     return pickPrimaryPreviewTarget(extractPreviewTargets(messageText))
   }, [messageText])
 
-  const isPlaceholder = useAuiState(s => s.message.status?.type === 'running' && s.message.content.length === 0)
+  const messageStatus = useAuiState(s => s.message.status?.type)
+  const isPlaceholder = messageStatus === 'running' && content.length === 0
 
   if (isPlaceholder) {
     return null
@@ -382,14 +384,7 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
         data-slot="aui_assistant-message-content"
       >
         {hoistedTodos.length > 0 && <HoistedTodoPanel todos={hoistedTodos} />}
-        <MessagePrimitive.Parts
-          components={{
-            Text: MarkdownText,
-            Reasoning: ReasoningTextPart,
-            ReasoningGroup: ReasoningAccordionGroup,
-            tools: { Fallback: ChainToolFallback }
-          }}
-        />
+        <MessagePrimitive.Parts components={MESSAGE_PARTS_COMPONENTS} />
         {previewTargets.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {previewTargets.map(target => (
@@ -462,26 +457,70 @@ const ImageGenerateTool: FC<ToolCallMessagePartProps> = ({ result }) => {
 
 const ChainToolFallback: FC<ToolCallMessagePartProps> = props => {
   // todo parts are hoisted to a dedicated panel above the message content.
-  if (props.toolName === 'todo') {return null}
+  if (props.toolName === 'todo') {
+    return null
+  }
 
-  if (props.toolName === 'image_generate') {return <ImageGenerateTool {...props} />}
+  if (props.toolName === 'image_generate') {
+    return <ImageGenerateTool {...props} />
+  }
 
-  if (props.toolName === 'clarify') {return <ClarifyTool {...props} />}
+  if (props.toolName === 'clarify') {
+    return <ClarifyTool {...props} />
+  }
 
   return <ToolFallback {...props} />
 }
 
 const ThinkingDisclosure: FC<{
   children: ReactNode
+  messageRunning?: boolean
   pending?: boolean
   timerKey?: string
-}> = ({ children, pending = false, timerKey }) => {
-  const [open, setOpen] = useState(false)
+}> = ({ children, messageRunning = false, pending = false, timerKey }) => {
+  // `null` = no explicit user toggle yet, defer to the streaming default.
+  // The default is "auto-open while streaming, auto-collapse when done" so
+  // reasoning surfaces a live preview without manual interaction. The first
+  // explicit toggle wins from then on.
+  const [userOpen, setUserOpen] = useState<boolean | null>(null)
   const elapsed = useElapsedSeconds(pending, timerKey)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const enterRef = useEnterAnimation(messageRunning, timerKey)
+
+  const open = userOpen ?? pending
+  const isPreview = pending && userOpen === null
+
+  // While the preview is live, pin the scroll container to the bottom on
+  // every content growth so the latest tokens are always visible. Combined
+  // with the top mask in styles.css, this reads as text settling in from
+  // below while older lines fade out at the top.
+  useEffect(() => {
+    if (!isPreview) {
+      return
+    }
+
+    const el = scrollRef.current
+    const content = contentRef.current
+
+    if (!el || !content) {
+      return
+    }
+
+    const pin = () => {
+      el.scrollTop = el.scrollHeight
+    }
+
+    pin()
+    const observer = new ResizeObserver(pin)
+    observer.observe(content)
+
+    return () => observer.disconnect()
+  }, [isPreview])
 
   return (
-    <div className="text-sm text-muted-foreground" data-slot="aui_thinking-disclosure">
-      <DisclosureRow onToggle={() => setOpen(v => !v)} open={open}>
+    <div className="text-sm text-muted-foreground" data-slot="aui_thinking-disclosure" ref={enterRef}>
+      <DisclosureRow onToggle={() => setUserOpen(!open)} open={open}>
         <span className="flex min-w-0 items-baseline gap-1.5">
           <span
             className={cn(
@@ -497,19 +536,48 @@ const ThinkingDisclosure: FC<{
         </span>
       </DisclosureRow>
       {open && (
-        <div className="mt-2 w-full min-w-0 max-w-full overflow-hidden pl-(--message-text-indent) pr-2 wrap-anywhere pb-1">
-          {children}
+        <div
+          className={cn(
+            // Keep the reasoning body tucked close to the "Thinking" row so
+            // it aligns with tool-group disclosure rhythm.
+            'mt-0.5 w-full min-w-0 max-w-full overflow-hidden pr-2 pl-3 wrap-anywhere pb-1',
+            isPreview && 'thinking-preview max-h-40'
+          )}
+          ref={scrollRef}
+        >
+          <div ref={contentRef}>{children}</div>
         </div>
       )}
     </div>
   )
 }
 
-const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; startIndex: number }> = ({ children }) => {
-  const pending = useAuiState(s => s.thread.isRunning && s.message.status?.type === 'running')
+// Self-gate "Thinking…" on this message's own reasoning parts. Reading
+// `thread.isRunning` directly would flicker shimmer/timer on every old
+// assistant whenever the external-store runtime clears+reimports its
+// repository (one ref-identity bump per streaming delta).
+const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; startIndex: number }> = ({
+  children,
+  endIndex,
+  startIndex
+}) => {
   const messageId = useAuiState(s => s.message.id)
+  const messageRunning = useAuiState(s => s.message.status?.type === 'running')
 
-  return <ThinkingDisclosure pending={pending} timerKey={`reasoning:${messageId}`}>{children}</ThinkingDisclosure>
+  const pending = useAuiState(
+    s =>
+      s.thread.isRunning &&
+      s.message.status?.type === 'running' &&
+      s.message.parts
+        .slice(Math.max(0, startIndex), Math.min(s.message.parts.length, endIndex))
+        .some(p => p?.type === 'reasoning' && p.status?.type !== 'complete')
+  )
+
+  return (
+    <ThinkingDisclosure messageRunning={messageRunning} pending={pending} timerKey={`reasoning:${messageId}`}>
+      {children}
+    </ThinkingDisclosure>
+  )
 }
 
 const ReasoningTextPart: FC<{ text: string; status?: { type: string } }> = ({ text, status }) => {
@@ -527,6 +595,21 @@ const ReasoningTextPart: FC<{ text: string; status?: { type: string } }> = ({ te
     </div>
   )
 }
+
+// Module-level constant so the `components` prop on `MessagePrimitive.Parts`
+// has a stable identity across renders. Without this every AssistantMessage
+// render would create a fresh `components` object, invalidating the memo on
+// `MessagePrimitivePartByIndex` and forcing every tool/reasoning child to
+// re-render on every streaming delta. Memo invalidation alone doesn't
+// remount, but combined with the previous ToolFallback group-swap it was a
+// big chunk of the per-delta work.
+const MESSAGE_PARTS_COMPONENTS = {
+  Reasoning: ReasoningTextPart,
+  ReasoningGroup: ReasoningAccordionGroup,
+  Text: MarkdownText,
+  ToolGroup: ToolGroupSlot,
+  tools: { Fallback: ChainToolFallback }
+} as const
 
 const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 

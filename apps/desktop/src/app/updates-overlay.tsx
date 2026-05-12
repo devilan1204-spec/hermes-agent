@@ -46,11 +46,9 @@ export function UpdatesOverlay() {
   }, [checking, open, status])
 
   const behind = status?.behind ?? 0
-  const phase: 'idle' | 'applying' | 'error' = apply.applying || apply.stage === 'restart'
-    ? 'applying'
-    : apply.stage === 'error'
-      ? 'error'
-      : 'idle'
+
+  const phase: 'idle' | 'applying' | 'error' =
+    apply.applying || apply.stage === 'restart' ? 'applying' : apply.stage === 'error' ? 'error' : 'idle'
 
   const handleClose = (next: boolean) => {
     if (phase === 'applying') {
@@ -114,7 +112,9 @@ function IdleView({
   status: DesktopUpdateStatus | null
 }) {
   if (!status && checking) {
-    return <CenteredStatus icon={<Loader2 className="size-6 animate-spin text-primary" />} title="Looking for updates…" />
+    return (
+      <CenteredStatus icon={<Loader2 className="size-6 animate-spin text-primary" />} title="Looking for updates…" />
+    )
   }
 
   if (!status) {
@@ -223,7 +223,9 @@ function IdleView({
       </div>
 
       {remaining > 0 && (
-        <p className="text-center text-xs text-muted-foreground">+ {remaining} more change{remaining === 1 ? '' : 's'} included.</p>
+        <p className="text-center text-xs text-muted-foreground">
+          + {remaining} more change{remaining === 1 ? '' : 's'} included.
+        </p>
       )}
     </div>
   )
@@ -231,6 +233,7 @@ function IdleView({
 
 function ApplyingView({ apply }: { apply: UpdateApplyState }) {
   const label = STAGE_LABELS[apply.stage] ?? 'Updating Hermes…'
+
   const percent =
     typeof apply.percent === 'number' && Number.isFinite(apply.percent)
       ? Math.max(2, Math.min(100, Math.round(apply.percent)))

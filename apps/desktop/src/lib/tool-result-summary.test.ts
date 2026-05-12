@@ -44,9 +44,7 @@ describe('formatToolResultSummary', () => {
       details: `prefix ${'x'.repeat(500)}`
     })
 
-    const detailsLine = summary
-      .split('\n')
-      .find(line => line.startsWith('- Details:'))
+    const detailsLine = summary.split('\n').find(line => line.startsWith('- Details:'))
 
     expect(detailsLine).toBeTruthy()
     expect(detailsLine?.length).toBeLessThan(230)

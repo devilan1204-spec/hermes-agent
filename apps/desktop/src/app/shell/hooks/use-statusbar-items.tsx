@@ -123,8 +123,9 @@ export function useStatusbarItems({
     const sha = updateStatus?.currentSha?.slice(0, 7) ?? null
     const behind = updateStatus?.behind ?? 0
     const applying = updateApply.applying || updateApply.stage === 'restart'
-    const base = appVersion ? `v${appVersion}` : sha ?? 'unknown'
+    const base = appVersion ? `v${appVersion}` : (sha ?? 'unknown')
     const behindHint = !applying && behind > 0 ? ` (+${behind})` : ''
+
     const label = applying
       ? updateApply.stage === 'restart'
         ? `${base} · restart`

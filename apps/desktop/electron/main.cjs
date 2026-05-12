@@ -21,6 +21,14 @@ const path = require('node:path')
 const { fileURLToPath, pathToFileURL } = require('node:url')
 const { spawn } = require('node:child_process')
 const { bundledRuntimeImportCheck, isWindowsBinaryPathInWsl, isWslEnvironment } = require('./bootstrap-platform.cjs')
+const {
+  DATA_URL_READ_MAX_BYTES,
+  DEFAULT_FETCH_TIMEOUT_MS,
+  TEXT_PREVIEW_SOURCE_MAX_BYTES,
+  encryptDesktopSecret: encryptDesktopSecretStrict,
+  resolveReadableFileForIpc,
+  resolveTimeoutMs
+} = require('./hardening.cjs')
 
 const USER_DATA_OVERRIDE = process.env.HERMES_DESKTOP_USER_DATA_DIR
 if (USER_DATA_OVERRIDE) {
@@ -843,7 +851,16 @@ function resolveHermesBackend(dashboardArgs) {
     if (backend) return backend
   }
 
-  // 2. Existing `hermes` on PATH — installed via install.ps1 / install.sh, or
+  // 2. Development source — when running `npm run dev` from a checkout, the
+  //    cloned repo at SOURCE_REPO_ROOT takes precedence over ACTIVE and any
+  //    installed `hermes` on PATH so local Python edits are actually exercised.
+  //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isHermesSourceRoot.)
+  if (!IS_PACKAGED && isHermesSourceRoot(SOURCE_REPO_ROOT)) {
+    const backend = createPythonBackend(SOURCE_REPO_ROOT, `Hermes source at ${SOURCE_REPO_ROOT}`, dashboardArgs)
+    if (backend) return backend
+  }
+
+  // 3. Existing `hermes` on PATH — installed via install.ps1 / install.sh, or
   //    pip-installed system-wide. Skip when HERMES_DESKTOP_IGNORE_EXISTING=1
   //    (used by test:desktop:fresh to force the factory-image bootstrap path).
   if (process.env.HERMES_DESKTOP_IGNORE_EXISTING !== '1') {
@@ -874,15 +891,6 @@ function resolveHermesBackend(dashboardArgs) {
         shell: isCommandScript(hermesCommand)
       }
     }
-  }
-
-  // 3. Development source — when running `npm run dev` from a checkout, the
-  //    cloned repo at SOURCE_REPO_ROOT takes precedence over ACTIVE so the
-  //    desktop uses the dev's local edits, not whatever's under HERMES_HOME.
-  //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isHermesSourceRoot.)
-  if (!IS_PACKAGED && isHermesSourceRoot(SOURCE_REPO_ROOT)) {
-    const backend = createPythonBackend(SOURCE_REPO_ROOT, `Hermes source at ${SOURCE_REPO_ROOT}`, dashboardArgs)
-    if (backend) return backend
   }
 
   // 4. ACTIVE_HERMES_ROOT — the canonical mutable install at
@@ -1155,6 +1163,7 @@ function fetchJson(url, token, options = {}) {
     const body = options.body === undefined ? undefined : Buffer.from(JSON.stringify(options.body))
     const parsed = new URL(url)
     const client = parsed.protocol === 'https:' ? https : http
+    const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
@@ -1190,11 +1199,9 @@ function fetchJson(url, token, options = {}) {
     )
 
     req.on('error', reject)
-    if (options.timeoutMs) {
-      req.setTimeout(options.timeoutMs, () => {
-        req.destroy(new Error(`Timed out connecting to Hermes backend after ${options.timeoutMs}ms`))
-      })
-    }
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
+    })
     if (body) req.write(body)
     req.end()
   })
@@ -1456,7 +1463,9 @@ function fetchLinkTitle(rawUrl) {
   const pending = fetchHtmlTitleWithCurl(url)
     .catch(() => '')
     .then(value => usableTitle((value || '').slice(0, 240)))
-    .then(async value => value || usableTitle(((await fetchHtmlTitleWithRenderer(url).catch(() => '')) || '').slice(0, 240)))
+    .then(
+      async value => value || usableTitle(((await fetchHtmlTitleWithRenderer(url).catch(() => '')) || '').slice(0, 240))
+    )
     .then(clean => {
       cacheTitle(key, clean)
       titleInflight.delete(key)
@@ -2022,24 +2031,7 @@ function tokenPreview(value) {
 }
 
 function encryptDesktopSecret(value) {
-  const raw = String(value || '')
-
-  if (!raw) {
-    return null
-  }
-
-  try {
-    if (safeStorage.isEncryptionAvailable()) {
-      return {
-        encoding: 'safeStorage',
-        value: safeStorage.encryptString(raw).toString('base64')
-      }
-    }
-  } catch {
-    // Fall through to plaintext for platforms where Electron cannot encrypt.
-  }
-
-  return { encoding: 'plain', value: raw }
+  return encryptDesktopSecretStrict(value, safeStorage)
 }
 
 function decryptDesktopSecret(secret) {
@@ -2108,14 +2100,19 @@ function sanitizeDesktopConnectionConfig(config = readDesktopConnectionConfig())
   }
 }
 
-function coerceDesktopConnectionConfig(input = {}, existing = readDesktopConnectionConfig()) {
+function coerceDesktopConnectionConfig(input = {}, existing = readDesktopConnectionConfig(), options = {}) {
+  const persistToken = options.persistToken !== false
   const mode = input.mode === 'remote' ? 'remote' : 'local'
   const remoteUrl = String(input.remoteUrl ?? existing.remote?.url ?? '').trim()
   const incomingToken = typeof input.remoteToken === 'string' ? input.remoteToken.trim() : ''
   const existingToken = existing.remote?.token
   const nextRemote = {
     url: remoteUrl,
-    token: incomingToken ? encryptDesktopSecret(incomingToken) : existingToken
+    token: incomingToken
+      ? persistToken
+        ? encryptDesktopSecret(incomingToken)
+        : { encoding: 'plain', value: incomingToken }
+      : existingToken
   }
 
   if (mode === 'remote') {
@@ -2181,7 +2178,7 @@ function resolveRemoteBackend() {
 }
 
 async function testDesktopConnectionConfig(input = {}) {
-  const config = coerceDesktopConnectionConfig(input)
+  const config = coerceDesktopConnectionConfig(input, readDesktopConnectionConfig(), { persistToken: false })
   const remote =
     config.mode === 'remote'
       ? {
@@ -2455,9 +2452,11 @@ ipcMain.handle('hermes:requestMicrophoneAccess', async () => {
 
 ipcMain.handle('hermes:api', async (_event, request) => {
   const connection = await startHermes()
+  const timeoutMs = resolveTimeoutMs(request?.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
   return fetchJson(`${connection.baseUrl}${request.path}`, connection.token, {
-    method: request.method,
-    body: request.body
+    method: request?.method,
+    body: request?.body,
+    timeoutMs
   })
 })
 
@@ -2472,18 +2471,21 @@ ipcMain.handle('hermes:notify', (_event, payload) => {
 })
 
 ipcMain.handle('hermes:readFileDataUrl', async (_event, filePath) => {
-  const input = String(filePath || '')
-  const resolved = input.startsWith('file:') ? fileURLToPath(input) : path.resolve(input)
-  const data = await fs.promises.readFile(resolved)
-  return `data:${mimeTypeForPath(resolved)};base64,${data.toString('base64')}`
+  const { resolvedPath } = await resolveReadableFileForIpc(filePath, {
+    maxBytes: DATA_URL_READ_MAX_BYTES,
+    purpose: 'File preview'
+  })
+  const data = await fs.promises.readFile(resolvedPath)
+  return `data:${mimeTypeForPath(resolvedPath)};base64,${data.toString('base64')}`
 })
 
 ipcMain.handle('hermes:readFileText', async (_event, filePath) => {
-  const input = String(filePath || '')
-  const resolved = input.startsWith('file:') ? fileURLToPath(input) : path.resolve(input)
-  const ext = path.extname(resolved).toLowerCase()
-  const stat = await fs.promises.stat(resolved)
-  const handle = await fs.promises.open(resolved, 'r')
+  const { resolvedPath, stat } = await resolveReadableFileForIpc(filePath, {
+    maxBytes: TEXT_PREVIEW_SOURCE_MAX_BYTES,
+    purpose: 'Text preview'
+  })
+  const ext = path.extname(resolvedPath).toLowerCase()
+  const handle = await fs.promises.open(resolvedPath, 'r')
   const bytesToRead = Math.min(stat.size, TEXT_PREVIEW_MAX_BYTES)
 
   try {
@@ -2494,8 +2496,8 @@ ipcMain.handle('hermes:readFileText', async (_event, filePath) => {
       binary: looksBinary(buffer.subarray(0, Math.min(bytesRead, 4096))),
       byteSize: stat.size,
       language: PREVIEW_LANGUAGE_BY_EXT[ext] || 'text',
-      mimeType: mimeTypeForPath(resolved),
-      path: resolved,
+      mimeType: mimeTypeForPath(resolvedPath),
+      path: resolvedPath,
       text: buffer.subarray(0, bytesRead).toString('utf8'),
       truncated: stat.size > TEXT_PREVIEW_MAX_BYTES
     }

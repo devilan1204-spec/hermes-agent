@@ -154,6 +154,7 @@ export function clearNotifications() {
   timers.clear()
   const all = $notifications.get()
   $notifications.set([])
+
   for (const item of all) {
     item.onDismiss?.()
   }

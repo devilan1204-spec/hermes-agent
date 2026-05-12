@@ -49,6 +49,7 @@ describe('collectArtifactsForSession', () => {
         timestamp: 3000
       }
     ]
+
     const artifacts = collectArtifactsForSession(makeSession({ id: 'session-2' }), messages)
 
     expect(artifacts).toHaveLength(1)

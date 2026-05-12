@@ -134,6 +134,7 @@ export function DesktopOnboardingOverlay({ enabled, onCompleted, requestGateway 
   }
 
   const { flow } = onboarding
+  const reason = onboarding.reason?.trim() || null
   const ready = enabled && onboarding.configured === false
   const showPicker = flow.status === 'idle' || flow.status === 'success'
 
@@ -142,17 +143,18 @@ export function DesktopOnboardingOverlay({ enabled, onCompleted, requestGateway 
       <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-border bg-card/95 shadow-2xl">
         <Header />
         <div className="grid gap-5 p-6">
-          {ready ? (
-            showPicker ? (
-              <Picker ctx={ctx} />
-            ) : (
-              <FlowPanel ctx={ctx} flow={flow} />
-            )
-          ) : (
-            <Preparing boot={boot} />
-          )}
+          {reason ? <ReasonNotice reason={reason} /> : null}
+          {ready ? showPicker ? <Picker ctx={ctx} /> : <FlowPanel ctx={ctx} flow={flow} /> : <Preparing boot={boot} />}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ReasonNotice({ reason }: { reason: string }) {
+  return (
+    <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      {reason}
     </div>
   )
 }
@@ -445,7 +447,9 @@ function FlowPanel({ ctx, flow }: { ctx: OnboardingContext; flow: OnboardingFlow
           in":
         </p>
         <CodeBlock copied={flow.copied} onCopy={() => void copyExternalCommand()} text={flow.provider.cli_command} />
-        <FlowFooter left={flow.provider.docs_url ? <DocsLink href={flow.provider.docs_url}>{title} docs</DocsLink> : null}>
+        <FlowFooter
+          left={flow.provider.docs_url ? <DocsLink href={flow.provider.docs_url}>{title} docs</DocsLink> : null}
+        >
           <CancelBtn />
           <Button onClick={() => void recheckExternalSignin(ctx)}>
             <Check className="size-4" />
