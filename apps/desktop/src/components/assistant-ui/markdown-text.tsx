@@ -7,7 +7,6 @@ import {
   type SyntaxHighlighterProps
 } from '@assistant-ui/react-streamdown'
 import { code } from '@streamdown/code'
-import { createMathPlugin } from '@streamdown/math'
 import { type ComponentProps, memo, useEffect, useMemo, useState } from 'react'
 
 import { PreviewAttachment } from '@/components/chat/preview-attachment'
@@ -15,6 +14,7 @@ import { SyntaxHighlighter } from '@/components/chat/shiki-highlighter'
 import { ZoomableImage } from '@/components/chat/zoomable-image'
 import { CopyButton } from '@/components/ui/copy-button'
 import { normalizeExternalUrl, openExternalLink, PrettyLink } from '@/lib/external-link'
+import { createMemoizedMathPlugin } from '@/lib/katex-memo'
 import { isLikelyProseCodeBlock, sanitizeLanguageTag } from '@/lib/markdown-code'
 import { preprocessMarkdown } from '@/lib/markdown-preprocess'
 import {
@@ -29,11 +29,18 @@ import { previewTargetFromMarkdownHref } from '@/lib/preview-targets'
 import { cn } from '@/lib/utils'
 
 // Math rendering plugin (KaTeX). Configured once at module scope — the
-// plugin is stateless so re-creating per-render is wasted work. Enable
-// `singleDollarTextMath` so models that emit `$x^2$` for inline math
-// (the de-facto convention in OpenAI / Anthropic outputs) render
-// correctly. The default false-setting only accepts `$$...$$` blocks.
-const mathPlugin = createMathPlugin({ singleDollarTextMath: true })
+// plugin is stateless beyond its internal cache so re-creating per-render
+// would needlessly thrash. We use a memoizing wrapper around rehype-katex
+// (see lib/katex-memo.ts) so that during streaming we re-katex only the
+// equations whose source actually changed since the last token. With the
+// stock @streamdown/math plugin every equation re-renders on every token,
+// which throttles UI updates badly for math-heavy responses; the memoized
+// plugin keeps the steady-state work proportional to "new equations
+// arriving" rather than "equations × tokens-per-second".
+//
+// `singleDollarTextMath: true` enables `$x^2$` for inline math (de-facto
+// LLM convention). The default false-setting only accepts `$$...$$`.
+const mathPlugin = createMemoizedMathPlugin({ singleDollarTextMath: true })
 
 function CodeHeader({ language, code }: { language?: string; code?: string }) {
   const normalizedCode = (code ?? '').replace(/^\n+/, '').trimEnd()
@@ -329,7 +336,7 @@ const MarkdownTextImpl = () => {
       lineNumbers={false}
       mode="streaming"
       parseIncompleteMarkdown={!isStreaming}
-      plugins={isStreaming ? undefined : { code, math: mathPlugin }}
+      plugins={{ math: mathPlugin, ...(isStreaming ? {} : { code }) }}
       preprocess={preprocessMarkdown}
       shikiTheme={['github-light-default', 'github-dark-default']}
     />
