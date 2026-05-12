@@ -479,18 +479,17 @@ def auth_status_command(args) -> None:
         raise SystemExit("Provider is required. Example: `hermes auth status spotify`.")
     status = auth_mod.get_auth_status(provider)
     if not status.get("logged_in"):
-        reason = status.get("error")
-        if reason:
-            print(f"{provider}: logged out ({reason})")
-        else:
-            print(f"{provider}: logged out")
+        # Avoid echoing provider error strings here. OAuth libraries and
+        # provider responses can include token-like fields in exception text,
+        # and this command may be copied into bug reports.
+        print(f"{provider}: logged out")
         return
 
     print(f"{provider}: logged in")
-    for key in ("auth_type", "client_id", "redirect_uri", "scope", "expires_at", "api_base_url"):
-        value = status.get(key)
-        if value:
-            print(f"  {key}: {value}")
+    if status.get("expires_at") or status.get("expires_at_ms"):
+        print("  token: present (expiry available)")
+    if status.get("has_refresh_token"):
+        print("  refresh_token: present")
 
 
 def auth_logout_command(args) -> None:

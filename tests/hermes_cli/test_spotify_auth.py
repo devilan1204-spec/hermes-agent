@@ -85,7 +85,7 @@ def test_auth_spotify_status_command_reports_logged_in(capsys, monkeypatch: pyte
     auth_status_command(SimpleNamespace(provider="spotify"))
     output = capsys.readouterr().out
     assert "spotify: logged in" in output
-    assert "client_id: spotify-client" in output
+    assert "spotify-client" not in output
 
 
 def test_spotify_logout_does_not_reset_model_provider(
