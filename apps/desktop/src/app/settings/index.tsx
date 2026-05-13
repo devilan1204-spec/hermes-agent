@@ -80,16 +80,9 @@ export function SettingsView({ gateway, onClose, onConfigSaved }: SettingsPagePr
     }
   }
 
+  // OverlayView handles Esc; this just adds Cmd/Ctrl+P → focus search.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        triggerHaptic('close')
-        onClose()
-
-        return
-      }
-
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         searchInputRef.current?.focus()
@@ -100,7 +93,7 @@ export function SettingsView({ gateway, onClose, onConfigSaved }: SettingsPagePr
     window.addEventListener('keydown', onKeyDown)
 
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onClose])
+  }, [])
 
   return (
     <OverlayView
