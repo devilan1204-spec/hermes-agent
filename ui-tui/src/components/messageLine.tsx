@@ -199,7 +199,9 @@ export const MessageLine = memo(function MessageLine({
           </Text>
         </NoSelect>
 
-        <Box width={transcriptBodyWidth(cols, msg.role, t.brand.prompt)}>{content}</Box>
+        <Box copySource={msg.text} width={transcriptBodyWidth(cols, msg.role, t.brand.prompt)}>
+          {content}
+        </Box>
       </Box>
     </Box>
   )

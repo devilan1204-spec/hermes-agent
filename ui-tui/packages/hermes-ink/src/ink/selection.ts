@@ -966,6 +966,16 @@ function trimEmptyEdgeRows(lines: string[]): string[] {
  * skipped. Rows that scrolled out of the viewport during drag-to-scroll
  * are joined back in from the scrolledOffAbove/Below accumulators along
  * with their captured softWrap bits.
+ *
+ * Copy-source override (markdown round-trip): if the selection fully
+ * covers a contiguous copy-source region (every cell of that region's
+ * on-screen extent is inside the selection), the rendered cell text for
+ * that region is replaced with `screen.copySourcePool.get(id)` —
+ * giving back the raw markdown / formatted source instead of the
+ * stripped render. Multiple fully-covered regions concatenate in row
+ * order with newlines between them. Partial coverage or no region falls
+ * back to extractRowText (rendered cells), preserving the previous
+ * behavior for arbitrary terminal selections.
  */
 export function getSelectedText(s: SelectionState, screen: Screen): string {
   const b = selectionBounds(s)
@@ -982,12 +992,78 @@ export function getSelectedText(s: SelectionState, screen: Screen): string {
     joinRows(lines, s.scrolledOffAbove[i]!, s.scrolledOffAboveSW[i])
   }
 
+  // Pre-scan: find every copy-source region the selection touches and
+  // decide whether the selection FULLY covers it. A region is "fully
+  // covered" when every cell on the screen carrying that ID is inside
+  // the selection rect — only then is it safe to substitute the source
+  // string (a partial selection has no obvious sub-mapping from rendered
+  // cells back to source characters; v1 punts on that case).
+  const fullyCovered = computeFullyCoveredCopySources(screen, start, end)
+
+  // Track which copy-source IDs we've already emitted (one source string
+  // covers many rows; we flush it once at the first row of the region in
+  // selection order).
+  const emittedIds = new Set<number>()
+
   for (let row = start.row; row <= end.row; row++) {
     const rowStart = Math.max(0, row === start.row ? start.col : 0)
     const rowEnd = Math.min(row === end.row ? end.col : screen.width - 1, screen.width - 1)
-    const bounds = selectionContentBounds(screen, row, rowStart, rowEnd)
 
-    joinRows(lines, bounds ? extractRowText(screen, row, bounds.first, bounds.last) : '', sw[row]! > 0)
+    // Walk the row's selected cells left-to-right, segmenting on
+    // copy-source ID transitions. Each segment is either:
+    //   - a fully-covered region's first appearance → emit source ONCE
+    //   - a fully-covered region we've already emitted → skip
+    //   - everything else → fall back to extractRowText for that span
+    //
+    // This handles three cases the simple "uniform-row" check missed:
+    //   1. region surrounded by id=0 cells in the same row (selection
+    //      wider than the region)
+    //   2. two regions side by side on one row
+    //   3. regions sharing a row with plain text
+    const cs = screen.copySources
+    const rowOff = row * screen.width
+    let segStart = rowStart
+
+    while (segStart <= rowEnd) {
+      const segId = cs[rowOff + segStart]!
+
+      // Run-length: how many consecutive cells share this id
+      let segEnd = segStart
+
+      while (segEnd + 1 <= rowEnd && cs[rowOff + segEnd + 1]! === segId) {
+        segEnd++
+      }
+
+      if (segId !== 0 && fullyCovered.has(segId)) {
+        if (!emittedIds.has(segId)) {
+          emittedIds.add(segId)
+          const source = screen.copySourcePool.get(segId)
+
+          if (source !== undefined) {
+            // sw=false: each region starts a new logical line in the copy
+            // output even if the underlying screen row is mid-wrap.
+            joinRows(lines, source, false)
+          }
+        }
+        // else: already emitted — skip this segment, the earlier
+        // emission's source string already covers all rows of this region.
+      } else {
+        const bounds = selectionContentBounds(screen, row, segStart, segEnd)
+        const segText = bounds ? extractRowText(screen, row, bounds.first, bounds.last) : ''
+
+        if (segText) {
+          // Continue the current logical line if (a) we're past the start
+          // of a soft-wrapped row, or (b) this is a mid-row segment after
+          // a region emission (sw=true keeps it on the previous line in
+          // joinRows). For the first segment of a non-wrapped row, sw is
+          // the screen's softWrap bit.
+          const isFirstSegment = segStart === rowStart
+          joinRows(lines, segText, isFirstSegment ? sw[row]! > 0 : true)
+        }
+      }
+
+      segStart = segEnd + 1
+    }
   }
 
   for (let i = 0; i < s.scrolledOffBelow.length; i++) {
@@ -995,6 +1071,115 @@ export function getSelectedText(s: SelectionState, screen: Screen): string {
   }
 
   return trimEmptyEdgeRows(lines).join('\n')
+}
+
+/**
+ * For each copy-source ID touched by the selection rect, decide whether
+ * EVERY cell on screen carrying that ID is inside the selection. Returns
+ * the set of fully-covered IDs, suitable for substitution.
+ *
+ * The selection rect here is the simple bounding rect from
+ * selectionBounds (start/end). On a multi-row selection, the cells inside
+ * are the union of partial-row spans (col-clamped on the first/last row,
+ * full-width on middle rows). A region's cells outside that union →
+ * partial coverage → don't substitute.
+ */
+function computeFullyCoveredCopySources(
+  screen: Screen,
+  start: { col: number; row: number },
+  end: { col: number; row: number }
+): Set<number> {
+  const cs = screen.copySources
+  const w = screen.width
+  const h = screen.height
+
+  // First pass: collect every copy-source ID that appears inside the
+  // selection rect, AND its bounding rect across the full screen.
+  const ids = new Set<number>()
+  const idBounds = new Map<number, { minCol: number; maxCol: number; minRow: number; maxRow: number }>()
+
+  for (let row = start.row; row <= end.row && row < h; row++) {
+    const rowOff = row * w
+    const colStart = row === start.row ? start.col : 0
+    const colEnd = row === end.row ? end.col : w - 1
+
+    for (let col = colStart; col <= colEnd && col < w; col++) {
+      const id = cs[rowOff + col]!
+
+      if (id !== 0) {
+        ids.add(id)
+      }
+    }
+  }
+
+  if (ids.size === 0) {
+    return ids
+  }
+
+  // Second pass: for each candidate ID, scan the WHOLE screen and find
+  // every cell carrying that ID. If any of those cells lives outside the
+  // selection rect, the region isn't fully covered — drop it.
+  for (let row = 0; row < h; row++) {
+    const rowOff = row * w
+
+    for (let col = 0; col < w; col++) {
+      const id = cs[rowOff + col]!
+
+      if (id === 0 || !ids.has(id)) {
+        continue
+      }
+
+      const bounds = idBounds.get(id)
+
+      if (bounds) {
+        if (col < bounds.minCol) {bounds.minCol = col}
+
+        if (col > bounds.maxCol) {bounds.maxCol = col}
+
+        if (row < bounds.minRow) {bounds.minRow = row}
+
+        if (row > bounds.maxRow) {bounds.maxRow = row}
+      } else {
+        idBounds.set(id, { minCol: col, maxCol: col, minRow: row, maxRow: row })
+      }
+    }
+  }
+
+  // Third pass: for each candidate, decide fully-covered. The selection
+  // rect is rectangular but the row spans on the first/last rows are
+  // col-clamped. A region fits fully when:
+  //   region.minRow >= selection.start.row AND
+  //   region.maxRow <= selection.end.row AND
+  //   on row=start.row: region cols >= start.col
+  //   on row=end.row:   region cols <= end.col
+  //   middle rows: any cols, since we select full-width there.
+  const fullyCovered = new Set<number>()
+
+  for (const id of ids) {
+    const bounds = idBounds.get(id)
+
+    if (!bounds) {
+      continue
+    }
+
+    if (bounds.minRow < start.row || bounds.maxRow > end.row) {
+      continue
+    }
+
+    if (bounds.minRow === start.row && bounds.minCol < start.col) {
+      continue
+    }
+
+    if (bounds.maxRow === end.row && bounds.maxCol > end.col) {
+      continue
+    }
+
+    // Edge case: same-row region (minRow === maxRow === start.row === end.row)
+    // needs both clamps to apply — handled by the two checks above.
+    fullyCovered.add(id)
+  }
+
+  return fullyCovered
 }
 
 /**

@@ -396,6 +396,27 @@ export type Styles = {
    * doesn't pick up leading whitespace from middle rows.
    */
   readonly noSelect?: boolean | 'from-left-edge'
+
+  /**
+   * Mark this box's region of cells as carrying a hidden "source"
+   * string. When the user copies cells inside the region, the rendered
+   * text is replaced with this string in the clipboard.
+   *
+   * Used to round-trip raw markdown / formatting that the renderer
+   * strips before writing to the screen — wrap a `<Md>` block in a Box
+   * with `copySource={rawMarkdownLine}` and copy gives back the raw
+   * `**bold**` / `# heading` / fence syntax instead of the rendered
+   * cells. Only affects alt-screen text selection; no-op otherwise.
+   *
+   * Substitution rules: a selection that fully covers the region (or
+   * is fully contained inside it) copies the source string. A
+   * selection that crosses multiple regions concatenates each
+   * region's source. A partial selection within a single region
+   * falls back to rendered cell text — picking a known-good substring
+   * out of arbitrary markdown source is harder than the v1 mapping
+   * supports (no per-row span yet).
+   */
+  readonly copySource?: string
 }
 
 const applyPositionStyles = (node: LayoutNode, style: Styles): void => {
