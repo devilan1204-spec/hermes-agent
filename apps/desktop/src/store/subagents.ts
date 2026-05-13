@@ -1,31 +1,36 @@
 import { atom } from 'nanostores'
 
 export type SubagentStatus = 'completed' | 'failed' | 'interrupted' | 'queued' | 'running'
+export type SubagentStreamKind = 'progress' | 'summary' | 'thinking' | 'tool'
+
+export interface SubagentStreamEntry {
+  at: number
+  isError?: boolean
+  kind: SubagentStreamKind
+  text: string
+}
 
 export interface SubagentProgress {
   id: string
-  apiCalls?: number
-  costUsd?: number
-  depth: number
-  durationSeconds?: number
-  filesRead: string[]
-  filesWritten: string[]
-  goal: string
-  inputTokens?: number
-  model?: string
-  outputTail: { isError?: boolean; preview?: string; tool?: string }[]
-  outputTokens?: number
   parentId: null | string
-  reasoningTokens?: number
-  sessionId: string
+  goal: string
+  model?: string
   status: SubagentStatus
-  summary?: string
   taskCount: number
   taskIndex: number
-  toolName?: string
-  toolPreview?: string
-  toolsets: string[]
+  startedAt: number
   updatedAt: number
+  durationSeconds?: number
+  costUsd?: number
+  inputTokens?: number
+  outputTokens?: number
+  toolCount?: number
+  filesRead: string[]
+  filesWritten: string[]
+  stream: SubagentStreamEntry[]
+  summary?: string
+  /** Active tool while running — cleared on terminal status. */
+  currentTool?: string
 }
 
 export interface SubagentNode extends SubagentProgress {
@@ -34,122 +39,172 @@ export interface SubagentNode extends SubagentProgress {
 
 export type SubagentPayload = Record<string, unknown>
 
+const TERMINAL: ReadonlySet<SubagentStatus> = new Set(['completed', 'failed', 'interrupted'])
+const MAX_STREAM = 24
+const PREVIEW_MAX = 220
+const TOOL_PREVIEW_MAX = 96
+
 export const $subagentsBySession = atom<Record<string, SubagentProgress[]>>({})
 
-const TERMINAL = new Set<SubagentStatus>(['completed', 'failed', 'interrupted'])
+const isStr = (v: unknown): v is string => typeof v === 'string'
+const str = (v: unknown) => (isStr(v) ? v : '')
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+const strList = (v: unknown) => (Array.isArray(v) ? v.filter(isStr) : [])
 
-const asString = (value: unknown) => (typeof value === 'string' ? value : '')
-const asNumber = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
-const asStatus = (value: unknown): SubagentStatus =>
-  value === 'completed' || value === 'failed' || value === 'interrupted' || value === 'queued' ? value : 'running'
+const asStatus = (v: unknown): SubagentStatus =>
+  v === 'completed' || v === 'failed' || v === 'interrupted' || v === 'queued' ? v : 'running'
 
-const asStringList = (value: unknown) => (Array.isArray(value) ? value.map(asString).filter(Boolean) : [])
+const compact = (text: string, max = PREVIEW_MAX) => {
+  const line = text.replace(/\s+/g, ' ').trim()
+  if (!line) return ''
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line
+}
 
-const asOutputTail = (value: unknown): SubagentProgress['outputTail'] =>
-  Array.isArray(value)
-    ? value
-        .map(item => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
-        .filter((item): item is Record<string, unknown> => Boolean(item))
+const toolLabel = (name: string) =>
+  name.split('_').filter(Boolean).map(p => p[0]!.toUpperCase() + p.slice(1)).join(' ') || name
+
+const formatTool = (name: string, preview = '') => {
+  const snippet = compact(preview, TOOL_PREVIEW_MAX)
+  return snippet ? `${toolLabel(name)}("${snippet}")` : toolLabel(name)
+}
+
+interface TailEntry {
+  isError?: boolean
+  preview?: string
+  tool?: string
+}
+
+const asTail = (v: unknown): TailEntry[] =>
+  Array.isArray(v)
+    ? v
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
         .map(item => ({
           isError: item.is_error === true,
-          preview: asString(item.preview) || undefined,
-          tool: asString(item.tool) || undefined
+          preview: str(item.preview) || undefined,
+          tool: str(item.tool) || undefined
         }))
     : []
 
-function idFor(payload: SubagentPayload) {
-  return (
-    asString(payload.subagent_id) ||
-    `${asString(payload.parent_id) || 'root'}:${asNumber(payload.task_index) ?? 0}:${asString(payload.goal)}`
-  )
+const idOf = (p: SubagentPayload) =>
+  str(p.subagent_id) || `${str(p.parent_id) || 'root'}:${num(p.task_index) ?? 0}:${str(p.goal)}`
+
+const appendStream = (stream: SubagentStreamEntry[], entry: SubagentStreamEntry) => {
+  const last = stream.at(-1)
+  if (last?.kind === entry.kind && last.text === entry.text && last.isError === entry.isError) return stream
+
+  return [...stream, entry].slice(-MAX_STREAM)
 }
 
-function toProgress(sessionId: string, payload: SubagentPayload, previous?: SubagentProgress): SubagentProgress {
+function streamFromPayload(
+  payload: SubagentPayload,
+  status: SubagentStatus,
+  eventType: string,
+  at: number
+): SubagentStreamEntry[] {
+  const out: SubagentStreamEntry[] = []
+  const tool = str(payload.tool_name)
+  const preview = str(payload.tool_preview) || str(payload.text)
+  const text = compact(str(payload.text) || preview)
+
+  for (const tail of asTail(payload.output_tail)) {
+    const line = tail.tool ? formatTool(tail.tool, tail.preview ?? '') : compact(tail.preview ?? '')
+    if (line) out.push({ at, isError: tail.isError, kind: tail.tool ? 'tool' : 'progress', text: line })
+  }
+
+  if (tool) out.push({ at, isError: !!payload.error, kind: 'tool', text: formatTool(tool, preview) })
+
+  if (eventType === 'subagent.progress' && text)
+    out.push({ at, isError: !!payload.error, kind: 'progress', text })
+
+  if (eventType === 'subagent.thinking' && text) out.push({ at, kind: 'thinking', text })
+
+  const summary = compact(str(payload.summary) || str(payload.text))
+  if (TERMINAL.has(status) && summary)
+    out.push({ at, isError: status === 'failed', kind: 'summary', text: summary })
+
+  return out
+}
+
+function toProgress(payload: SubagentPayload, prev: SubagentProgress | undefined, eventType = ''): SubagentProgress {
+  const at = Date.now()
+  const status = asStatus(payload.status)
+  const tool = str(payload.tool_name)
+  const stream = streamFromPayload(payload, status, eventType, at).reduce(appendStream, prev?.stream ?? [])
+  const filesRead = strList(payload.files_read)
+  const filesWritten = strList(payload.files_written)
+
   return {
-    apiCalls: asNumber(payload.api_calls) ?? previous?.apiCalls,
-    costUsd: asNumber(payload.cost_usd) ?? previous?.costUsd,
-    depth: asNumber(payload.depth) ?? previous?.depth ?? 0,
-    durationSeconds: asNumber(payload.duration_seconds) ?? previous?.durationSeconds,
-    filesRead: asStringList(payload.files_read).length ? asStringList(payload.files_read) : (previous?.filesRead ?? []),
-    filesWritten: asStringList(payload.files_written).length
-      ? asStringList(payload.files_written)
-      : (previous?.filesWritten ?? []),
-    goal: asString(payload.goal) || previous?.goal || 'Subagent',
-    id: previous?.id || idFor(payload),
-    inputTokens: asNumber(payload.input_tokens) ?? previous?.inputTokens,
-    model: asString(payload.model) || previous?.model,
-    outputTail: asOutputTail(payload.output_tail).length ? asOutputTail(payload.output_tail) : (previous?.outputTail ?? []),
-    outputTokens: asNumber(payload.output_tokens) ?? previous?.outputTokens,
-    parentId: asString(payload.parent_id) || previous?.parentId || null,
-    reasoningTokens: asNumber(payload.reasoning_tokens) ?? previous?.reasoningTokens,
-    sessionId,
-    status: asStatus(payload.status),
-    summary: asString(payload.summary) || previous?.summary,
-    taskCount: asNumber(payload.task_count) ?? previous?.taskCount ?? 1,
-    taskIndex: asNumber(payload.task_index) ?? previous?.taskIndex ?? 0,
-    toolName: asString(payload.tool_name) || previous?.toolName,
-    toolPreview: asString(payload.tool_preview) || asString(payload.text) || previous?.toolPreview,
-    toolsets: asStringList(payload.toolsets).length ? asStringList(payload.toolsets) : (previous?.toolsets ?? []),
-    updatedAt: Date.now()
+    id: prev?.id ?? idOf(payload),
+    parentId: str(payload.parent_id) || prev?.parentId || null,
+    goal: str(payload.goal) || prev?.goal || 'Subagent',
+    model: str(payload.model) || prev?.model,
+    status,
+    taskCount: num(payload.task_count) ?? prev?.taskCount ?? 1,
+    taskIndex: num(payload.task_index) ?? prev?.taskIndex ?? 0,
+    startedAt: prev?.startedAt ?? at,
+    updatedAt: at,
+    durationSeconds: num(payload.duration_seconds) ?? prev?.durationSeconds,
+    costUsd: num(payload.cost_usd) ?? prev?.costUsd,
+    inputTokens: num(payload.input_tokens) ?? prev?.inputTokens,
+    outputTokens: num(payload.output_tokens) ?? prev?.outputTokens,
+    toolCount: num(payload.tool_count) ?? prev?.toolCount,
+    filesRead: filesRead.length ? filesRead : (prev?.filesRead ?? []),
+    filesWritten: filesWritten.length ? filesWritten : (prev?.filesWritten ?? []),
+    stream,
+    summary: str(payload.summary) || prev?.summary,
+    currentTool: TERMINAL.has(status) ? undefined : tool || prev?.currentTool
   }
 }
 
-export function clearSessionSubagents(sessionId: string) {
-  const current = $subagentsBySession.get()
+export function clearSessionSubagents(sid: string) {
+  const map = $subagentsBySession.get()
+  if (!(sid in map)) return
 
-  if (!(sessionId in current)) {
-    return
-  }
-
-  const next = { ...current }
-  delete next[sessionId]
-  $subagentsBySession.set(next)
+  const { [sid]: _drop, ...rest } = map
+  $subagentsBySession.set(rest)
 }
 
-export function upsertSubagent(sessionId: string, payload: SubagentPayload, createIfMissing = true) {
-  const current = $subagentsBySession.get()
-  const list = current[sessionId] ?? []
-  const id = idFor(payload)
-  const index = list.findIndex(item => item.id === id)
+export function pruneDelegateFallbackSubagents(sid: string) {
+  const map = $subagentsBySession.get()
+  const list = map[sid]
+  if (!list?.length) return
 
-  if (index < 0 && !createIfMissing) {
-    return
-  }
+  const next = list.filter(item => !item.id.startsWith('delegate-tool:'))
+  if (next.length === list.length) return
 
-  const previous = index >= 0 ? list[index] : undefined
+  $subagentsBySession.set({ ...map, [sid]: next })
+}
 
-  if (previous && TERMINAL.has(previous.status)) {
-    return
-  }
+export function upsertSubagent(sid: string, payload: SubagentPayload, createIfMissing = true, eventType?: string) {
+  const map = $subagentsBySession.get()
+  const list = map[sid] ?? []
+  const id = idOf(payload)
+  const idx = list.findIndex(item => item.id === id)
+  if (idx < 0 && !createIfMissing) return
 
-  const nextItem = toProgress(sessionId, payload, previous)
-  const nextList = index >= 0 ? list.map(item => (item.id === id ? nextItem : item)) : [...list, nextItem]
+  const prev = idx >= 0 ? list[idx] : undefined
+  if (prev && TERMINAL.has(prev.status)) return
 
-  $subagentsBySession.set({ ...current, [sessionId]: nextList })
+  const next = toProgress(payload, prev, eventType)
+  const nextList = idx >= 0 ? list.map(item => (item.id === id ? next : item)) : [...list, next]
+
+  $subagentsBySession.set({ ...map, [sid]: nextList })
 }
 
 export function buildSubagentTree(items: readonly SubagentProgress[]): SubagentNode[] {
   const nodes = new Map<string, SubagentNode>()
-
-  for (const item of items) {
-    nodes.set(item.id, { ...item, children: [] })
-  }
+  for (const item of items) nodes.set(item.id, { ...item, children: [] })
 
   const roots: SubagentNode[] = []
-
   for (const node of nodes.values()) {
     const parent = node.parentId ? nodes.get(node.parentId) : null
-
-    if (parent) {
-      parent.children.push(node)
-    } else {
-      roots.push(node)
-    }
+    if (parent) parent.children.push(node)
+    else roots.push(node)
   }
 
-  const sort = (a: SubagentNode, b: SubagentNode) => a.taskIndex - b.taskIndex || a.goal.localeCompare(b.goal)
+  const sort = (a: SubagentNode, b: SubagentNode) =>
+    a.startedAt - b.startedAt || a.taskIndex - b.taskIndex || a.goal.localeCompare(b.goal)
   const walk = (node: SubagentNode) => node.children.sort(sort).forEach(walk)
-
   roots.sort(sort).forEach(walk)
 
   return roots

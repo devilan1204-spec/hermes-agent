@@ -31,7 +31,7 @@ import {
   setCurrentUsage,
   setTurnStartedAt
 } from '@/store/session'
-import { clearSessionSubagents, upsertSubagent } from '@/store/subagents'
+import { clearSessionSubagents, pruneDelegateFallbackSubagents, upsertSubagent } from '@/store/subagents'
 import { recordToolDiff } from '@/store/tool-diffs'
 import type { RpcEvent } from '@/types/hermes'
 
@@ -60,6 +60,7 @@ interface QueuedStreamDeltas {
 }
 
 const STREAM_DELTA_FLUSH_MS = 16
+
 const SUBAGENT_EVENT_TYPES = new Set([
   'subagent.spawn_requested',
   'subagent.start',
@@ -75,9 +76,81 @@ function toTodoPayload(payload: GatewayEventPayload | undefined): GatewayEventPa
   if (!payload) {
     return undefined
   }
+
   const isTodo = payload.name === 'todo' || (!payload.name && Object.hasOwn(payload, 'todos'))
 
   return isTodo ? { ...payload, name: 'todo', tool_id: payload.tool_id || 'todo-live' } : undefined
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function parseMaybeRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === 'string') {
+    try {
+      return asRecord(JSON.parse(value))
+    } catch {
+      return {}
+    }
+  }
+
+  return asRecord(value)
+}
+
+const firstString = (...candidates: unknown[]): string => {
+  for (const v of candidates) {
+    if (typeof v === 'string' && v) return v
+  }
+
+  return ''
+}
+
+function delegateTaskPayloads(
+  payload: GatewayEventPayload | undefined,
+  phase: 'running' | 'complete',
+  sourceEventType?: string
+): Record<string, unknown>[] {
+  if (payload?.name !== 'delegate_task') return []
+
+  const args = parseMaybeRecord(payload.args ?? payload.input)
+  const result = parseMaybeRecord(payload.result)
+  const rawTasks = Array.isArray(args.tasks) ? args.tasks : []
+  const tasks = rawTasks.length ? rawTasks.map(parseMaybeRecord) : [args]
+  const status = phase === 'complete' ? (payload.error ? 'failed' : 'completed') : 'running'
+  const toolId = payload.tool_id || payload.tool_call_id || payload.id || 'delegate_task'
+  const progressText = firstString(payload.preview, payload.message, payload.context)
+  const eventType =
+    phase === 'complete'
+      ? 'subagent.complete'
+      : sourceEventType === 'tool.start'
+        ? 'subagent.start'
+        : 'subagent.progress'
+
+  return tasks.map((task, index) => {
+    const goal = firstString(task.goal, args.goal, payload.context) || 'Delegated task'
+    const summary = firstString(result.summary, payload.summary, payload.message)
+
+    return {
+      depth: 0,
+      duration_seconds: payload.duration_s,
+      goal,
+      status,
+      subagent_id: `delegate-tool:${toolId}:${index}`,
+      summary: summary || undefined,
+      task_count: tasks.length,
+      task_index: index,
+      text: eventType === 'subagent.progress' ? progressText || goal : undefined,
+      tool_name: eventType === 'subagent.start' ? 'delegate_task' : undefined,
+      tool_preview: eventType === 'subagent.start' ? progressText : undefined,
+      toolsets: Array.isArray(task.toolsets) ? task.toolsets : Array.isArray(args.toolsets) ? args.toolsets : [],
+      event_type: eventType,
+      output_tail:
+        phase === 'complete' && summary
+          ? [{ is_error: Boolean(payload.error), preview: summary, tool: 'delegate_task' }]
+          : undefined
+    }
+  })
 }
 
 export function useMessageStream({
@@ -154,6 +227,7 @@ export function useMessageStream({
 
   const queuedDeltasRef = useRef<Map<string, QueuedStreamDeltas>>(new Map())
   const flushHandleRef = useRef<number | null>(null)
+  const nativeSubagentSessionsRef = useRef<Set<string>>(new Set())
 
   const flushQueuedDeltas = useCallback(
     (sessionId?: string) => {
@@ -290,7 +364,18 @@ export function useMessageStream({
   )
 
   const upsertToolCall = useCallback(
-    (sessionId: string, payload: GatewayEventPayload | undefined, phase: 'running' | 'complete') => {
+    (
+      sessionId: string,
+      payload: GatewayEventPayload | undefined,
+      phase: 'running' | 'complete',
+      sourceEventType?: string
+    ) => {
+      if (!nativeSubagentSessionsRef.current.has(sessionId)) {
+        for (const subagentPayload of delegateTaskPayloads(payload, phase, sourceEventType)) {
+          upsertSubagent(sessionId, subagentPayload, true, phase === 'complete' ? 'delegate.complete' : 'delegate.running')
+        }
+      }
+
       mutateStream(
         sessionId,
         parts => upsertToolPart(parts, payload, phase),
@@ -516,6 +601,7 @@ export function useMessageStream({
 
         flushQueuedDeltas(sessionId)
         clearSessionSubagents(sessionId)
+        nativeSubagentSessionsRef.current.delete(sessionId)
 
         if (isActiveEvent) {
           triggerHaptic('streamStart')
@@ -574,12 +660,13 @@ export function useMessageStream({
         if (!sessionId) {
           return
         }
+
         flushQueuedDeltas(sessionId)
-        upsertToolCall(sessionId, toTodoPayload(payload) ?? payload, 'running')
+        upsertToolCall(sessionId, toTodoPayload(payload) ?? payload, 'running', event.type)
       } else if (event.type === 'tool.complete') {
         if (sessionId) {
           flushQueuedDeltas(sessionId)
-          upsertToolCall(sessionId, toTodoPayload(payload) ?? payload, 'complete')
+          upsertToolCall(sessionId, toTodoPayload(payload) ?? payload, 'complete', event.type)
         }
 
         if (typeof payload?.inline_diff === 'string' && payload.inline_diff.trim()) {
@@ -587,7 +674,17 @@ export function useMessageStream({
         }
       } else if (SUBAGENT_EVENT_TYPES.has(event.type)) {
         if (sessionId && payload) {
-          upsertSubagent(sessionId, payload as Record<string, unknown>, event.type === 'subagent.spawn_requested')
+          if (!nativeSubagentSessionsRef.current.has(sessionId)) {
+            pruneDelegateFallbackSubagents(sessionId)
+          }
+
+          nativeSubagentSessionsRef.current.add(sessionId)
+          upsertSubagent(
+            sessionId,
+            payload as Record<string, unknown>,
+            event.type === 'subagent.spawn_requested' || event.type === 'subagent.start',
+            event.type
+          )
         }
       } else if (event.type === 'clarify.request') {
         if (!isActiveEvent) {
