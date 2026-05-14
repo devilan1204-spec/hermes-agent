@@ -64,6 +64,7 @@ export function AppShell({
   // on macOS, where window controls sit on the left and are reported via
   // windowButtonPosition instead). The right tool cluster has to clear them.
   const nativeOverlayWidth = connection?.nativeOverlayWidth ?? 0
+  const titlebarToolsRight = nativeOverlayWidth > 0 ? `${nativeOverlayWidth}px` : '0.75rem'
 
   const titlebarContentInset = sidebarOpen
     ? 0
@@ -116,7 +117,7 @@ export function AppShell({
           '--titlebar-content-inset': `${titlebarContentInset}px`,
           '--titlebar-controls-left': `${titlebarControls.left}px`,
           '--titlebar-controls-top': `${titlebarControls.top}px`,
-          '--titlebar-tools-right': `calc(${nativeOverlayWidth}px + 0.75rem)`,
+          '--titlebar-tools-right': titlebarToolsRight,
           '--titlebar-tools-width': titlebarToolsWidth,
           // Anchor for the pane-tool cluster's right edge in TitlebarControls.
           // Sourced from the layout store rather than the PaneShell-emitted

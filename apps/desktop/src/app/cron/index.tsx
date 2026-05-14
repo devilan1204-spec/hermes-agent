@@ -42,6 +42,50 @@ const DELIVERY_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
   { label: 'Email', value: 'email' }
 ]
 
+const SCHEDULE_OPTIONS: ReadonlyArray<ScheduleOption> = [
+  {
+    expr: '0 9 * * *',
+    hint: 'Every day at 9:00 AM',
+    label: 'Daily',
+    value: 'daily'
+  },
+  {
+    expr: '0 9 * * 1-5',
+    hint: 'Monday through Friday at 9:00 AM',
+    label: 'Weekdays',
+    value: 'weekdays'
+  },
+  {
+    expr: '0 9 * * 1',
+    hint: 'Every Monday at 9:00 AM',
+    label: 'Weekly',
+    value: 'weekly'
+  },
+  {
+    expr: '0 9 1 * *',
+    hint: 'The first day of each month at 9:00 AM',
+    label: 'Monthly',
+    value: 'monthly'
+  },
+  {
+    expr: '0 * * * *',
+    hint: 'At the top of every hour',
+    label: 'Hourly',
+    value: 'hourly'
+  },
+  {
+    expr: '*/15 * * * *',
+    hint: 'Every 15 minutes',
+    label: 'Every 15 minutes',
+    value: 'every-15-minutes'
+  },
+  {
+    hint: 'Cron syntax or natural language',
+    label: 'Custom',
+    value: 'custom'
+  }
+]
+
 const STATE_TONE: Record<string, 'good' | 'muted' | 'warn' | 'bad'> = {
   enabled: 'good',
   scheduled: 'good',
@@ -107,6 +151,120 @@ function jobState(job: CronJob): string {
 
 function jobDeliver(job: CronJob): string {
   return asText(job.deliver) || DEFAULT_DELIVER
+}
+
+function cronParts(expr: string): null | string[] {
+  const parts = expr.trim().replace(/\s+/g, ' ').split(' ')
+
+  return parts.length === 5 ? parts : null
+}
+
+function dayName(value: string): string {
+  const names: Record<string, string> = {
+    '0': 'Sunday',
+    '1': 'Monday',
+    '2': 'Tuesday',
+    '3': 'Wednesday',
+    '4': 'Thursday',
+    '5': 'Friday',
+    '6': 'Saturday',
+    '7': 'Sunday'
+  }
+
+  return names[value] ?? `day ${value}`
+}
+
+function formatCronTime(minute: string, hour: string): string {
+  const numericHour = Number(hour)
+  const numericMinute = Number(minute)
+
+  if (!Number.isInteger(numericHour) || !Number.isInteger(numericMinute)) {
+    return `${hour}:${minute}`
+  }
+
+  return new Date(2000, 0, 1, numericHour, numericMinute).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
+function isIntegerToken(value: string): boolean {
+  return /^\d+$/.test(value)
+}
+
+function scheduleOptionForExpr(expr: string): ScheduleOption {
+  const normalized = expr.trim().replace(/\s+/g, ' ')
+  const exactMatch = SCHEDULE_OPTIONS.find(option => option.expr === normalized)
+
+  if (exactMatch) {
+    return exactMatch
+  }
+
+  const parts = cronParts(normalized)
+
+  if (!parts) {
+    return SCHEDULE_OPTIONS[SCHEDULE_OPTIONS.length - 1]
+  }
+
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts
+
+  if (dayOfMonth === '*' && month === '*' && dayOfWeek === '*' && isIntegerToken(minute) && isIntegerToken(hour)) {
+    return SCHEDULE_OPTIONS.find(option => option.value === 'daily') ?? SCHEDULE_OPTIONS[0]
+  }
+
+  if (dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5' && isIntegerToken(minute) && isIntegerToken(hour)) {
+    return SCHEDULE_OPTIONS.find(option => option.value === 'weekdays') ?? SCHEDULE_OPTIONS[0]
+  }
+
+  if (dayOfMonth === '*' && month === '*' && isIntegerToken(dayOfWeek) && isIntegerToken(minute) && isIntegerToken(hour)) {
+    return SCHEDULE_OPTIONS.find(option => option.value === 'weekly') ?? SCHEDULE_OPTIONS[0]
+  }
+
+  if (month === '*' && dayOfWeek === '*' && isIntegerToken(dayOfMonth) && isIntegerToken(minute) && isIntegerToken(hour)) {
+    return SCHEDULE_OPTIONS.find(option => option.value === 'monthly') ?? SCHEDULE_OPTIONS[0]
+  }
+
+  if (hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*' && isIntegerToken(minute)) {
+    return SCHEDULE_OPTIONS.find(option => option.value === 'hourly') ?? SCHEDULE_OPTIONS[0]
+  }
+
+  if (normalized === '*/15 * * * *') {
+    return SCHEDULE_OPTIONS.find(option => option.value === 'every-15-minutes') ?? SCHEDULE_OPTIONS[0]
+  }
+
+  return SCHEDULE_OPTIONS[SCHEDULE_OPTIONS.length - 1]
+}
+
+function scheduleSummary(option: ScheduleOption, expr: string): string {
+  const parts = cronParts(expr)
+
+  if (!parts) {
+    return option.hint
+  }
+
+  const [minute, hour, dayOfMonth, , dayOfWeek] = parts
+
+  if (option.value === 'daily') {
+    return `Every day at ${formatCronTime(minute, hour)}`
+  }
+
+  if (option.value === 'weekdays') {
+    return `Weekdays at ${formatCronTime(minute, hour)}`
+  }
+
+  if (option.value === 'weekly') {
+    return `Every ${dayName(dayOfWeek)} at ${formatCronTime(minute, hour)}`
+  }
+
+  if (option.value === 'monthly') {
+    return `Monthly on day ${dayOfMonth} at ${formatCronTime(minute, hour)}`
+  }
+
+  if (option.value === 'hourly') {
+    return minute === '0' ? 'At the top of every hour' : `Every hour at :${minute.padStart(2, '0')}`
+  }
+
+  return option.hint
 }
 
 function formatTime(iso?: null | string): string {
@@ -523,6 +681,7 @@ function CronEditorDialog({
   const [name, setName] = useState('')
   const [prompt, setPrompt] = useState('')
   const [schedule, setSchedule] = useState('')
+  const [schedulePreset, setSchedulePreset] = useState('daily')
   const [deliver, setDeliver] = useState(DEFAULT_DELIVER)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<null | string>(null)
@@ -534,11 +693,30 @@ function CronEditorDialog({
 
     setName(initial ? jobName(initial) : '')
     setPrompt(initial ? jobPrompt(initial) : '')
-    setSchedule(initial ? jobScheduleExpr(initial) : '')
+    setSchedule(initial ? jobScheduleExpr(initial) : (SCHEDULE_OPTIONS[0].expr ?? ''))
+    setSchedulePreset(initial ? scheduleOptionForExpr(jobScheduleExpr(initial)).value : 'daily')
     setDeliver(initial ? jobDeliver(initial) : DEFAULT_DELIVER)
     setError(null)
     setSaving(false)
   }, [initial, open])
+
+  const selectedScheduleOption =
+    SCHEDULE_OPTIONS.find(candidate => candidate.value === schedulePreset) ?? SCHEDULE_OPTIONS[0]
+
+  function handleSchedulePresetChange(nextPreset: string) {
+    setSchedulePreset(nextPreset)
+    setError(null)
+
+    const option = SCHEDULE_OPTIONS.find(candidate => candidate.value === nextPreset)
+
+    if (option?.expr) {
+      setSchedule(option.expr)
+    } else if (scheduleOptionForExpr(schedule).value !== 'custom') {
+      setSchedule('')
+    }
+  }
+
+  const scheduleHint = scheduleSummary(selectedScheduleOption, schedule)
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -601,21 +779,25 @@ function CronEditorDialog({
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field htmlFor="cron-schedule" label="Schedule">
-              <Input
-                className="font-mono"
-                id="cron-schedule"
-                onChange={event => setSchedule(event.target.value)}
-                placeholder="0 9 * * *"
-                value={schedule}
-              />
-              <FieldHint>Cron expression, or phrases like "every hour" or "weekdays at 9am".</FieldHint>
+          <div className="grid items-start gap-4 sm:grid-cols-2">
+            <Field htmlFor="cron-frequency" label="Frequency">
+              <Select onValueChange={handleSchedulePresetChange} value={schedulePreset}>
+                <SelectTrigger className="h-9 rounded-md" id="cron-frequency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SCHEDULE_OPTIONS.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
 
             <Field htmlFor="cron-deliver" label="Deliver to">
               <Select onValueChange={setDeliver} value={deliver}>
-                <SelectTrigger id="cron-deliver">
+                <SelectTrigger className="h-9 rounded-md" id="cron-deliver">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -628,6 +810,26 @@ function CronEditorDialog({
               </Select>
             </Field>
           </div>
+
+          {schedulePreset === 'custom' ? (
+            <Field htmlFor="cron-schedule" label="Custom schedule">
+              <Input
+                className="font-mono"
+                id="cron-schedule"
+                onChange={event => setSchedule(event.target.value)}
+                placeholder="0 9 * * * or weekdays at 9am"
+                value={schedule}
+              />
+              <FieldHint>Cron expression, or phrases like "every hour" or "weekdays at 9am".</FieldHint>
+            </Field>
+          ) : (
+            <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-medium text-foreground">{scheduleHint}</span>
+                <span className="font-mono text-muted-foreground">{schedule}</span>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -683,4 +885,11 @@ interface EditorValues {
   name: string
   prompt: string
   schedule: string
+}
+
+interface ScheduleOption {
+  expr?: string
+  hint: string
+  label: string
+  value: string
 }

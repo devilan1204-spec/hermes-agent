@@ -195,6 +195,10 @@ function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark') {
   set('--dt-font-sans', typo.fontSans)
   set('--dt-font-mono', typo.fontMono)
   set('--noise-opacity-mul', rendered === 'dark' ? 'calc(0.04 / 0.21)' : 'calc(0.34 / 0.21)')
+  window.hermesDesktop?.setTitleBarTheme?.({
+    background: c.background,
+    foreground: c.foreground
+  })
 
   if (typo.fontUrl && !INJECTED_FONT_URLS.has(typo.fontUrl)) {
     const link = document.createElement('link')

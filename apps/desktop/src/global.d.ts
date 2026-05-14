@@ -23,6 +23,7 @@ declare global {
       normalizePreviewTarget: (target: string, baseDir?: string) => Promise<HermesPreviewTarget | null>
       watchPreviewFile: (url: string) => Promise<HermesPreviewWatch>
       stopPreviewFileWatch: (id: string) => Promise<boolean>
+      setTitleBarTheme?: (payload: HermesTitleBarTheme) => void
       setPreviewShortcutActive?: (active: boolean) => void
       openExternal: (url: string) => Promise<void>
       fetchLinkTitle: (url: string) => Promise<string>
@@ -109,6 +110,11 @@ export interface HermesConnection {
   wsUrl: string
   logs: string[]
   windowButtonPosition: { x: number; y: number } | null
+}
+
+export interface HermesTitleBarTheme {
+  background: string
+  foreground: string
 }
 
 export interface HermesWindowState {
