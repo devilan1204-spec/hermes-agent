@@ -785,6 +785,11 @@ def session_search(
     around_message_id: int = None,
     window: int = 5,
     anchors: list = None,
+    # Fast-mode-only temporal bias for ranking. ``None`` keeps FTS5's BM25
+    # ordering (time-neutral); ``"newest"`` / ``"oldest"`` make timestamp
+    # the primary key with rank as the tiebreaker. Silently ignored in
+    # other modes — see schema description.
+    sort: str = None,
 ) -> str:
     """
     Search past sessions, or drill into a specific one.
@@ -823,6 +828,22 @@ def session_search(
         mode = "guided"
     if mode not in ("fast", "summary", "guided"):
         mode = "summary"
+
+    # Normalise sort. Only "newest" / "oldest" are accepted; anything else
+    # (including None) collapses to None = FTS5 rank-only ordering, which is
+    # the historical default. sort only affects fast mode — log and ignore
+    # in summary / guided / recent so misuse is visible but non-fatal.
+    sort_norm: Optional[str] = None
+    if isinstance(sort, str):
+        candidate = sort.strip().lower()
+        if candidate in ("newest", "oldest"):
+            sort_norm = candidate
+    if sort_norm and mode != "fast":
+        logging.debug(
+            "session_search: sort=%r is fast-mode only; ignored for mode=%s",
+            sort_norm, mode,
+        )
+        sort_norm = None
 
     # Guided mode is a different shape: it doesn't search, it drills. Branch
     # before FTS5 so we don't pay for anything we don't use, and so missing-arg
@@ -866,13 +887,15 @@ def session_search(
         else:
             role_list = ["user", "assistant"]
 
-        # FTS5 search -- get matches ranked by relevance
+        # FTS5 search -- get matches ranked by relevance (with optional
+        # temporal bias when sort is set; see param docs).
         raw_results = db.search_messages(
             query=query,
             role_filter=role_list,
             exclude_sources=list(_HIDDEN_SESSION_SOURCES),
             limit=50,  # Get more matches to find unique sessions
             offset=0,
+            sort=sort_norm,
         )
 
         if not raw_results:
@@ -1194,6 +1217,16 @@ SESSION_SEARCH_SCHEMA = {
         "user kickoff, the real opener is in the parent — fast-search again scoped to the "
         "parent if you need it. Most sessions are not compacted; this only matters on long "
         "multi-day arcs.\n\n"
+        "TEMPORAL DIRECTION (fast mode only): by default fast ranks by FTS5 relevance with no "
+        "time signal — fine for keyword discovery but ties are arbitrary, and same-keyword hits "
+        "from years ago can outrank fresh ones. Pass ``sort='newest'`` when the question is "
+        "shaped by recency (\"where did we leave X\", \"latest thinking on Y\", \"current status of "
+        "Z\") and ``sort='oldest'`` when it's shaped by origin (\"how did X start\", \"what was the "
+        "original take on Y\", \"first time we discussed Z\"). When the question is exploratory "
+        "(\"what do we know about X\") leave sort unset and let relevance lead. sort is silently "
+        "ignored in summary / guided / recent modes — for temporal narrative across multiple "
+        "sessions, drive the temporal selection from a fast call with sort set, then drill the "
+        "right anchors with guided.\n\n"
         "Browsing recent sessions: call with NO arguments to see what was worked on recently. "
         "Returns titles, previews, timestamps. Zero LLM cost, instant. Start here when the user "
         "asks 'what were we working on' or 'what did we do recently'.\n\n"
@@ -1269,6 +1302,11 @@ SESSION_SEARCH_SCHEMA = {
                 "description": "Mode='guided' only. Number of messages to return on each side of each anchor (the anchor itself is always included). Shared across all anchors in a multi-anchor call. Clamped to [1, 20]. Default 5.",
                 "default": 5,
             },
+            "sort": {
+                "type": "string",
+                "enum": ["newest", "oldest"],
+                "description": "Mode='fast' only. Temporal bias on top of FTS5 ranking. Omit to keep relevance-only ordering (the default, suitable for exploratory recall — 'what do we know about X'). Set 'newest' for recency-shaped questions ('where did we leave X', 'latest status of Y') so recent matches surface first with rank as the tiebreaker. Set 'oldest' for origin-shaped questions ('how did X start', 'first time we discussed Y') so the earliest matches surface first. Silently ignored in summary / guided / recent modes — for temporal narrative across sessions, drive fast with sort, then drill the right anchors with guided.",
+            },
         },
         "required": [],
     },
@@ -1291,6 +1329,7 @@ registry.register(
         around_message_id=args.get("around_message_id"),
         window=args.get("window", 5),
         anchors=args.get("anchors"),
+        sort=args.get("sort"),
         db=kw.get("db"),
         current_session_id=kw.get("current_session_id")),
     check_fn=check_session_search_requirements,

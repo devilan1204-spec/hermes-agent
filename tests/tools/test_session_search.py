@@ -701,6 +701,119 @@ class TestSessionSearch:
         assert "aux_usage_total" not in result
         assert "aux_usage" not in result["results"][0]
 
+    def test_fast_mode_default_sort_is_relevance_only(self):
+        """Without ``sort``, fast mode passes ``sort=None`` to the DB layer so
+        the existing FTS5 ``ORDER BY rank`` behaviour is preserved. This locks
+        the default to time-neutral relevance — agents that don't think about
+        temporal direction get the same retrieval shape as before."""
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = []
+        mock_db.get_session.return_value = {"parent_session_id": None}
+
+        session_search(query="foo", db=mock_db, mode="fast")
+
+        call_kwargs = mock_db.search_messages.call_args.kwargs
+        assert call_kwargs.get("sort") is None, (
+            "Default sort must be None so DB layer keeps FTS5 ORDER BY rank. "
+            f"Got sort={call_kwargs.get('sort')!r}"
+        )
+
+    def test_fast_mode_passes_newest_sort_to_db(self):
+        """``sort='newest'`` flows through to ``db.search_messages`` so the
+        DB layer can rewrite ORDER BY to put recent matches first."""
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = []
+        mock_db.get_session.return_value = {"parent_session_id": None}
+
+        session_search(query="foo", db=mock_db, mode="fast", sort="newest")
+
+        assert mock_db.search_messages.call_args.kwargs["sort"] == "newest"
+
+    def test_fast_mode_passes_oldest_sort_to_db(self):
+        """``sort='oldest'`` flows through for origin-shaped questions
+        ('how did X start') — symmetric with newest."""
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = []
+        mock_db.get_session.return_value = {"parent_session_id": None}
+
+        session_search(query="foo", db=mock_db, mode="fast", sort="oldest")
+
+        assert mock_db.search_messages.call_args.kwargs["sort"] == "oldest"
+
+    def test_fast_mode_sort_garbage_value_falls_back_to_default(self):
+        """Anything outside {'newest', 'oldest'} (case-insensitive) collapses
+        to None at the tool layer rather than failing the search. Forgiving
+        coercion — bad sort param doesn't mean no results."""
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = []
+        mock_db.get_session.return_value = {"parent_session_id": None}
+
+        for bad in ("garbage", "", "RANDOM", 42, None):
+            mock_db.reset_mock()
+            session_search(query="foo", db=mock_db, mode="fast", sort=bad)
+            assert mock_db.search_messages.call_args.kwargs["sort"] is None, (
+                f"Bad sort value {bad!r} should collapse to None"
+            )
+
+    def test_fast_mode_sort_is_case_insensitive(self):
+        """Mixed-case 'Newest' / 'OLDEST' normalise to canonical lowercase
+        values. Don't punish callers for case wobble."""
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = []
+        mock_db.get_session.return_value = {"parent_session_id": None}
+
+        session_search(query="foo", db=mock_db, mode="fast", sort="NEWEST")
+        assert mock_db.search_messages.call_args.kwargs["sort"] == "newest"
+
+        mock_db.reset_mock()
+        session_search(query="foo", db=mock_db, mode="fast", sort="  Oldest  ")
+        assert mock_db.search_messages.call_args.kwargs["sort"] == "oldest"
+
+    def test_summary_mode_silently_ignores_sort_parameter(self, monkeypatch):
+        """``sort`` is fast-mode-only by design. Passing it with mode='summary'
+        is a no-op (logged at debug level) — search proceeds with sort=None.
+        Prevents temporal bias from leaking into summary's session selection
+        without breaking callers that pass sort defensively."""
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        async def fake_summarize(_text, _query, _meta):
+            return "summary", None
+
+        monkeypatch.setattr("tools.session_search_tool._summarize_session", fake_summarize)
+        monkeypatch.setattr("model_tools._run_async", lambda coro: asyncio.run(coro))
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = [
+            {"session_id": "sid", "source": "cli", "session_started": 1709500000, "model": "test"},
+        ]
+        mock_db.get_session.return_value = {"parent_session_id": None, "source": "cli"}
+        mock_db.get_messages_as_conversation.return_value = [
+            {"role": "user", "content": "transcript"},
+        ]
+
+        session_search(query="foo", db=mock_db, mode="summary", sort="newest")
+
+        # Summary calls search_messages internally; sort must be stripped.
+        assert mock_db.search_messages.call_args.kwargs["sort"] is None, (
+            "sort must be ignored outside fast mode"
+        )
+
     def test_positional_db_argument_remains_backwards_compatible(self):
         """Keep the historical positional order: query, role_filter, limit, db, current_session_id."""
         from unittest.mock import MagicMock

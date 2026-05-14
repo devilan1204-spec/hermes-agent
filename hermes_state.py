@@ -2067,6 +2067,7 @@ class SessionDB:
         role_filter: List[str] = None,
         limit: int = 20,
         offset: int = 0,
+        sort: str = None,
     ) -> List[Dict[str, Any]]:
         """
         Full-text search across session messages using FTS5.
@@ -2079,6 +2080,19 @@ class SessionDB:
 
         Returns matching messages with session metadata, content snippet,
         and surrounding context (1 message before and after the match).
+
+        ``sort`` controls temporal ordering of results:
+          - ``None`` (default): FTS5 BM25 relevance only. Time-neutral, but
+            ties between equally-relevant messages are broken arbitrarily.
+          - ``"newest"``: order by message timestamp DESC, then by rank.
+            Recent matches surface first; rank breaks same-timestamp ties.
+          - ``"oldest"``: order by message timestamp ASC, then by rank.
+            For "how did this start" / "what was the original X" questions.
+
+        The LIKE fallback path (short CJK queries) ignores ``sort`` because
+        it has no rank to combine with — it already orders by timestamp DESC
+        unconditionally. The trigram CJK path honours ``sort`` like the main
+        FTS5 path.
         """
         if not query or not query.strip():
             return []
@@ -2086,6 +2100,26 @@ class SessionDB:
         query = self._sanitize_fts5_query(query)
         if not query:
             return []
+
+        # Normalise sort. Anything not in the allowed set falls back to None
+        # (FTS5 rank-only) — be forgiving to callers who pass empty string or
+        # an unexpected value rather than failing the search.
+        if isinstance(sort, str):
+            sort_norm = sort.strip().lower()
+            if sort_norm not in ("newest", "oldest"):
+                sort_norm = None
+        else:
+            sort_norm = None
+
+        # Build the ORDER BY clause shared by both FTS5 paths (main + trigram).
+        # When sort is set, timestamp is primary and rank is the tiebreaker;
+        # otherwise rank alone (current behaviour).
+        if sort_norm == "newest":
+            order_by_sql = "ORDER BY m.timestamp DESC, rank"
+        elif sort_norm == "oldest":
+            order_by_sql = "ORDER BY m.timestamp ASC, rank"
+        else:
+            order_by_sql = "ORDER BY rank"
 
         # Build WHERE clauses dynamically
         where_clauses = ["messages_fts MATCH ?"]
@@ -2125,7 +2159,7 @@ class SessionDB:
             JOIN messages m ON m.id = messages_fts.rowid
             JOIN sessions s ON s.id = m.session_id
             WHERE {where_sql}
-            ORDER BY rank
+            {order_by_sql}
             LIMIT ? OFFSET ?
         """
 
@@ -2194,7 +2228,7 @@ class SessionDB:
                     JOIN messages m ON m.id = messages_fts_trigram.rowid
                     JOIN sessions s ON s.id = m.session_id
                     WHERE {' AND '.join(tri_where)}
-                    ORDER BY rank
+                    {order_by_sql}
                     LIMIT ? OFFSET ?
                 """
                 tri_params.extend([limit, offset])
@@ -2233,6 +2267,15 @@ class SessionDB:
                 if role_filter:
                     like_where.append(f"m.role IN ({','.join('?' for _ in role_filter)})")
                     like_params.extend(role_filter)
+                # LIKE fallback has no FTS5 rank to combine with, so the
+                # ordering options collapse to just timestamp direction.
+                # Default and "newest" both produce DESC (preserving prior
+                # behaviour); "oldest" flips to ASC.
+                like_order_sql = (
+                    "ORDER BY m.timestamp ASC"
+                    if sort_norm == "oldest"
+                    else "ORDER BY m.timestamp DESC"
+                )
                 like_sql = f"""
                     SELECT m.id, m.session_id, m.role,
                            substr(m.content,
@@ -2243,7 +2286,7 @@ class SessionDB:
                     FROM messages m
                     JOIN sessions s ON s.id = m.session_id
                     WHERE {' AND '.join(like_where)}
-                    ORDER BY m.timestamp DESC
+                    {like_order_sql}
                     LIMIT ? OFFSET ?
                 """
                 like_params.extend([limit, offset])

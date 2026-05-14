@@ -2494,6 +2494,103 @@ class TestExcludeSources:
         sources = [r["source"] for r in results]
         assert sources == ["cli"]
 
+    def test_search_messages_sort_newest_orders_by_timestamp_desc(self, db):
+        """``sort='newest'`` makes timestamp the primary sort key (DESC) with
+        FTS5 rank as the tiebreaker. With three matching messages at distinct
+        timestamps, results come out newest-first regardless of BM25 score."""
+        db.create_session("old_sid", "cli")
+        db.create_session("mid_sid", "cli")
+        db.create_session("new_sid", "cli")
+        # Same content → identical BM25 score; only timestamps differ.
+        mid_old = db.append_message("old_sid", "user", "matchword discussion")
+        mid_mid = db.append_message("mid_sid", "user", "matchword discussion")
+        mid_new = db.append_message("new_sid", "user", "matchword discussion")
+        # Stamp explicit, well-separated timestamps after the fact.
+        with db._lock:
+            db._conn.execute("UPDATE messages SET timestamp=1000 WHERE id=?", (mid_old,))
+            db._conn.execute("UPDATE messages SET timestamp=2000 WHERE id=?", (mid_mid,))
+            db._conn.execute("UPDATE messages SET timestamp=3000 WHERE id=?", (mid_new,))
+            db._conn.commit()
+
+        results = db.search_messages("matchword", sort="newest")
+        session_order = [r["session_id"] for r in results]
+        assert session_order == ["new_sid", "mid_sid", "old_sid"], (
+            f"sort=newest must return newest first; got {session_order}"
+        )
+
+    def test_search_messages_sort_oldest_orders_by_timestamp_asc(self, db):
+        """``sort='oldest'`` is symmetric — earliest matches first. Critical
+        for 'how did X start' questions where rank-only ordering would hide
+        the origin under more recent revisitations."""
+        db.create_session("a", "cli")
+        db.create_session("b", "cli")
+        db.create_session("c", "cli")
+        m_a = db.append_message("a", "user", "matchword")
+        m_b = db.append_message("b", "user", "matchword")
+        m_c = db.append_message("c", "user", "matchword")
+        with db._lock:
+            db._conn.execute("UPDATE messages SET timestamp=3000 WHERE id=?", (m_a,))
+            db._conn.execute("UPDATE messages SET timestamp=1000 WHERE id=?", (m_b,))
+            db._conn.execute("UPDATE messages SET timestamp=2000 WHERE id=?", (m_c,))
+            db._conn.commit()
+
+        results = db.search_messages("matchword", sort="oldest")
+        session_order = [r["session_id"] for r in results]
+        assert session_order == ["b", "c", "a"], (
+            f"sort=oldest must return earliest first; got {session_order}"
+        )
+
+    def test_search_messages_sort_unset_preserves_rank_ordering(self, db):
+        """No sort param → ``ORDER BY rank`` (FTS5 BM25). With identical
+        single-keyword matches on different-length messages, BM25 prefers
+        the shorter / denser ones — that's the existing default and it must
+        not regress when the new param is omitted."""
+        db.create_session("short_sid", "cli")
+        db.create_session("long_sid", "cli")
+        # Single keyword in a short message scores higher than the same
+        # keyword buried in a much longer one (BM25 length normalisation).
+        m_short = db.append_message("short_sid", "user", "matchword.")
+        m_long = db.append_message(
+            "long_sid", "user", "matchword " + ("padding " * 200)
+        )
+        # Older = short_sid so we can confirm rank wins, not recency.
+        with db._lock:
+            db._conn.execute("UPDATE messages SET timestamp=1000 WHERE id=?", (m_short,))
+            db._conn.execute("UPDATE messages SET timestamp=2000 WHERE id=?", (m_long,))
+            db._conn.commit()
+
+        results = db.search_messages("matchword")  # sort omitted
+        assert len(results) == 2
+        # BM25 should rank the short message first despite being older.
+        assert results[0]["session_id"] == "short_sid", (
+            "Default (no sort) must use FTS5 rank — short_sid should outrank "
+            f"the longer message. Got order: {[r['session_id'] for r in results]}"
+        )
+
+    def test_search_messages_sort_invalid_value_falls_back_to_rank(self, db):
+        """Passing a value outside the allowed set (e.g. 'sideways') silently
+        falls back to FTS5 rank-only ordering rather than raising. Same
+        forgiveness as the tool-layer normalisation, in case callers reach
+        SessionDB directly."""
+        db.create_session("short_sid", "cli")
+        db.create_session("long_sid", "cli")
+        m_short = db.append_message("short_sid", "user", "matchword.")
+        m_long = db.append_message(
+            "long_sid", "user", "matchword " + ("padding " * 200)
+        )
+        with db._lock:
+            db._conn.execute("UPDATE messages SET timestamp=1000 WHERE id=?", (m_short,))
+            db._conn.execute("UPDATE messages SET timestamp=2000 WHERE id=?", (m_long,))
+            db._conn.commit()
+
+        # Garbage sort should behave the same as no sort.
+        results_default = db.search_messages("matchword")
+        results_garbage = db.search_messages("matchword", sort="sideways")
+        assert (
+            [r["session_id"] for r in results_default]
+            == [r["session_id"] for r in results_garbage]
+        )
+
 
 class TestResolveSessionByNameOrId:
     """Tests for the main.py helper that resolves names or IDs."""
