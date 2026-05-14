@@ -833,30 +833,14 @@ export function inlineDiffFromResult(result: unknown): string {
   return typeof value === 'string' ? stripInlineDiffChrome(value) : ''
 }
 
+// Falls back to a string only when there's something concrete to render —
+// counts of opaque items/fields are noise, not signal.
 function minimalValueSummary(value: unknown): string {
-  if (value == null) {
-    return ''
-  }
+  if (value == null) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
 
-  if (typeof value === 'string') {
-    return value
-  }
-
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value)
-  }
-
-  if (Array.isArray(value)) {
-    return value.length ? `Returned ${value.length} items.` : 'No items returned.'
-  }
-
-  if (isRecord(value)) {
-    const count = Object.keys(value).length
-
-    return count ? `Returned object with ${count} fields.` : 'Returned an empty object.'
-  }
-
-  return String(value)
+  return ''
 }
 
 function fallbackDetailText(args: unknown, result: unknown): string {

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { triggerHaptic } from '@/lib/haptics'
@@ -26,6 +26,23 @@ export function OverlayView({
     triggerHaptic('close')
     onClose()
   }
+
+  // Esc dismisses every OverlayView-based overlay. Nested Radix dialogs
+  // stop propagation themselves, so opening (e.g.) the model picker inside
+  // Settings still closes the picker first instead of the underlying overlay.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+
+      event.preventDefault()
+      triggerHaptic('close')
+      onClose()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
 
   return (
     <div

@@ -33,7 +33,6 @@ import type {
   StatusResponse
 } from '@/hermes'
 import { sessionTitle } from '@/lib/chat-runtime'
-import { triggerHaptic } from '@/lib/haptics'
 import { Activity, AlertCircle, BarChart3, Cpu, Pin } from '@/lib/icons'
 import { exportSession } from '@/lib/session-export'
 import { cn } from '@/lib/utils'
@@ -391,20 +390,6 @@ export function CommandCenterView({
     },
     []
   )
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        triggerHaptic('close')
-        onClose()
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onClose])
 
   useEffect(() => {
     if (!debouncedQuery) {

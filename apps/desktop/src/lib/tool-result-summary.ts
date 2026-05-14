@@ -185,7 +185,7 @@ function formatFieldValue(value: unknown, depth: number): string {
 
   if (Array.isArray(v)) {
     if (!v.length) {
-      return '0 items'
+      return ''
     }
     const scalars = v.map(summarizeScalar).filter(Boolean)
 
@@ -204,10 +204,10 @@ function formatFieldValue(value: unknown, depth: number): string {
   return clipInline(String(v))
 }
 
+// "Returned N items" / "0 items" / "Returned an empty object" are all
+// noise — better to render nothing and let the title carry the signal.
 function formatArraySummary(value: unknown[], depth: number): string {
-  if (!value.length) {
-    return 'No items returned.'
-  }
+  if (!value.length) return ''
 
   const max = 6
   const lines = value
@@ -216,9 +216,7 @@ function formatArraySummary(value: unknown[], depth: number): string {
     .filter(Boolean)
     .map(l => `- ${l}`)
 
-  if (!lines.length) {
-    return `Returned ${pluralize(value.length, 'item')}.`
-  }
+  if (!lines.length) return ''
 
   if (value.length > max) {
     const remaining = value.length - max
@@ -230,10 +228,7 @@ function formatArraySummary(value: unknown[], depth: number): string {
 
 function formatRecordSummary(record: Json, depth: number): string {
   const keys = Object.keys(record)
-
-  if (!keys.length) {
-    return 'Returned an empty object.'
-  }
+  if (!keys.length) return ''
 
   if (depth <= 2) {
     const direct = firstString(record, ['message', 'summary', 'description', 'preview', 'text', 'content'])
@@ -261,9 +256,7 @@ function formatRecordSummary(record: Json, depth: number): string {
     }
   }
 
-  if (!lines.length) {
-    return `Returned object with ${pluralize(keys.length, 'field')}.`
-  }
+  if (!lines.length) return ''
 
   if (candidates.length > lines.length) {
     const remaining = candidates.length - lines.length

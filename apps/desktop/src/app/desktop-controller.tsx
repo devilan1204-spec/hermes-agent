@@ -426,6 +426,7 @@ export function DesktopController() {
       {settingsOpen && (
         <Suspense fallback={null}>
           <SettingsView
+            gateway={gatewayRef.current}
             onClose={closeOverlayToPreviousRoute}
             onConfigSaved={() => {
               void refreshHermesConfig()
