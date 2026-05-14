@@ -5,21 +5,10 @@ import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
 import { BrailleSpinner } from '@/components/ui/braille-spinner'
 import { FadeText } from '@/components/ui/fade-text'
-import {
-  Activity,
-  AlertCircle,
-  CheckCircle2,
-  Layers3,
-  Loader2,
-  type LucideIcon,
-  RefreshCw,
-  Sparkles
-} from '@/lib/icons'
+import { AlertCircle, CheckCircle2, Sparkles } from '@/lib/icons'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
-import { $desktopActionTasks, buildRailTasks, type RailTask, type RailTaskStatus } from '@/store/activity'
-import { $previewServerRestart } from '@/store/preview'
-import { $activeSessionId, $sessions, $workingSessionIds } from '@/store/session'
+import { $activeSessionId } from '@/store/session'
 import {
   $subagentsBySession,
   buildSubagentTree,
@@ -28,38 +17,7 @@ import {
   type SubagentStreamEntry
 } from '@/store/subagents'
 
-import { useRouteEnumParam } from '../hooks/use-route-enum-param'
-import { OverlayMain, OverlayNavItem, OverlaySidebar, OverlaySplitLayout } from '../overlays/overlay-split-layout'
 import { OverlayView } from '../overlays/overlay-view'
-
-type AgentsSection = 'tree' | 'activity' | 'history'
-
-interface SectionDef {
-  description: string
-  icon: LucideIcon
-  id: AgentsSection
-  label: string
-}
-
-const SECTIONS: readonly SectionDef[] = [
-  { description: 'Live subagent spawn tree for the current turn', icon: Layers3, id: 'tree', label: 'Spawn tree' },
-  { description: 'Background work across sessions and the desktop', icon: Activity, id: 'activity', label: 'Activity' },
-  { description: 'Past spawn snapshots, replay, and diff', icon: RefreshCw, id: 'history', label: 'History' }
-]
-
-const SECTION_IDS = SECTIONS.map(s => s.id) as readonly AgentsSection[]
-
-const RAIL_TONE: Record<RailTaskStatus, string> = {
-  error: 'text-destructive',
-  running: 'text-foreground',
-  success: 'text-emerald-500'
-}
-
-const RAIL_ICON: Record<RailTaskStatus, LucideIcon> = {
-  error: AlertCircle,
-  running: Loader2,
-  success: Sparkles
-}
 
 // Mirrors statusGlyph() in tool-fallback.tsx so subagent rows speak the
 // same visual vocabulary as the chat tool blocks.
@@ -114,26 +72,12 @@ function streamGlyph(entry: SubagentStreamEntry): ReactNode {
 }
 
 interface AgentsViewProps {
-  initialSection?: AgentsSection
   onClose: () => void
 }
 
-export function AgentsView({ initialSection = 'tree', onClose }: AgentsViewProps) {
-  const [section, setSection] = useRouteEnumParam('section', SECTION_IDS, initialSection)
-
+export function AgentsView({ onClose }: AgentsViewProps) {
   const activeSessionId = useStore($activeSessionId)
-  const sessions = useStore($sessions)
-  const workingSessionIds = useStore($workingSessionIds)
-  const previewRestart = useStore($previewServerRestart)
-  const desktopActionTasks = useStore($desktopActionTasks)
   const subagentsBySession = useStore($subagentsBySession)
-
-  const activityTasks = useMemo(
-    () => buildRailTasks(workingSessionIds, sessions, previewRestart, desktopActionTasks),
-    [desktopActionTasks, previewRestart, sessions, workingSessionIds]
-  )
-
-  const active = SECTIONS.find(s => s.id === section) ?? SECTIONS[0]!
 
   const activeSubagents = useMemo(
     () => (activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []),
@@ -143,35 +87,17 @@ export function AgentsView({ initialSection = 'tree', onClose }: AgentsViewProps
   const tree = useMemo(() => buildSubagentTree(activeSubagents), [activeSubagents])
 
   return (
-    <OverlayView closeLabel="Close agents" onClose={onClose}>
-      <OverlaySplitLayout>
-        <OverlaySidebar>
-          {SECTIONS.map(s => (
-            <OverlayNavItem
-              active={s.id === section}
-              icon={s.icon}
-              key={s.id}
-              label={s.label}
-              onClick={() => setSection(s.id)}
-            />
-          ))}
-        </OverlaySidebar>
-
-        <OverlayMain>
-          <header className="mb-4">
-            <h2 className="text-sm font-semibold text-foreground">{active.label}</h2>
-            <p className="text-xs text-muted-foreground">{active.description}</p>
-          </header>
-
-          {section === 'tree' ? (
-            <SubagentTree tree={tree} />
-          ) : section === 'activity' ? (
-            <ActivityList tasks={activityTasks} />
-          ) : (
-            <SectionStub label={active.label} />
-          )}
-        </OverlayMain>
-      </OverlaySplitLayout>
+    <OverlayView
+      closeLabel="Close agents"
+      contentClassName="px-5 pt-5 pb-4 sm:px-6"
+      onClose={onClose}
+      rootClassName="mx-auto max-w-3xl"
+    >
+      <header className="mb-3 shrink-0">
+        <h2 className="text-sm font-semibold text-foreground">Spawn tree</h2>
+        <p className="text-xs text-muted-foreground/80">Live subagent activity for the current turn.</p>
+      </header>
+      <SubagentTree tree={tree} />
     </OverlayView>
   )
 }
@@ -449,45 +375,3 @@ function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; depth?: n
   )
 }
 
-function ActivityList({ tasks }: { tasks: readonly RailTask[] }) {
-  if (tasks.length === 0) {
-    return (
-      <p className="py-4 text-sm text-muted-foreground/75">
-        No background activity. Long-running tools, preview restarts, and parallel sessions surface here.
-      </p>
-    )
-  }
-
-  return (
-    <div className="grid min-h-0 gap-2 overflow-y-auto pr-1">
-      {tasks.map(task => {
-        const Icon = RAIL_ICON[task.status]
-
-        return (
-          <div className="flex items-start gap-2.5" key={task.id}>
-            <Icon
-              className={cn(
-                'mt-0.5 size-3.5 shrink-0',
-                RAIL_TONE[task.status],
-                task.status === 'running' && 'animate-spin'
-              )}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-foreground/90">{task.label}</div>
-              {task.detail ? <div className="truncate text-xs text-muted-foreground/75">{task.detail}</div> : null}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function SectionStub({ label }: { label: string }) {
-  return (
-    <div className="grid place-items-center gap-3 py-12 text-center">
-      <Sparkles className="size-6 text-muted-foreground/60" />
-      <p className="text-sm font-medium text-foreground/90">{label} — coming soon</p>
-    </div>
-  )
-}
