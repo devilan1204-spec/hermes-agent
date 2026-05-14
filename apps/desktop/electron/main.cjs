@@ -132,9 +132,23 @@ const APP_ICON_PATHS = [
   path.join(unpackedPathFor(APP_ROOT), 'dist', 'apple-touch-icon.png')
 ]
 
+let rendererTitleBarTheme = null
+
+function isHexColor(value) {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+}
+
 function getTitleBarOverlayOptions() {
   if (IS_MAC) {
     return { height: TITLEBAR_HEIGHT }
+  }
+
+  if (rendererTitleBarTheme) {
+    return {
+      color: rendererTitleBarTheme.background,
+      height: TITLEBAR_HEIGHT,
+      symbolColor: rendererTitleBarTheme.foreground
+    }
   }
 
   const useDarkColors = nativeTheme.shouldUseDarkColors
@@ -2704,6 +2718,18 @@ ipcMain.handle('hermes:normalizePreviewTarget', (_event, target, baseDir) =>
 ipcMain.handle('hermes:watchPreviewFile', (_event, url) => watchPreviewFile(String(url || '')))
 
 ipcMain.handle('hermes:stopPreviewFileWatch', (_event, id) => stopPreviewFileWatch(String(id || '')))
+
+ipcMain.on('hermes:titlebar-theme', (_event, payload) => {
+  if (!payload || !isHexColor(payload.background) || !isHexColor(payload.foreground)) {
+    return
+  }
+
+  rendererTitleBarTheme = {
+    background: payload.background,
+    foreground: payload.foreground
+  }
+  mainWindow?.setTitleBarOverlay?.(getTitleBarOverlayOptions())
+})
 
 ipcMain.handle('hermes:openExternal', (_event, url) => shell.openExternal(url))
 
