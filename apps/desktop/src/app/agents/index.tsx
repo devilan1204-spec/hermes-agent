@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
@@ -8,12 +8,14 @@ import { FadeText } from '@/components/ui/fade-text'
 import {
   Activity,
   AlertCircle,
+  CheckCircle2,
   Layers3,
   Loader2,
   type LucideIcon,
   RefreshCw,
   Sparkles
 } from '@/lib/icons'
+import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { $desktopActionTasks, buildRailTasks, type RailTask, type RailTaskStatus } from '@/store/activity'
 import { $previewServerRestart } from '@/store/preview'
@@ -59,19 +61,29 @@ const RAIL_ICON: Record<RailTaskStatus, LucideIcon> = {
   success: Sparkles
 }
 
-const STATUS_GLYPH: Record<SubagentStatus, string> = {
-  completed: '✓',
-  failed: '✗',
-  interrupted: '■',
-  queued: '○',
-  running: '●'
-}
+// Mirrors statusGlyph() in tool-fallback.tsx so subagent rows speak the
+// same visual vocabulary as the chat tool blocks.
+function statusGlyph(status: SubagentStatus): ReactNode {
+  if (status === 'running' || status === 'queued') {
+    return (
+      <BrailleSpinner
+        ariaLabel="Running"
+        className="size-3.5 shrink-0 text-[0.95rem] text-muted-foreground/80"
+        spinner="breathe"
+      />
+    )
+  }
 
-const STREAM_GLYPH: Record<SubagentStreamEntry['kind'], string> = {
-  progress: '·',
-  summary: '✓',
-  thinking: '💭',
-  tool: '●'
+  if (status === 'failed' || status === 'interrupted') {
+    return <AlertCircle aria-label="Failed" className="size-3.5 shrink-0 text-destructive" />
+  }
+
+  return (
+    <CheckCircle2
+      aria-label="Done"
+      className="size-3.5 shrink-0 text-emerald-600/85 dark:text-emerald-400/85"
+    />
+  )
 }
 
 const STREAM_TONE: Record<SubagentStreamEntry['kind'], string> = {
@@ -79,6 +91,26 @@ const STREAM_TONE: Record<SubagentStreamEntry['kind'], string> = {
   summary: 'text-foreground/85',
   thinking: 'text-muted-foreground/80',
   tool: 'text-foreground/85'
+}
+
+function streamGlyph(entry: SubagentStreamEntry): ReactNode {
+  if (entry.isError) {
+    return <AlertCircle aria-hidden className="mt-0.5 size-3 shrink-0 text-destructive" />
+  }
+
+  if (entry.kind === 'tool') {
+    return <span aria-hidden className="mt-0.5 size-1.5 shrink-0 rounded-full bg-foreground/55" />
+  }
+
+  if (entry.kind === 'summary') {
+    return <CheckCircle2 aria-hidden className="mt-0.5 size-3 shrink-0 text-emerald-600/85 dark:text-emerald-400/85" />
+  }
+
+  if (entry.kind === 'thinking') {
+    return <span aria-hidden className="font-mono text-[0.7rem] leading-none text-muted-foreground/70">…</span>
+  }
+
+  return <span aria-hidden className="mt-0.5 size-1 shrink-0 rounded-full bg-muted-foreground/55" />
 }
 
 interface AgentsViewProps {
@@ -287,17 +319,35 @@ function DelegationGroup({ group, nowMs }: { group: RootGroup; nowMs: number }) 
   )
 }
 
-function StreamLine({ active, entry }: { active: boolean; entry: SubagentStreamEntry }) {
+function StreamLine({
+  active,
+  entry,
+  parentRunning,
+  rowKey
+}: {
+  active: boolean
+  entry: SubagentStreamEntry
+  parentRunning: boolean
+  rowKey: string
+}) {
+  const enterRef = useEnterAnimation(parentRunning, `subagent-stream:${rowKey}`)
   const isMono = entry.kind === 'tool'
   const tone = entry.isError ? 'text-destructive' : STREAM_TONE[entry.kind]
 
   return (
-    <div className="flex min-w-0 items-baseline gap-2 text-[0.72rem] leading-relaxed">
-      <span className={cn('shrink-0 text-[0.65rem]', tone)}>{STREAM_GLYPH[entry.kind]}</span>
+    <div
+      className="flex min-w-0 items-baseline gap-2 text-[0.72rem] leading-relaxed"
+      ref={enterRef}
+    >
+      <span className="flex h-[0.95rem] shrink-0 items-center">{streamGlyph(entry)}</span>
       <span className={cn('min-w-0 flex-1 wrap-anywhere', tone, isMono && 'font-mono text-[0.69rem]')}>
         {entry.text}
         {active ? (
-          <span className="ml-1 inline-block h-2.5 w-0.5 animate-pulse rounded-sm bg-primary/75 align-middle" />
+          <BrailleSpinner
+            ariaLabel="Streaming"
+            className="ml-1 inline-block size-2.5 align-middle text-muted-foreground/70"
+            spinner="breathe"
+          />
         ) : null}
       </span>
     </div>
@@ -310,6 +360,7 @@ function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; depth?: n
   const durationSeconds =
     typeof node.durationSeconds === 'number' ? Math.max(0, Math.round(node.durationSeconds)) : elapsed
   const [open, setOpen] = useState(() => running || depth < 2)
+  const enterRef = useEnterAnimation(true, `subagent-row:${node.id}`)
 
   useEffect(() => {
     if (running) setOpen(true)
@@ -327,61 +378,52 @@ function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; depth?: n
   ].filter(Boolean)
 
   return (
-    <div className={cn('grid min-w-0 max-w-full gap-2', depth > 0 && 'pl-4')}>
+    <div
+      className={cn('grid min-w-0 max-w-full gap-2', depth > 0 && 'pl-4')}
+      data-slot="tool-block"
+      ref={enterRef}
+    >
       <button
         aria-expanded={open}
         className="group flex w-full min-w-0 items-start gap-2.5 text-left"
         onClick={() => setOpen(v => !v)}
         type="button"
       >
-        <span
-          className={cn(
-            'mt-1 flex size-4 shrink-0 items-center justify-center text-[0.82rem] leading-none',
-            running
-              ? 'text-primary'
-              : node.status === 'failed' || node.status === 'interrupted'
-                ? 'text-destructive'
-                : node.status === 'completed'
-                  ? 'text-emerald-500'
-                  : 'text-muted-foreground/70'
-          )}
-        >
-          {running ? (
-            <BrailleSpinner ariaLabel="Running" className="text-[0.82rem]" spinner="breathe" />
-          ) : (
-            STATUS_GLYPH[node.status]
-          )}
-        </span>
+        <span className="mt-0.5 flex h-[1.1rem] shrink-0 items-center">{statusGlyph(node.status)}</span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <FadeText
+          <span
             className={cn(
-              'wrap-anywhere text-[0.84rem] font-medium leading-snug text-foreground/95 transition-colors group-hover:text-foreground',
-              running && 'text-foreground/85'
+              'wrap-anywhere text-[0.82rem] font-medium leading-[1.1rem] text-foreground/90 transition-colors group-hover:text-foreground',
+              running && 'shimmer text-foreground/65'
             )}
           >
             {node.goal}
-          </FadeText>
+          </span>
           {subtitle.length > 0 ? (
-            <FadeText className="text-[0.66rem] leading-snug text-muted-foreground/65">{subtitle.join(' · ')}</FadeText>
+            <FadeText className="text-[0.66rem] leading-[1.05rem] text-muted-foreground/65">
+              {subtitle.join(' · ')}
+            </FadeText>
           ) : null}
         </span>
         {running ? <ActivityTimerText className="mt-1 shrink-0 text-[0.6rem]" seconds={durationSeconds} /> : null}
       </button>
 
       {visibleRows.length > 0 ? (
-        <div className="grid min-w-0 gap-1 pl-7">
+        <div className="grid min-w-0 gap-1 pl-6">
           {visibleRows.map((entry, i) => (
             <StreamLine
               active={running && i === visibleRows.length - 1}
               entry={entry}
               key={`${entry.kind}:${entry.at}:${i}`}
+              parentRunning={running}
+              rowKey={`${node.id}:${entry.kind}:${entry.at}`}
             />
           ))}
         </div>
       ) : null}
 
       {open && fileLines.length > 0 ? (
-        <div className="grid min-w-0 gap-0.5 pl-7">
+        <div className="grid min-w-0 gap-0.5 pl-6">
           <p className="text-[0.58rem] font-medium tracking-wider text-muted-foreground/60 uppercase">Files</p>
           {fileLines.slice(0, 8).map(line => (
             <p className="wrap-break-word font-mono text-[0.67rem] leading-relaxed text-muted-foreground/80" key={line}>
@@ -397,7 +439,7 @@ function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; depth?: n
       ) : null}
 
       {node.children.length > 0 ? (
-        <div className="grid min-w-0 gap-3 pl-7">
+        <div className="grid min-w-0 gap-3 pl-6">
           {node.children.map(child => (
             <SubagentRow depth={depth + 1} key={child.id} node={child} nowMs={nowMs} />
           ))}
