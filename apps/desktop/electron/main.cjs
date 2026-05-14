@@ -7,6 +7,7 @@ const {
   dialog,
   ipcMain,
   nativeImage,
+  nativeTheme,
   safeStorage,
   session,
   shell,
@@ -117,11 +118,33 @@ const WINDOW_BUTTON_POSITION = {
   x: 24,
   y: TITLEBAR_HEIGHT / 2 - MACOS_TRAFFIC_LIGHTS_HEIGHT / 2
 }
+// Width Electron reserves for the Windows/Linux native min/max/close cluster
+// when `titleBarOverlay` is enabled. The OS paints these buttons in the
+// top-right corner of the renderer; we have to leave that much room on the
+// right edge so our system tools (file browser, haptics, settings) don't sit
+// underneath them. macOS uses left-side traffic lights instead and reports a
+// position via getWindowButtonPosition(), so this width is non-zero only on
+// non-macOS platforms.
+const NATIVE_OVERLAY_BUTTON_WIDTH = 144
 const APP_ICON_PATHS = [
   path.join(APP_ROOT, 'public', 'apple-touch-icon.png'),
   path.join(APP_ROOT, 'dist', 'apple-touch-icon.png'),
   path.join(unpackedPathFor(APP_ROOT), 'dist', 'apple-touch-icon.png')
 ]
+
+function getTitleBarOverlayOptions() {
+  if (IS_MAC) {
+    return { height: TITLEBAR_HEIGHT }
+  }
+
+  const useDarkColors = nativeTheme.shouldUseDarkColors
+
+  return {
+    color: useDarkColors ? '#111111' : '#f7f7f7',
+    height: TITLEBAR_HEIGHT,
+    symbolColor: useDarkColors ? '#f7f7f7' : '#242424'
+  }
+}
 
 const MEDIA_MIME_TYPES = {
   '.avi': 'video/x-msvideo',
@@ -1840,9 +1863,18 @@ function getWindowButtonPosition() {
   return mainWindow?.getWindowButtonPosition?.() || WINDOW_BUTTON_POSITION
 }
 
+function getNativeOverlayWidth() {
+  // macOS reports traffic-light coords via windowButtonPosition; the
+  // titlebarOverlay there doesn't reserve right-edge space. Windows/Linux
+  // render the native window-controls overlay on the right, so the renderer
+  // needs to inset its right cluster by this much to clear them.
+  return IS_MAC ? 0 : NATIVE_OVERLAY_BUTTON_WIDTH
+}
+
 function getWindowState() {
   return {
     isFullscreen: Boolean(mainWindow?.isFullScreen?.()),
+    nativeOverlayWidth: getNativeOverlayWidth(),
     windowButtonPosition: getWindowButtonPosition()
   }
 }
@@ -2481,8 +2513,14 @@ function createWindow() {
     minWidth: 900,
     minHeight: 620,
     title: 'Hermes',
-    titleBarStyle: IS_MAC ? 'hidden' : 'default',
-    titleBarOverlay: IS_MAC ? { height: TITLEBAR_HEIGHT } : undefined,
+    // Frameless title bar on every platform so the renderer can paint the
+    // "hide sidebar" button (and other left-side titlebar tools) flush with
+    // the top edge — matching the macOS layout where the traffic lights sit
+    // inside the same band. On Windows/Linux, titleBarOverlay tells Electron
+    // to paint native min/max/close in the top-right of the renderer; on
+    // macOS it just reserves a content inset alongside the traffic lights.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
     vibrancy: IS_MAC ? 'sidebar' : undefined,
     icon,
@@ -2502,6 +2540,12 @@ function createWindow() {
     if (icon) {
       app.dock?.setIcon(icon)
     }
+  }
+
+  if (!IS_MAC) {
+    nativeTheme.on('updated', () => {
+      mainWindow?.setTitleBarOverlay?.(getTitleBarOverlayOptions())
+    })
   }
 
   mainWindow.on('will-enter-full-screen', () => sendWindowStateChanged(true))
