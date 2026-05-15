@@ -149,7 +149,7 @@ declare module '@hermes/ink' {
   export function forceRedraw(stdout?: NodeJS.WriteStream): boolean
   export function getInkForStdout(stdout?: NodeJS.WriteStream): InkInstance | null
   export function copyPointAt(rootDom: unknown, col: number, row: number):
-    | { kind: 'in-range'; rangeId: number; visualLine: number; col: number }
+    | { kind: 'in-range'; rangeId: number; visualLine: number; col: number; sourceOffset?: number }
     | { kind: 'gap'; afterRangeId: null | number; beforeRangeId: null | number }
   export function findRangeDom(rootDom: unknown, id: number): unknown
   export function render(node: React.ReactNode, options?: NodeJS.WriteStream | RenderOptions): Instance

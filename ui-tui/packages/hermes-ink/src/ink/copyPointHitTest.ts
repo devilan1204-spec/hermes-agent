@@ -6,6 +6,14 @@
  * ancestor box tagged with `style.copyRangeId` and translates the
  * coords to (visualLine, col) relative to that box's rect.
  *
+ * If the deepest hit ancestor also has `style.copySourceFragment` set
+ * (the per-segment tag attached to each <Text> by markdown inline
+ * rendering), the SelectionPoint includes a precomputed `sourceOffset`
+ * — the EXACT byte offset within the enclosing range's outerSource.
+ * Host code uses this directly without consulting `getOffset`, sidestepping
+ * the width-math that would otherwise be needed for formatted segments
+ * like `**bold**` or `$math$` where rendered cells ≠ source bytes.
+ *
  * The returned SelectionPoint is structurally identical to the
  * `lib/copySource/types.ts` SelectionPoint (host code), but this module
  * doesn't import from there to avoid a circular dependency (host depends
@@ -23,13 +31,27 @@ import type { DOMElement } from './dom.js'
 import { nodeCache } from './node-cache.js'
 
 export type RawSelectionPoint =
-  | { kind: 'in-range'; rangeId: number; visualLine: number; col: number }
+  | {
+      kind: 'in-range'
+      rangeId: number
+      visualLine: number
+      col: number
+      /**
+       * When set, this is the precomputed source byte offset within the
+       * range's outerSource — the host MUST use this verbatim instead of
+       * resolving (visualLine, col) via getOffset. Set whenever the
+       * ink-text along the path up to the range carries cached fragment
+       * info covering (col, row).
+       */
+      sourceOffset?: number
+    }
   | { kind: 'gap'; afterRangeId: null | number; beforeRangeId: null | number }
 
 /**
  * Walk the DOM tree from `root` finding the deepest box at (col, row),
  * then walk back up looking for `style.copyRangeId`. Returns the raw
- * SelectionPoint with adjacency info for gaps.
+ * SelectionPoint with adjacency info for gaps and a precomputed source
+ * byte offset when a fragment tag was found on the way up.
  *
  * `root` is the Ink rootNode. The walk uses nodeCache rects (computed
  * by the last frame's render pass), which already account for
@@ -40,28 +62,52 @@ export function copyPointAt(root: DOMElement, col: number, row: number): RawSele
   const deepest = hitDeepest(root, col, row)
 
   if (deepest) {
-    // Walk up looking for a Box tagged with copyRangeId.
+    // Walk up looking for a Box tagged with copyRangeId. Along the way,
+    // if we cross an ink-text whose cached layout carries `fragments`,
+    // try to resolve the click against those per-segment ranges — that
+    // gives byte-exact source mapping for markdown inline content
+    // (math, bold, links, code, etc.) without any width math.
+    let fragmentResolved: number | undefined
     let node: DOMElement | undefined = deepest
 
     while (node) {
       const rangeId = (node.style as { copyRangeId?: number }).copyRangeId
+      const rect = nodeCache.get(node)
 
-      if (typeof rangeId === 'number') {
-        const rect = nodeCache.get(node)
+      // If THIS node has cached fragments (ink-text), try to find one
+      // covering (col, row). First hit wins; we don't keep looking up
+      // the tree once we've resolved.
+      if (rect && rect.fragments && fragmentResolved === undefined) {
+        const localRow = row - rect.y
+        const localCol = col - rect.x
 
-        if (rect) {
-          return {
-            kind: 'in-range',
-            rangeId,
-            visualLine: Math.max(0, row - rect.y),
-            col: Math.max(0, col - rect.x)
+        for (const f of rect.fragments) {
+          if (f.row === localRow && localCol >= f.colStart && localCol < f.colEnd) {
+            const len = f.end - f.start
+
+            if (f.verbatim) {
+              fragmentResolved = f.start + Math.min(localCol - f.colStart, len)
+            } else {
+              const widthInFragment = f.colEnd - f.colStart
+              const colInFragment = localCol - f.colStart
+
+              fragmentResolved =
+                colInFragment * 2 < widthInFragment ? f.start : f.end
+            }
+
+            break
           }
         }
+      }
 
-        // Tagged but not in cache → shouldn't happen normally (the tag
-        // got there via the same render that populates cache), but if it
-        // does, fall through to the gap path so we still produce a
-        // useful adjacency answer.
+      if (typeof rangeId === 'number' && rect) {
+        return {
+          kind: 'in-range',
+          rangeId,
+          visualLine: Math.max(0, row - rect.y),
+          col: Math.max(0, col - rect.x),
+          ...(fragmentResolved !== undefined && { sourceOffset: fragmentResolved })
+        }
       }
 
       node = node.parentNode

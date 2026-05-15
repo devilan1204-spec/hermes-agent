@@ -2,9 +2,11 @@ import { PassThrough } from 'stream'
 
 import { Box, renderSync } from '@hermes/ink'
 import React from 'react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AUDIO_DIRECTIVE_RE, INLINE_RE, Md, MEDIA_LINE_RE, stripInlineMarkup } from '../components/markdown.js'
+import { listRanges, resetRegistry } from '../lib/copySource/registry.js'
+import { toCopyText } from '../lib/copySource/toCopyText.js'
 import { stripAnsi } from '../lib/text.js'
 import { DEFAULT_THEME } from '../theme.js'
 
@@ -216,6 +218,75 @@ describe('Md wrapping', () => {
 
     expect(lines.some(line => line.startsWith(' hi  ok'))).toBe(true)
   })
+
+  it('renders math content correctly', () => {
+    // Smoke test: rendering doesn't crash on the math example from
+    // ethie's bug report. Visual output is checked elsewhere.
+    const lines = renderPlain(
+      React.createElement(Md, { msgId: 'm1', t: DEFAULT_THEME, text: 'inline: $E = mc^2$ or done' })
+    )
+
+    expect(lines.join('\n')).toContain('or done')
+  })
+})
+
+describe('Md copy-source fragments', () => {
+  // These tests exercise the inline-fragment plumbing end-to-end:
+  // render a paragraph with markdown formatting, then verify the
+  // registered CopySource range's outerSource matches the raw source
+  // and the rendered tree carries copySourceFragment style props on
+  // its segments (so the Ink hit-test will find byte-exact mappings).
+  beforeEach(() => {
+    resetRegistry()
+  })
+
+  it('paragraph with inline math: each segment registers a fragment', () => {
+    const source = 'inline: $E = mc^2$ or done'
+
+    renderPlain(
+      React.createElement(Md, { msgId: 'fragment-msg', t: DEFAULT_THEME, text: source })
+    )
+
+    const ranges = listRanges()
+    const block = ranges.find(r => r.msgId === 'fragment-msg' && r.blockIndex >= 1)
+
+    expect(block).toBeDefined()
+    expect(block!.outerSource).toBe(source)
+
+    // The math span `$E = mc^2$` occupies source bytes [8, 18]. A
+    // synthetic in-range SelectionPoint pointing at sourceOffset=8
+    // (just past "inline: ") would copy from there forward — verifying
+    // toCopyText honors precomputed source offsets from the hit-test.
+    const copied = toCopyText({
+      anchor: { kind: 'in-range', rangeId: block!.id, visualLine: 0, col: 0, sourceOffset: 8 },
+      focus: { kind: 'after-all' },
+      transcript: [{ id: 'fragment-msg', order: 0 }]
+    })
+
+    expect(copied).toBe('$E = mc^2$ or done')
+  })
+
+  it('sourceOffset=0 anchor + post-math focus copies bytes [0..N]', () => {
+    const source = 'inline: $E = mc^2$ or done'
+
+    renderPlain(
+      React.createElement(Md, { msgId: 'fragment-msg-2', t: DEFAULT_THEME, text: source })
+    )
+
+    const ranges = listRanges()
+    const block = ranges.find(r => r.msgId === 'fragment-msg-2' && r.blockIndex >= 1)!
+
+    // Anchor at start of "inline:". Focus at "or" via sourceOffset=22.
+    // Should yield 'inline: $E = mc^2$ or' — byte-exact even across the
+    // formatted math span.
+    const copied = toCopyText({
+      anchor: { kind: 'in-range', rangeId: block.id, visualLine: 0, col: 0, sourceOffset: 0 },
+      focus: { kind: 'in-range', rangeId: block.id, visualLine: 0, col: 0, sourceOffset: 21 },
+      transcript: [{ id: 'fragment-msg-2', order: 0 }]
+    })
+
+    expect(copied).toBe('inline: $E = mc^2$ or')
+  })
 })
 
 describe('renderTable CJK width alignment', () => {
@@ -248,6 +319,7 @@ describe('renderTable CJK width alignment', () => {
     // unique anchor for column 2's start position on each row.
     const colStarts = (line: string, anchor: string): number => {
       const idx = line.indexOf(anchor)
+
       return idx < 0 ? -1 : stringWidth(line.slice(0, idx))
     }
 

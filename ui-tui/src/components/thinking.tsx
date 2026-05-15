@@ -4,6 +4,8 @@ import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 
 import { THINKING_COT_MAX } from '../config/limits.js'
 import { sectionMode } from '../domain/details.js'
+import { CopySource } from '../lib/copySource/CopySource.js'
+import { buildLineStartsFromRows, simpleOffsetFor } from '../lib/copySource/offsetMaps.js'
 import {
   buildSubagentTree,
   fmtCost,
@@ -618,6 +620,7 @@ export const Thinking = memo(function Thinking({
   active = false,
   branch = 'last',
   mode = 'truncated',
+  msgId,
   rails = [],
   reasoning,
   streaming = false,
@@ -626,6 +629,11 @@ export const Thinking = memo(function Thinking({
   active?: boolean
   branch?: TreeBranch
   mode?: ThinkingMode
+  /** Stable msg id for anchoring the reasoning text in the copy-source
+   * registry. When set, the rendered content is wrapped in a CopySource
+   * with blockIndex=-1 (reserved for thinking — kept negative so it
+   * orders BEFORE the assistant's reply blocks at blockIndex≥0). */
+  msgId?: string
   rails?: TreeRails
   reasoning: string
   streaming?: boolean
@@ -643,31 +651,56 @@ export const Thinking = memo(function Thinking({
     return null
   }
 
-  return (
-    <TreeRow branch={branch} rails={rails} t={t}>
-      <Box flexDirection="column" flexGrow={1}>
-        {preview ? (
-          mode === 'full' ? (
-            lines.map((line, index) => (
-              <Text color={t.color.muted} key={index} wrap="wrap-trim">
-                {line || ' '}
-                {index === lines.length - 1 ? (
-                  <StreamCursor color={t.color.muted} streaming={streaming} visible={active} />
-                ) : null}
-              </Text>
-            ))
-          ) : (
-            <Text color={t.color.muted} wrap="truncate-end">
-              {preview}
-              <StreamCursor color={t.color.muted} streaming={streaming} visible={active} />
+  const content = (
+    <Box flexDirection="column" flexGrow={1}>
+      {preview ? (
+        mode === 'full' ? (
+          lines.map((line, index) => (
+            <Text color={t.color.muted} key={index} wrap="wrap-trim">
+              {line || ' '}
+              {index === lines.length - 1 ? (
+                <StreamCursor color={t.color.muted} streaming={streaming} visible={active} />
+              ) : null}
             </Text>
-          )
+          ))
         ) : (
-          <Text color={t.color.muted}>
+          <Text color={t.color.muted} wrap="truncate-end">
+            {preview}
             <StreamCursor color={t.color.muted} streaming={streaming} visible={active} />
           </Text>
-        )}
-      </Box>
+        )
+      ) : (
+        <Text color={t.color.muted}>
+          <StreamCursor color={t.color.muted} streaming={streaming} visible={active} />
+        </Text>
+      )}
+    </Box>
+  )
+
+  // When we have an msgId, wrap the rendered content in a CopySource so
+  // ctrl-c over the thinking text gives the user the raw reasoning. Use
+  // blockIndex=-1 so this range sorts BEFORE any blockIndex≥0 (assistant
+  // reply blocks). outerSource is the full reasoning string — even when
+  // the rendered preview is truncated, copy returns the full text.
+  // visualLineCount tracks the rendered preview's row count so clicks
+  // on rendered rows resolve correctly; offset map is line-starts.
+  const wrapped = msgId ? (
+    <CopySource
+      blockIndex={-1}
+      getOffset={simpleOffsetFor(reasoning, buildLineStartsFromRows(reasoning.split('\n')))}
+      msgId={msgId}
+      outerSource={reasoning}
+      visualLineCount={Math.max(1, lines.length)}
+    >
+      {content}
+    </CopySource>
+  ) : (
+    content
+  )
+
+  return (
+    <TreeRow branch={branch} rails={rails} t={t}>
+      {wrapped}
     </TreeRow>
   )
 })
@@ -686,6 +719,7 @@ export const ToolTrail = memo(function ToolTrail({
   busy = false,
   commandOverride = false,
   detailsMode = 'collapsed',
+  msgId,
   outcome = '',
   reasoningActive = false,
   reasoning = '',
@@ -702,6 +736,10 @@ export const ToolTrail = memo(function ToolTrail({
   busy?: boolean
   commandOverride?: boolean
   detailsMode?: DetailsMode
+  /** Stable msg id for anchoring copy-source ranges on the reasoning
+   * content. When set, the thinking text is wrapped in a CopySource so
+   * `ctrl-c` over expanded thinking returns the raw reasoning text. */
+  msgId?: string
   outcome?: string
   reasoningActive?: boolean
   reasoning?: string
@@ -1025,6 +1063,7 @@ export const ToolTrail = memo(function ToolTrail({
           active={reasoningActive}
           branch="last"
           mode="full"
+          msgId={msgId}
           rails={rails}
           reasoning={busy ? reasoning : cot}
           streaming={busy && reasoningStreaming}

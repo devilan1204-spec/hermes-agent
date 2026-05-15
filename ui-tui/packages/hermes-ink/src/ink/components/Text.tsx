@@ -45,6 +45,15 @@ type BaseProps = {
    */
   readonly wrap?: Styles['textWrap']
   readonly children?: ReactNode
+
+  /**
+   * Per-segment source byte range, forwarded to the underlying ink-text
+   * element's style so the copy-source hit-test can map clicks back to
+   * exact source bytes. See styles.ts `copySourceFragment` for the full
+   * semantics. Used by markdown inline rendering — most Text consumers
+   * leave it undefined.
+   */
+  readonly copySourceFragment?: Styles['copySourceFragment']
 }
 
 /**
@@ -167,6 +176,7 @@ export default function Text(t0: Props) {
     strikethrough: t3,
     inverse: t4,
     wrap: t5,
+    copySourceFragment,
     children
   } = t0
 
@@ -314,10 +324,25 @@ export default function Text(t0: Props) {
   }
 
   const textStyles = t14
-  const t15 = memoizedStylesForWrap[wrap]
+  const baseWrapStyle = memoizedStylesForWrap[wrap]
+  // When a copySourceFragment is set on this Text, we MUST emit a fresh
+  // style object (not the memoized wrap-style) so the fragment lands on
+  // the ink-text's style. The memoization above caches the children +
+  // style + textStyles tuple; copySourceFragment values are unique per
+  // segment so the memo would miss anyway. We skip the cache lookup
+  // entirely in this case to keep the render correct.
+  const t15 = copySourceFragment ? { ...baseWrapStyle, copySourceFragment } : baseWrapStyle
   let t16
 
-  if ($[25] !== children || $[26] !== t15 || $[27] !== textStyles) {
+  if (copySourceFragment) {
+    // Non-memoized path: always re-emit. Cheap for typical markdown
+    // rendering (each segment renders ≤1x per parent re-render).
+    t16 = (
+      <ink-text style={t15} textStyles={textStyles}>
+        {children}
+      </ink-text>
+    )
+  } else if ($[25] !== children || $[26] !== t15 || $[27] !== textStyles) {
     t16 = (
       <ink-text style={t15} textStyles={textStyles}>
         {children}

@@ -408,6 +408,36 @@ export type Styles = {
    * affects selection extraction, not visual rendering).
    */
   readonly copyRangeId?: number
+
+  /**
+   * Per-segment source byte range, when the block-level CopySource isn't
+   * fine-grained enough to map a click back to source bytes.
+   *
+   * Used by markdown inline rendering (MdInline): each `<Text>` produced
+   * by the inline regex dispatcher (link, bold, math, code, etc.) wraps
+   * in `<Box copySourceFragment={{start, end, verbatim}}>` so the
+   * hit-test can return the exact source byte the user clicked, without
+   * needing width-math at the block level.
+   *
+   * `start`/`end` are byte offsets RELATIVE TO the enclosing
+   * `copyRangeId`'s outerSource. The hit-test resolves up the DOM:
+   * fragment found → use fragment.start + clampedCol when verbatim,
+   * snap to fragment.start/end otherwise; no fragment → fall through to
+   * the block's `getOffset`.
+   *
+   * `verbatim` is true when the rendered text width matches the source
+   * byte length character-for-character (plain text between markdown
+   * tokens, code spans). For those, col-within-fragment maps directly
+   * to source byte = start + col. False for tokens where rendered
+   * cells ≠ source bytes (`**bold**`, `$math$`, `[link](url)`); for
+   * those, partial-fragment clicks snap to the nearer of start/end so
+   * selections don't slice mid-glyph.
+   */
+  readonly copySourceFragment?: {
+    readonly start: number
+    readonly end: number
+    readonly verbatim: boolean
+  }
 }
 
 const applyPositionStyles = (node: LayoutNode, style: Styles): void => {

@@ -60,8 +60,12 @@ export type SourceRange = {
    * to the row's source-byte length.
    *
    * For ranges where inline markdown rendering is applied (paragraphs,
-   * headings), this looks up the source-byte position via a per-row table
-   * of <Text>-span source ranges that the host computed during render.
+   * headings), the renderer attaches per-segment `copySourceFragment`
+   * tags directly to the DOM, and the Ink hit-test returns a precomputed
+   * `sourceOffset` on the SelectionPoint — toCopyText uses that
+   * directly and skips this function. This `getOffset` is only consulted
+   * for clicks that didn't land on a fragment (e.g. trailing whitespace
+   * past the last token on a row, or non-MdInline blocks like fences).
    *
    * Callers are expected to clamp visualRow ∈ [0, visualLineCount].
    * visualRow == visualLineCount returns outerSource.length.
@@ -82,8 +86,20 @@ export type SourceRange = {
  * which outlives any individual render.
  */
 export type SelectionPoint =
-  /** Inside a known range. */
-  | { kind: 'in-range'; rangeId: RangeId; visualLine: number; col: number }
+  /**
+   * Inside a known range.
+   *
+   * When `sourceOffset` is set, toCopyText uses it directly as the byte
+   * offset into the range's outerSource — bypassing `visualLine`/`col`
+   * resolution via getOffset. This is set by the hit-test when the click
+   * landed inside a `copySourceFragment`-tagged DOM node (per-segment
+   * markdown rendering): the renderer attached the exact source byte
+   * range to that segment, so width-math is unnecessary.
+   *
+   * When `sourceOffset` is unset, toCopyText falls back to
+   * `getOffset(visualLine, col)`.
+   */
+  | { kind: 'in-range'; rangeId: RangeId; visualLine: number; col: number; sourceOffset?: number }
   /** Before any range we know about (e.g. above the first message). */
   | { kind: 'before-all' }
   /** After all known ranges (e.g. below the last message). */

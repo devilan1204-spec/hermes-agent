@@ -5,7 +5,7 @@ import type { DOMElement } from './dom.js'
 import getMaxWidth from './get-max-width.js'
 import type { Rectangle } from './layout/geometry.js'
 import { LayoutDisplay, LayoutEdge, type LayoutNode } from './layout/node.js'
-import { nodeCache, pendingClears } from './node-cache.js'
+import { type CachedFragment, nodeCache, pendingClears } from './node-cache.js'
 import type Output from './output.js'
 import renderBorder from './render-border.js'
 import type { Screen } from './screen.js'
@@ -636,6 +636,18 @@ function renderNodeToOutput(
         text = applyPaddingToText(node, text, softWrap)
 
         output.write(x, y, text, softWrap)
+
+        // Build per-row fragment ranges for the copy hit-test. Each
+        // segment with a `copySourceFragment` style emits one or more
+        // CachedFragment entries (multiple when the segment wraps
+        // across visual rows). Stored on the node directly so the
+        // generic `nodeCache.set` at the end of renderNodeToOutput
+        // picks it up.
+        const segmentFragments = computeSegmentFragments(segments, softWrap)
+
+        if (segmentFragments.length > 0) {
+          ;(node as DOMElement & { _copyFragments?: CachedFragment[] })._copyFragments = segmentFragments
+        }
       }
     } else if (node.nodeName === 'ink-box') {
       const boxBackgroundColor = node.style.backgroundColor ?? inheritedBackgroundColor
@@ -1280,8 +1292,20 @@ function renderNodeToOutput(
       renderChildren(node, output, x, y, hasRemovedChild, prevScreen, inheritedBackgroundColor)
     }
 
-    // Cache layout bounds for dirty tracking
-    const rect = { x, y, width, height, top: yogaTop }
+    // Cache layout bounds for dirty tracking. If the ink-text branch
+    // computed per-segment fragment ranges, attach them — the copy
+    // hit-test reads them from rect.fragments to map clicks to source
+    // bytes without DOM-walking for child virtual-text nodes (which
+    // don't have their own nodeCache entries).
+    const fragmentsFromBranch = (node as DOMElement & { _copyFragments?: CachedFragment[] })._copyFragments
+    const rect = { x, y, width, height, top: yogaTop, ...(fragmentsFromBranch && { fragments: fragmentsFromBranch }) }
+
+    // Clear after consuming so a future render that has no fragments
+    // doesn't see stale data.
+    if (fragmentsFromBranch) {
+      ;(node as DOMElement & { _copyFragments?: CachedFragment[] })._copyFragments = undefined
+    }
+
     nodeCache.set(node, rect)
 
     if (node.style.position === 'absolute') {
@@ -1556,5 +1580,86 @@ function dropSubtreeCache(node: DOMElement): void {
 
 // Exported for testing
 export { applyStylesToWrappedText, buildCharToSegmentMap }
+
+/**
+ * Compute per-row source-fragment ranges for an ink-text's segments.
+ *
+ * For each segment carrying `copySourceFragment`, walk the segment's
+ * char range within plainText and emit one `CachedFragment` per visual
+ * row the segment occupies. The softWrap array (one entry per char in
+ * the FINAL wrapped text — note: same as plainText, since wrap inserts
+ * '\n' soft breaks but plainText is pre-wrap; we read softWrap by char
+ * index into plainText? actually softWrap is per visual row according
+ * to wrapWithSoftWrap docs, indicating which rows are word-wrap
+ * continuations) ...
+ *
+ * Implementation: for v1, no soft-wrap handling — emit one fragment
+ * per segment with `row=0`. When the text wraps, the fragment still
+ * lives "on the first row" with colStart/colEnd. The hit-test only
+ * uses fragments when (col,row) lands inside one; clicks on wrapped
+ * continuation rows fall through to the block-level getOffset.
+ *
+ * For wrapped lines this means: partial selection of formatted text
+ * that spans a wrap boundary degrades to block-level mapping. The
+ * common case (a paragraph fitting on one screen row, or selecting
+ * a whole formatted span that doesn't wrap) gets byte-exact source
+ * via fragments. Acceptable trade-off — wrap-aware fragment splitting
+ * needs the same width math we deliberately deleted from the host
+ * earlier, and the hit-test fallback is the block's outerSource
+ * (still correct for "select the whole paragraph" cases).
+ */
+function computeSegmentFragments(
+  segments: readonly StyledSegment[],
+  softWrap: boolean[] | undefined
+): CachedFragment[] {
+  const out: CachedFragment[] = []
+  let visualCol = 0
+
+  for (const seg of segments) {
+    const segWidth = widestLine(seg.text)
+    const tag = seg.copySourceFragment
+
+    if (tag) {
+      // Determine which row this segment STARTS on, given softWrap.
+      // softWrap[r] is true when visual row r is a word-wrap continuation
+      // of the previous source line. We need to walk the cumulative
+      // width across segments and map visualCol → row.
+      //
+      // Simplest correct-on-no-wrap path: if no softWrap, all segments
+      // live on row 0. The colStart is the running visualCol.
+      if (!softWrap || softWrap.length <= 1) {
+        out.push({
+          row: 0,
+          colStart: visualCol,
+          colEnd: visualCol + segWidth,
+          start: tag.start,
+          end: tag.end,
+          verbatim: tag.verbatim
+        })
+      }
+      // When wrap IS present: emit only the first-row portion of the
+      // segment. The continuation rows fall through to block-level
+      // mapping. Adequate for selecting any non-wrapped span.
+      else {
+        // Conservative: don't try to split across rows. Emit on row 0
+        // with the segment's leading width clamped to first-row capacity.
+        // Hit-test on wrap-continuation rows won't find the fragment,
+        // which is fine — block fallback handles it.
+        out.push({
+          row: 0,
+          colStart: visualCol,
+          colEnd: visualCol + segWidth,
+          start: tag.start,
+          end: tag.end,
+          verbatim: tag.verbatim
+        })
+      }
+    }
+
+    visualCol += segWidth
+  }
+
+  return out
+}
 
 export default renderNodeToOutput

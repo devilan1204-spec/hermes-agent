@@ -214,121 +214,237 @@ const renderTable = (k: number, rows: string[][], t: Theme) => {
   )
 }
 
-function MdInline({ t, text }: { t: Theme; text: string }) {
+/**
+ * Render inline markdown tokens (links, bold, italic, code, math, etc.)
+ * as a flat sequence of <Text> children wrapped in <Box copySourceFragment>
+ * tags so the copy-source hit-test can map mouse clicks back to source
+ * bytes for partial-block selections.
+ *
+ * `sourceOffset` is the byte offset of `text` within the enclosing block's
+ * outerSource. For paragraph blocks it's 0 (text IS the block source).
+ * For headings `# Title`, the heading branch passes `text="Title"` with
+ * `sourceOffset=2` so the fragments report bytes relative to `# Title`.
+ *
+ * Recursive calls (inside bold/italic/strike/highlight) pass through
+ * `sourceOffset + matchInnerStart` so nested fragments stay accurate
+ * against the outermost block's outerSource.
+ *
+ * When `sourceOffset` is undefined (caller didn't pass one — e.g. table
+ * cell rendering, summary fallback), we render WITHOUT fragments. The
+ * copy still works via the block-level CopySource's simple offset map;
+ * partial-cell selections just snap to source-line boundaries.
+ */
+function MdInline({ sourceOffset, t, text }: { sourceOffset?: number; t: Theme; text: string }) {
   const parts: ReactNode[] = []
+  const tagged = sourceOffset !== undefined
+  const off = sourceOffset ?? 0
 
   let last = 0
 
+  const wrap = (node: ReactNode, srcStart: number, srcEnd: number, verbatim: boolean): ReactNode => {
+    if (!tagged) {
+      return node
+    }
+
+    // Use <Text> (not <Box>) so the wrapper flows inline within the
+    // surrounding Text.wrap="wrap-trim" context. Box is block-level and
+    // would force line breaks; Text is inline and just carries the
+    // copySourceFragment attribute on its ink-text DOMElement for the
+    // hit-test to find via ancestor walk.
+    return (
+      <Text
+        copySourceFragment={{ start: off + srcStart, end: off + srcEnd, verbatim }}
+        key={parts.length}
+      >
+        {node}
+      </Text>
+    )
+  }
+
   for (const m of text.matchAll(INLINE_RE)) {
     const i = m.index ?? 0
+    const matchLen = m[0]!.length
+    const matchEnd = i + matchLen
     const k = parts.length
 
     if (i > last) {
-      parts.push(<Text key={k}>{text.slice(last, i)}</Text>)
+      // Plain text between matches. Verbatim: rendered cells == source bytes.
+      parts.push(wrap(<Text key={k}>{text.slice(last, i)}</Text>, last, i, true))
     }
 
     if (m[1] && m[2]) {
+      // image: rendered "[image: ALT] URL", not verbatim
       parts.push(
-        <Text color={t.color.muted} key={parts.length}>
-          [image: {m[1]}] {m[2]}
-        </Text>
+        wrap(
+          <Text color={t.color.muted} key={parts.length}>
+            [image: {m[1]}] {m[2]}
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[3] && m[4]) {
+      // link: rendered "TEXT", not verbatim
       parts.push(
-        <Link key={parts.length} url={m[4]}>
-          <Text color={t.color.accent} underline>
-            {m[3]}
-          </Text>
-        </Link>
+        wrap(
+          <Link key={parts.length} url={m[4]}>
+            <Text color={t.color.accent} underline>
+              {m[3]}
+            </Text>
+          </Link>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[5]) {
-      parts.push(renderAutolink(parts.length, t, m[5]))
+      // autolink: rendered url (minus mailto:), not verbatim (has `<>` in source)
+      parts.push(wrap(renderAutolink(parts.length, t, m[5]), i, matchEnd, false))
     } else if (m[6]) {
+      // strike ~~x~~: NOT verbatim (rendered = inner, source = `~~inner~~`)
+      const inner = m[6]
+      const innerStart = i + 2
+
       parts.push(
-        <Text key={parts.length} strikethrough>
-          <MdInline t={t} text={m[6]} />
-        </Text>
+        wrap(
+          <Text key={parts.length} strikethrough>
+            <MdInline sourceOffset={off + innerStart} t={t} text={inner} />
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[7]) {
-      // Code is the one wrap that does NOT recurse — inline `code` spans
-      // are verbatim by definition. Letting MdInline reprocess them
-      // would corrupt regex examples and shell snippets.
+      // code `x`: not verbatim (backticks not in render). But the body is
+      // verbatim within the fragment — for byte-exact partial selection
+      // INSIDE a code span we'd need a sub-fragment for the body. For
+      // now: treat whole code as one non-verbatim fragment (clicks snap
+      // to span boundaries). Good enough — partial code-span selections
+      // are rare.
       parts.push(
-        <Text color={t.color.accent} dimColor key={parts.length}>
-          {m[7]}
-        </Text>
+        wrap(
+          <Text color={t.color.accent} dimColor key={parts.length}>
+            {m[7]}
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[8] ?? m[9]) {
-      // Recurse into bold / italic / strike / highlight so nested
-      // `$...$` math (and other inline tokens) inside a `**bolded
-      // statement with $\mathbb{Z}$ math**` actually render. Without
-      // this the inner content is dropped into a single `<Text bold>`
-      // verbatim and the math renderer never sees it.
+      // bold: not verbatim. inner content is m[8] (** flavor) or m[9] (__ flavor).
+      const inner = (m[8] ?? m[9])!
+      const innerStart = i + 2
+
       parts.push(
-        <Text bold key={parts.length}>
-          <MdInline t={t} text={m[8] ?? m[9]!} />
-        </Text>
+        wrap(
+          <Text bold key={parts.length}>
+            <MdInline sourceOffset={off + innerStart} t={t} text={inner} />
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[10] ?? m[11]) {
+      // italic: not verbatim
+      const inner = (m[10] ?? m[11])!
+      const innerStart = i + 1
+
       parts.push(
-        <Text italic key={parts.length}>
-          <MdInline t={t} text={m[10] ?? m[11]!} />
-        </Text>
+        wrap(
+          <Text italic key={parts.length}>
+            <MdInline sourceOffset={off + innerStart} t={t} text={inner} />
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[12]) {
+      // highlight ==x==: not verbatim
+      const inner = m[12]
+      const innerStart = i + 2
+
       parts.push(
-        <Text backgroundColor={t.color.diffAdded} color={t.color.diffAddedWord} key={parts.length}>
-          <MdInline t={t} text={m[12]} />
-        </Text>
+        wrap(
+          <Text backgroundColor={t.color.diffAdded} color={t.color.diffAddedWord} key={parts.length}>
+            <MdInline sourceOffset={off + innerStart} t={t} text={inner} />
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[13]) {
+      // footnote [^N] → [N]: not verbatim
       parts.push(
-        <Text color={t.color.muted} key={parts.length}>
-          [{m[13]}]
-        </Text>
+        wrap(
+          <Text color={t.color.muted} key={parts.length}>
+            [{m[13]}]
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[14]) {
+      // super ^N^ → ^N: not verbatim
       parts.push(
-        <Text color={t.color.muted} key={parts.length}>
-          ^{m[14]}
-        </Text>
+        wrap(
+          <Text color={t.color.muted} key={parts.length}>
+            ^{m[14]}
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[15]) {
+      // sub ~N~ → _N: not verbatim
       parts.push(
-        <Text color={t.color.muted} key={parts.length}>
-          _{m[15]}
-        </Text>
+        wrap(
+          <Text color={t.color.muted} key={parts.length}>
+            _{m[15]}
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     } else if (m[16]) {
       // Bare URL — trim trailing prose punctuation into a sibling text node
       // so `see https://x.com/, which…` keeps the comma outside the link.
       const url = m[16].replace(/[),.;:!?]+$/g, '')
+      const urlEnd = i + url.length
 
-      parts.push(renderAutolink(parts.length, t, url))
+      parts.push(wrap(renderAutolink(parts.length, t, url), i, urlEnd, true))
 
       if (url.length < m[16].length) {
-        parts.push(<Text key={parts.length}>{m[16].slice(url.length)}</Text>)
+        // Trailing punctuation: verbatim plain text.
+        parts.push(wrap(<Text key={parts.length}>{m[16].slice(url.length)}</Text>, urlEnd, matchEnd, true))
       }
     } else if (m[17] ?? m[18]) {
-      // Inline math is run through `texToUnicode` (Greek letters, ℕℤℚℝ,
-      // operators, sub/superscripts, fractions) and rendered in italic
-      // accent. Italic is the disambiguator — links use accent+underline,
-      // so without italic readers can't tell `\mathbb{R}` (math) from a
-      // hyperlinked word. Anything `texToUnicode` doesn't recognise is
-      // preserved verbatim, so unfamiliar commands just look like their
-      // raw LaTeX rather than vanishing.
+      // Math: rendered as unicode, source is `$x$` or `\(x\)`. Not verbatim.
       parts.push(
-        <Text color={t.color.accent} italic key={parts.length}>
-          {renderMath(texToUnicode(m[17] ?? m[18]!))}
-        </Text>
+        wrap(
+          <Text color={t.color.accent} italic key={parts.length}>
+            {renderMath(texToUnicode(m[17] ?? m[18]!))}
+          </Text>,
+          i,
+          matchEnd,
+          false
+        )
       )
     }
 
-    last = i + m[0].length
+    last = matchEnd
   }
 
   if (last < text.length) {
-    parts.push(<Text key={parts.length}>{text.slice(last)}</Text>)
+    parts.push(wrap(<Text key={parts.length}>{text.slice(last)}</Text>, last, text.length, true))
   }
 
   return <Text wrap="wrap-trim">{parts.length ? parts : text}</Text>
@@ -391,6 +507,14 @@ function MdImpl({ blockIndexBase = 1, compact, msgId, t, text }: MdProps) {
   // selections round-trip the raw markdown for THAT block, and the
   // fence-stripping rule fires when a selection lands entirely inside
   // one fence's inner content.
+  //
+  // The block-level <CopySource> uses a simple line-starts offset map.
+  // For inline-formatted content (paragraphs, headings, etc.) MdInline
+  // emits per-segment <CopyFragment> wrappers carrying the exact source
+  // byte range each <Text> came from — the hit-test prefers the deepest
+  // fragment over the enclosing range so partial-block selections of
+  // math / bold / links / code map to byte-exact source offsets without
+  // any width math here.
   return (
     <Box flexDirection="column">
       {blocks.map((b, i) => {
@@ -639,7 +763,7 @@ function parseToBlocks(text: string, compact: boolean | undefined, t: Theme): Md
 
       if (closeIdx < 0) {
         start('paragraph')
-        push(<MdInline key={key} t={t} text={line} />, line)
+        push(<MdInline key={key} sourceOffset={0} t={t} text={line} />, line)
         i++
 
         continue
@@ -675,13 +799,22 @@ function parseToBlocks(text: string, compact: boolean | undefined, t: Theme): Md
       continue
     }
 
-    const heading = line.match(HEADING_RE)?.[2]
+    const headingMatch = line.match(HEADING_RE)
+    const heading = headingMatch?.[2]
 
     if (heading) {
       start('heading')
+      // Offset of heading text within `line`: after the `#+` and the
+      // required space. m[1]=hashes, m[2]=heading text. The space is
+      // captured by the `\s+` between groups so its length = the bytes
+      // from end of m[1] to start of m[2]. Compute via indexOf to
+      // tolerate variable-width whitespace (rare in practice).
+      const hashes = headingMatch![1]!
+      const headingStart = (line.indexOf(heading, hashes.length) ?? hashes.length + 1)
+
       push(
         <Text bold color={t.color.accent} key={key} wrap="wrap-trim">
-          <MdInline t={t} text={heading} />
+          <MdInline sourceOffset={headingStart} t={t} text={heading} />
         </Text>,
         line
       )
@@ -692,9 +825,12 @@ function parseToBlocks(text: string, compact: boolean | undefined, t: Theme): Md
 
     if (i + 1 < lines.length && SETEXT_RE.test(lines[i + 1]!)) {
       start('heading')
+      const trimmed = line.trim()
+      const setextOffset = line.indexOf(trimmed)
+
       push(
         <Text bold color={t.color.accent} key={key} wrap="wrap-trim">
-          <MdInline t={t} text={line.trim()} />
+          <MdInline sourceOffset={setextOffset} t={t} text={trimmed} />
         </Text>,
         lines.slice(blockStart, i + 2).join('\n')
       )
@@ -784,12 +920,14 @@ function parseToBlocks(text: string, compact: boolean | undefined, t: Theme): Md
 
       const task = bullet[2]!.match(TASK_RE)
       const marker = task ? (task[1]!.toLowerCase() === 'x' ? '☑' : '☐') : '•'
+      const innerText = task ? task[2]! : bullet[2]!
+      const bulletOffset = line.indexOf(innerText)
 
       push(
         <Box key={key} paddingLeft={indentDepth(bullet[1]!) * 2}>
           <Text wrap="wrap-trim">
             <Text color={t.color.muted}>{marker} </Text>
-            <MdInline t={t} text={task ? task[2]! : bullet[2]!} />
+            <MdInline sourceOffset={bulletOffset} t={t} text={innerText} />
           </Text>
         </Box>,
         line
@@ -803,11 +941,14 @@ function parseToBlocks(text: string, compact: boolean | undefined, t: Theme): Md
 
     if (numbered) {
       start('list')
+      const numberedInner = numbered[3]!
+      const numberedOffset = line.indexOf(numberedInner)
+
       push(
         <Box key={key} paddingLeft={indentDepth(numbered[1]!) * 2}>
           <Text wrap="wrap-trim">
             <Text color={t.color.muted}>{numbered[2]}. </Text>
-            <MdInline t={t} text={numbered[3]!} />
+            <MdInline sourceOffset={numberedOffset} t={t} text={numberedInner} />
           </Text>
         </Box>,
         line
@@ -918,7 +1059,7 @@ function parseToBlocks(text: string, compact: boolean | undefined, t: Theme): Md
     }
 
     start('paragraph')
-    push(<MdInline key={key} t={t} text={line} />, line)
+    push(<MdInline key={key} sourceOffset={0} t={t} text={line} />, line)
     i++
   }
 
@@ -939,6 +1080,13 @@ type Kind = 'blank' | 'code' | 'heading' | 'list' | 'paragraph' | 'quote' | 'rul
  * `innerSource` / `innerOffset` are set on fence blocks so that selecting
  * code inside a fence yields just the code body (without the ``` markers).
  * Empty for everything else (where outer == inner).
+ *
+ * Per-segment source mapping (for paragraphs / headings / lists / etc.
+ * where rendered cells differ from source bytes due to markdown formatting)
+ * happens in MdInline via <CopyFragment> wrappers attached directly to
+ * the rendered DOM nodes. The block-level CopySource here just owns the
+ * raw outerSource and a coarse line-starts offset map for fallback cases
+ * where the click lands outside any fragment.
  */
 interface MdBlock {
   content: ReactNode

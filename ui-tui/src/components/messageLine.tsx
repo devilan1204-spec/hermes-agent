@@ -73,6 +73,7 @@ export const MessageLine = memo(function MessageLine({
         <ToolTrail
           commandOverride={detailsModeCommandOverride}
           detailsMode={detailsMode}
+          msgId={msgId}
           reasoning={thinking}
           reasoningTokens={msg.thinkingTokens}
           sections={sections}
@@ -194,6 +195,7 @@ export const MessageLine = memo(function MessageLine({
           <ToolTrail
             commandOverride={detailsModeCommandOverride}
             detailsMode={detailsMode}
+            msgId={msgId}
             reasoning={thinking}
             reasoningTokens={msg.thinkingTokens}
             sections={sections}

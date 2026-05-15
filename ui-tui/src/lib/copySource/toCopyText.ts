@@ -199,12 +199,38 @@ function reducePoint(p: Exclude<Point, { kind: 'before-all' | 'after-all' }>): R
  * always fall through to the "include the whole adjacent range" path,
  * which is what the user gets when they drag across a gap.
  */
+/**
+ * Clamp a source byte offset to the range's outerSource bounds.
+ * Used to defensively bound a `sourceOffset` arriving from the hit-test
+ * (in theory always in-bounds, but range re-registration could have
+ * shrunk outerSource between hit-test time and copy time).
+ */
+function clampOffset(range: SourceRange, offset: number): number {
+  if (offset < 0) {
+    return 0
+  }
+
+  if (offset > range.outerSource.length) {
+    return range.outerSource.length
+  }
+
+  return offset
+}
+
 function resolvePoint(p: Point): { rangeId: number; offset: number } | null {
   if (p.kind === 'in-range') {
     const r = getRange(p.rangeId)
 
     if (!r) {
       return null
+    }
+
+    // Fast path: the hit-test already resolved the source byte for us
+    // via a per-segment copySourceFragment tag. Use it verbatim — this
+    // is the byte-exact path for inline-formatted markdown (math, bold,
+    // links, code spans, etc.) where rendered cells ≠ source bytes.
+    if (p.sourceOffset !== undefined) {
+      return { rangeId: p.rangeId, offset: clampOffset(r, p.sourceOffset) }
     }
 
     return { rangeId: p.rangeId, offset: pointToOffset(r, p.visualLine, p.col) }
