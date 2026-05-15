@@ -11470,6 +11470,13 @@ class HermesCLI:
 
     def run(self):
         """Run the interactive CLI loop with persistent input at bottom."""
+        # Detect light/dark terminal mode now (before pt grabs the tty).
+        # Caches the result so subsequent _hex_to_ansi / style calls
+        # don't risk re-querying mid-render.
+        try:
+            _detect_light_mode()
+        except Exception:
+            pass
         # Push the entire TUI to the bottom of the terminal so the banner,
         # responses, and prompt all appear pinned to the bottom — empty
         # space stays above, not below.  This prints enough blank lines to
