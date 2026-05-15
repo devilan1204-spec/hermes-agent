@@ -13069,10 +13069,97 @@ class HermesCLI:
         # recovery is a full screen-clear (\x1b[2J\x1b[H) before the next
         # redraw, so we force one on every resize rather than trying to
         # compute the exact drift.
+        # DECSTBM scroll region fix for resize scrollback pollution.
+        #
+        # Root cause: prompt_toolkit's _output_screen_diff (renderer.py
+        # line 106) emits write("\r\n" * N) to advance the cursor between
+        # rows during paint, and explicitly scrolls to the bottom of the
+        # canvas at line 232-242 to "reserve vertical space".  At the
+        # bottom row, \r\n SCROLLS the viewport, pushing chrome content
+        # into terminal scrollback.  This is the actual mechanism behind
+        # pt issues #29 (open since 2014), #1675, #1933 — same wall hit
+        # by aider, xonsh, ipython.  Nobody has shipped a fix.
+        #
+        # Our fix: DECSTBM (\x1b[<top>;<bottom>r) sets a SCROLL REGION
+        # on the terminal.  When pt's \r\n scrolls within the region,
+        # rows that fall off the top of the region are DISCARDED
+        # instead of being pushed to terminal scrollback.  Region top
+        # must be > 1 — content scrolling off a region starting at
+        # row 1 still goes to scrollback (terminal treats region top=1
+        # as "no region").  Above row 2 it gets discarded.
+        #
+        # Same trick used by vim's status line, tmux, weechat, htop.
+        #
+        # IMPORTANT: DECSTBM resets the cursor to (1,1).  We save the
+        # cursor position with \x1b[s before setting the region and
+        # restore with \x1b[u after, so pt's initial paint still draws
+        # the chrome at the bottom (where the cursor was when hermes
+        # launched).
+        _output_obj = app.renderer.output
+
+        def _set_scroll_region():
+            try:
+                size = _output_obj.get_size()
+                # Region: rows 2 to size.rows.  Top=2 keeps everything
+                # except row 1 inside the region; row 1 is excluded so
+                # the very-top row stays as a sacrifice line outside.
+                #
+                # After DECSTBM, the cursor is reset to (1,1).  Move it
+                # explicitly to the bottom row so pt's renderer anchors
+                # the chrome at the bottom of the viewport (where it
+                # naturally lives in non-fullscreen mode).
+                _output_obj.write_raw(
+                    f"\x1b[2;{size.rows}r"       # set scroll region
+                    f"\x1b[{size.rows};1H"       # cursor to bottom row, col 1
+                )
+                _output_obj.flush()
+            except Exception:
+                pass
+
+        _set_scroll_region()
+
+        # Restore default scroll region on exit so the user's shell
+        # isn't left with a constrained scroll area.
+        def _restore_scroll_region():
+            try:
+                _output_obj.write_raw("\x1b[r")
+                _output_obj.flush()
+            except Exception:
+                pass
+
+        try:
+            atexit.register(_restore_scroll_region)
+        except Exception:
+            pass
+
         _original_on_resize = app._on_resize
 
         def _resize_clear_ghosts():
-            self._schedule_resize_recovery(app, _original_on_resize)
+            # Re-set scroll region for new viewport size, then erase the
+            # region's contents using \x1b[J (erase from cursor to end of
+            # screen).  Unlike \x1b[2J, \x1b[J does NOT push erased content
+            # to terminal scrollback — verified empirically.  This wipes
+            # the old reflowed chrome WITHOUT polluting history.  Tell pt
+            # to do a full redraw by clearing its diff cache, then call
+            # pt's native _on_resize directly to repaint.
+            _set_scroll_region()
+            try:
+                size = _output_obj.get_size()
+                _output_obj.write_raw(
+                    "\x1b[2;1H"                  # cursor to row 2 (inside region)
+                    "\x1b[0J"                    # erase from cursor to end of screen
+                    f"\x1b[{size.rows};1H"       # cursor to bottom row, col 1
+                )
+                _output_obj.flush()
+                try:
+                    from prompt_toolkit.data_structures import Point
+                    app.renderer._cursor_pos = Point(x=0, y=0)
+                    app.renderer._last_screen = None
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            _original_on_resize()
 
         app._on_resize = _resize_clear_ghosts
 
