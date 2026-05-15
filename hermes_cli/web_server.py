@@ -4269,18 +4269,30 @@ async def pty_ws(ws: WebSocket) -> None:
 async def gateway_ws(ws: WebSocket) -> None:
     peer = _ws_client_label(ws)
     if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
-        _log.debug("gateway-ws reject peer=%s reason=embedded_chat_disabled", peer)
+        _log.warning(
+            "gateway-ws reject peer=%s reason=embedded_chat_disabled close_code=4403",
+            peer,
+        )
         await ws.close(code=4403)
         return
 
     token = ws.query_params.get("token", "")
     if not hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
-        _log.warning("gateway-ws reject peer=%s reason=bad_token", peer)
+        _log.warning(
+            "gateway-ws reject peer=%s reason=bad_token token_len=%d close_code=4401",
+            peer,
+            len(token),
+        )
         await ws.close(code=4401)
         return
 
     if not _ws_client_is_allowed(ws):
-        _log.warning("gateway-ws reject peer=%s reason=non_loopback_client", peer)
+        _log.warning(
+            "gateway-ws reject peer=%s reason=non_loopback_client "
+            "bound_host=%s close_code=4403",
+            peer,
+            getattr(app.state, "bound_host", ""),
+        )
         await ws.close(code=4403)
         return
 
@@ -4288,8 +4300,13 @@ async def gateway_ws(ws: WebSocket) -> None:
     _log.info("gateway-ws connect peer=%s", peer)
     try:
         await handle_ws(ws)
-    except WebSocketDisconnect:
-        _log.info("gateway-ws disconnect peer=%s", peer)
+    except WebSocketDisconnect as exc:
+        _log.info(
+            "gateway-ws disconnect peer=%s code=%s reason=%s",
+            peer,
+            getattr(exc, "code", None),
+            getattr(exc, "reason", None),
+        )
     except Exception:
         _log.exception("gateway-ws error peer=%s", peer)
         raise
