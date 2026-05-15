@@ -35,7 +35,7 @@ class TestHiddenSessionSources:
 class TestSessionSearchSchema:
     def test_keeps_cross_session_recall_guidance_without_current_session_nudge(self):
         description = SESSION_SEARCH_SCHEMA["description"]
-        assert "past conversations" in description
+        assert "past session" in description
         assert "recent turns of the current session" not in description
 
 
