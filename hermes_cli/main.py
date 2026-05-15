@@ -235,10 +235,20 @@ except Exception:
 
 # Initialize centralized file logging early — all `hermes` subcommands
 # (chat, setup, gateway, config, etc.) write to agent.log + errors.log.
+# Dashboard entrypoints bootstrap with GUI mode so gui.log is always present
+# during GUI testing, including pre-dispatch startup failures.
 try:
     from hermes_logging import setup_logging as _setup_logging
 
-    _setup_logging(mode="cli")
+    _early_mode = "cli"
+    for _arg in sys.argv[1:]:
+        if _arg.startswith("-"):
+            continue
+        if _arg == "dashboard":
+            _early_mode = "gui"
+        break
+
+    _setup_logging(mode=_early_mode)
 except Exception:
     pass  # best-effort — don't crash the CLI if logging setup fails
 
