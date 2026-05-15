@@ -1423,6 +1423,11 @@ def _detect_light_mode() -> bool:
 # Light-mode equivalents of skin colors that are unreadable on cream
 # Terminal.app backgrounds.  Used by _SkinAwareAnsi to remap colors
 # at resolution time when light mode is detected.
+#
+# IMPORTANT: only remap colors that are used as STANDALONE foregrounds
+# on the terminal's background.  Don't remap colors that are paired
+# with a dark bg (e.g. status bar text on bg:#1a1a2e) — those would
+# become invisible the OTHER direction (dark gray on dark navy).
 _LIGHT_MODE_REMAP: dict[str, str] = {
     # Original (dark-mode) -> Light-mode replacement (darker, readable)
     "#FFF8DC": "#1A1A1A",   # cornsilk -> near-black
@@ -1436,11 +1441,10 @@ _LIGHT_MODE_REMAP: dict[str, str] = {
     "#F5F5F5": "#1A1A1A",
     "#FFF0D4": "#1A1A1A",
     "#CD7F32": "#8A4F1A",   # bronze -> darker bronze
-    "#C0C0C0": "#3A3A3A",   # silver -> dark gray
-    "#888888": "#444444",
-    "#555555": "#444444",
-    "#8B8682": "#444444",
     "#FFEFB5": "#3A2A00",
+    # NOTE: skipping #C0C0C0/#888888/#555555/#8B8682 — those are
+    # status-bar foregrounds paired with dark navy bg, where dark
+    # remap values would become invisible.
 }
 
 
@@ -1460,6 +1464,41 @@ def _maybe_remap_for_light_mode(hex_color: str) -> str:
 
 # Pre-uppercased lookup table for case-insensitive remapping
 _LIGHT_MODE_REMAP_UPPER = {k.upper(): v for k, v in _LIGHT_MODE_REMAP.items()}
+
+
+def _install_skin_light_mode_hook() -> None:
+    """Wrap Skin.get_color at import time so EVERY skin color read goes
+    through the light-mode remap.  Idempotent."""
+    try:
+        from hermes_cli.skin_engine import Skin  # type: ignore[import]
+    except Exception:
+        return
+    if getattr(Skin, "_hermes_light_mode_hook_installed", False):
+        return
+    _orig_get_color = Skin.get_color
+
+    def _wrapped_get_color(self, key, fallback=""):
+        value = _orig_get_color(self, key, fallback)
+        try:
+            return _maybe_remap_for_light_mode(value)
+        except Exception:
+            return value
+
+    Skin.get_color = _wrapped_get_color  # type: ignore[method-assign]
+    Skin._hermes_light_mode_hook_installed = True  # type: ignore[attr-defined]
+
+
+_install_skin_light_mode_hook()
+
+
+# Prime the light-mode detection cache early (at module load) when
+# we're running interactively so OSC 11 happens before pt grabs the
+# tty.  Skip for non-tty contexts (subagents, gateway, tests).
+try:
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        _detect_light_mode()
+except Exception:
+    pass
 
 
 
@@ -8128,8 +8167,8 @@ class HermesCLI:
                         from hermes_cli.skin_engine import get_active_skin
                         _skin = get_active_skin()
                         label = _skin.get_branding("response_label", "⚕ Hermes")
-                        _resp_color = _skin.get_color("response_border", "#CD7F32")
-                        _resp_text = _skin.get_color("banner_text", "#FFF8DC")
+                        _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#CD7F32"))
+                        _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#FFF8DC"))
                     except Exception:
                         label = "⚕ Hermes"
                         _resp_color = "#CD7F32"
@@ -11110,12 +11149,12 @@ class HermesCLI:
                     from hermes_cli.skin_engine import get_active_skin
                     _skin = get_active_skin()
                     label = _skin.get_branding("response_label", "⚕ Hermes")
-                    _resp_color = _skin.get_color("response_border", "#CD7F32")
-                    _resp_text = _skin.get_color("banner_text", "#FFF8DC")
+                    _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#CD7F32"))
+                    _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#FFF8DC"))
                 except Exception:
                     label = "⚕ Hermes"
-                    _resp_color = "#CD7F32"
-                    _resp_text = "#FFF8DC"
+                    _resp_color = _maybe_remap_for_light_mode("#CD7F32")
+                    _resp_text = _maybe_remap_for_light_mode("#FFF8DC")
 
                 is_error_response = result and (result.get("failed") or result.get("partial"))
                 already_streamed = self._stream_started and self._stream_box_opened and not is_error_response
