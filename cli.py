@@ -13105,25 +13105,29 @@ class HermesCLI:
                     """Wraps pt's _output_screen_diff to suppress the
                     reserve-vertical-space scroll (renderer.py L232-242).
 
-                    Strategy: trick the function into thinking
-                    current_height <= previous_screen.height, which makes
-                    its `if current_height > previous_screen.height` guard
-                    fall through and skip the move_cursor-to-bottom.
+                    Strategy: ONLY when previous_screen is non-None and
+                    its current height is genuinely smaller than the new
+                    screen's height, inflate it to match.  This prevents
+                    the bottom-cursor-move at L242 without changing any
+                    other code path's behavior.
 
-                    We do this by inflating previous_screen.height to be
-                    >= screen.height before passing through.
+                    Critical: do NOT replace a None previous_screen with
+                    a fresh Screen() — that would skip the proper
+                    reset_attributes()+erase_down() at L178-185 which
+                    fires when previous_screen is None (first-paint /
+                    width-change).  Without that reset, ANSI styles
+                    leak between renders.
                     """
                     try:
-                        prev = previous_screen if previous_screen is not None else Screen()
-                        if hasattr(prev, "height"):
-                            prev.height = max(prev.height, screen.height)
-                        previous_screen_arg = prev
+                        if previous_screen is not None and hasattr(previous_screen, "height"):
+                            if previous_screen.height < screen.height:
+                                previous_screen.height = screen.height
                     except Exception:
-                        previous_screen_arg = previous_screen
+                        pass
 
                     return _orig_osd(
                         app, output, screen, current_pos, color_depth,
-                        previous_screen_arg, last_style, is_done, full_screen,
+                        previous_screen, last_style, is_done, full_screen,
                         attrs_for_style_string, style_string_has_style,
                         size, previous_width,
                     )
