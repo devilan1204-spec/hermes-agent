@@ -401,18 +401,15 @@ class TestSessionSearch:
         assert result["sessions_searched"] == 1
         assert current_sid not in [r.get("session_id") for r in result.get("results", [])]
 
-    def test_default_search_returns_summary_mode_recap(self, monkeypatch):
-        """Default keyword search should run the LLM summariser path (the recall users want)."""
+    def test_default_search_returns_fast_mode_snippets(self, monkeypatch):
+        """Default keyword search runs the FTS5 snippet path (no LLM call) since fast is the unconfigured default."""
         from unittest.mock import MagicMock
         from tools.session_search_tool import session_search
 
-        async def fake_summarize(text, query, meta):
-            assert "full transcript about session_search" in text
-            assert query == "session_search"
-            return "focused default summary", None
+        async def fail_summarize(*_args, **_kwargs):
+            raise AssertionError("default (fast) mode must not call the summarizer")
 
-        monkeypatch.setattr("tools.session_search_tool._summarize_session", fake_summarize)
-        monkeypatch.setattr("model_tools._run_async", lambda coro: asyncio.run(coro))
+        monkeypatch.setattr("tools.session_search_tool._summarize_session", fail_summarize)
 
         mock_db = MagicMock()
         mock_db.search_messages.return_value = [
@@ -431,22 +428,16 @@ class TestSessionSearch:
             },
         ]
         mock_db.get_session.return_value = {"parent_session_id": None, "title": "Latency debug", "source": "cli", "started_at": 1709400000}
-        mock_db.get_messages_as_conversation.return_value = [
-            {"role": "user", "content": "full transcript about session_search"},
-        ]
 
         result = json.loads(session_search(query="session_search", db=mock_db))
 
         assert result["success"] is True
-        assert result["mode"] == "summary"
+        assert result["mode"] == "fast"
         assert result["count"] == 1
         entry = result["results"][0]
-        assert entry["summary"] == "focused default summary"
-        assert entry["model"] == "test-model"
-        # Summary mode does NOT include snippet/context fields — only the metadata + summary
-        assert "snippet" not in entry
-        assert "context" not in entry
-        mock_db.get_messages_as_conversation.assert_called_once_with("other_sid")
+        # Fast mode includes snippet + context (the signal callers anchor on)
+        assert "snippet" in entry
+        assert entry["match_message_id"] == 123
 
     def test_explicit_fast_mode_returns_snippets_without_llm_or_full_session_load(self, monkeypatch):
         """mode='fast' stays on the DB/snippet path and avoids LLM latency."""
@@ -545,31 +536,29 @@ class TestSessionSearch:
         assert result["results"][0]["summary"] == "alias summary"
 
     @pytest.mark.parametrize("mode", ["", "unknown", 42, True, None])
-    def test_invalid_or_empty_mode_falls_back_to_summary(self, monkeypatch, mode):
-        """Loose tool-call args should degrade to summary mode (the safe default)."""
+    def test_invalid_or_empty_mode_falls_back_to_resolved_default(self, monkeypatch, mode):
+        """Loose tool-call args fall back to the user-configured default (fast when no config)."""
         from unittest.mock import MagicMock
-        from tools.session_search_tool import session_search
+        from tools.session_search_tool import session_search, _resolve_user_default_mode
 
-        async def fake_summarize(_text, _query, _meta):
-            return "fallback summary", None
+        # Ensure clean cache so the resolver sees the test's monkeypatched config (or lack thereof).
+        _resolve_user_default_mode.cache_clear()
 
-        monkeypatch.setattr("tools.session_search_tool._summarize_session", fake_summarize)
-        monkeypatch.setattr("model_tools._run_async", lambda coro: asyncio.run(coro))
+        async def fail_summarize(*_args, **_kwargs):
+            raise AssertionError("default fallback (fast) must not call the summarizer")
+
+        monkeypatch.setattr("tools.session_search_tool._summarize_session", fail_summarize)
 
         mock_db = MagicMock()
         mock_db.search_messages.return_value = [
-            {"session_id": "sid", "snippet": "hit", "context": "not-a-list", "source": "cli"},
+            {"id": 1, "session_id": "sid", "snippet": "hit", "context": [], "source": "cli"},
         ]
         mock_db.get_session.return_value = {"parent_session_id": None, "source": "cli"}
-        mock_db.get_messages_as_conversation.return_value = [
-            {"role": "user", "content": "transcript"},
-        ]
 
         result = json.loads(session_search(query="session_search", db=mock_db, mode=mode))
 
         assert result["success"] is True
-        assert result["mode"] == "summary"
-        assert result["results"][0]["summary"] == "fallback summary"
+        assert result["mode"] == "fast"
 
     def test_fast_mode_tolerates_session_metadata_lookup_failure(self):
         """Fast mode should still return the FTS hit when parent metadata is unavailable."""
@@ -825,7 +814,7 @@ class TestSessionSearch:
         result = json.loads(session_search("session_search", None, 3, mock_db, None))
 
         assert result["success"] is True
-        assert result["mode"] == "summary"
+        assert result["mode"] == "fast"
         mock_db.search_messages.assert_called_once()
 
     def test_run_agent_special_session_search_paths_forward_mode(self):
@@ -921,14 +910,14 @@ class TestSessionSearch:
         from tools.session_search_tool import _resolve_user_default_mode
         _resolve_user_default_mode.cache_clear()
 
-    def test_unset_mode_falls_back_to_summary_when_config_missing(self, monkeypatch):
-        """With no config, an unset mode resolves to 'summary'."""
+    def test_unset_mode_falls_back_to_fast_when_config_missing(self, monkeypatch):
+        """With no config, an unset mode resolves to 'fast'."""
         from tools.session_search_tool import _resolve_user_default_mode
         self._clear_default_mode_cache()
         # Force load_config import to fail → fallback path.
         import sys
         monkeypatch.setitem(sys.modules, "hermes_cli.config", None)
-        assert _resolve_user_default_mode() == "summary"
+        assert _resolve_user_default_mode() == "fast"
 
     def test_user_can_configure_fast_as_default(self, monkeypatch):
         """auxiliary.session_search.default_mode: fast → unset mode resolves to 'fast'."""
@@ -951,7 +940,7 @@ class TestSessionSearch:
         assert _resolve_user_default_mode() == "summary"
 
     def test_invalid_default_mode_warns_and_falls_back(self, monkeypatch, caplog):
-        """Typo'd / unknown value logs a warning and falls back to 'summary'."""
+        """Typo'd / unknown value logs a warning and falls back to 'fast'."""
         from tools.session_search_tool import _resolve_user_default_mode
         import logging
         self._clear_default_mode_cache()
@@ -960,19 +949,19 @@ class TestSessionSearch:
             lambda: {"auxiliary": {"session_search": {"default_mode": "smary"}}},
         )
         with caplog.at_level(logging.WARNING):
-            assert _resolve_user_default_mode() == "summary"
+            assert _resolve_user_default_mode() == "fast"
         # User sees feedback about the typo.
         assert any("smary" in rec.message for rec in caplog.records)
 
     def test_guided_as_default_mode_is_rejected(self, monkeypatch):
-        """guided requires anchors and can't be a standalone default — falls back to 'summary'."""
+        """guided requires anchors and can't be a standalone default — falls back to 'fast'."""
         from tools.session_search_tool import _resolve_user_default_mode
         self._clear_default_mode_cache()
         monkeypatch.setattr(
             "hermes_cli.config.load_config",
             lambda: {"auxiliary": {"session_search": {"default_mode": "guided"}}},
         )
-        assert _resolve_user_default_mode() == "summary"
+        assert _resolve_user_default_mode() == "fast"
 
     def test_non_string_default_mode_falls_back(self, monkeypatch):
         """Bogus types (int, dict, etc.) in YAML fall back gracefully, no crash."""
@@ -984,7 +973,7 @@ class TestSessionSearch:
                 lambda b=bad: {"auxiliary": {"session_search": {"default_mode": b}}},
             )
             self._clear_default_mode_cache()
-            assert _resolve_user_default_mode() == "summary", f"bad value {bad!r} should fall back"
+            assert _resolve_user_default_mode() == "fast", f"bad value {bad!r} should fall back"
 
     def test_explicit_mode_argument_overrides_user_default(self, monkeypatch):
         """User config sets fast-as-default, but explicit mode='summary' still wins."""

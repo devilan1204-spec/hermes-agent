@@ -25,7 +25,7 @@ from agent.auxiliary_client import async_call_llm, extract_content_or_reasoning
 MAX_SESSION_CHARS = 100_000
 
 
-# Default mode is summary unless the user opts into a different one via
+# Default mode is fast unless the user opts into a different one via
 # ``auxiliary.session_search.default_mode`` in ~/.hermes/config.yaml. Lives
 # alongside the other session_search-scoped knobs (provider, model,
 # max_concurrency) — "auxiliary" started as aux-LLM routing but in practice
@@ -40,7 +40,7 @@ _VALID_DEFAULT_MODES = ("fast", "summary")
 def _resolve_user_default_mode() -> str:
     """Look up ``auxiliary.session_search.default_mode`` from ~/.hermes/config.yaml.
 
-    Returns "summary" if unset, invalid, or the config loader is unavailable
+    Returns "fast" if unset, invalid, or the config loader is unavailable
     (e.g. tests, tools loaded outside the CLI). Logs a one-time warning on
     invalid values so users get feedback when they typo their config.
     """
@@ -48,11 +48,11 @@ def _resolve_user_default_mode() -> str:
         from hermes_cli.config import load_config
         config = load_config() or {}
     except ImportError:
-        logging.debug("hermes_cli.config not available; default_mode falls back to 'summary'")
-        return "summary"
+        logging.debug("hermes_cli.config not available; default_mode falls back to 'fast'")
+        return "fast"
     except Exception as e:
         logging.debug("Failed to load config for session_search default_mode: %s", e, exc_info=True)
-        return "summary"
+        return "fast"
 
     raw = (
         config.get("auxiliary", {})
@@ -60,21 +60,21 @@ def _resolve_user_default_mode() -> str:
         .get("default_mode")
     )
     if raw is None:
-        return "summary"
+        return "fast"
     if not isinstance(raw, str):
         logging.warning(
-            "auxiliary.session_search.default_mode in config.yaml must be a string, got %r — falling back to 'summary'",
+            "auxiliary.session_search.default_mode in config.yaml must be a string, got %r — falling back to 'fast'",
             raw,
         )
-        return "summary"
+        return "fast"
     normalised = raw.strip().lower()
     if normalised not in _VALID_DEFAULT_MODES:
         logging.warning(
-            "auxiliary.session_search.default_mode=%r is not one of %s — falling back to 'summary'. "
+            "auxiliary.session_search.default_mode=%r is not one of %s — falling back to 'fast'. "
             "(guided requires anchors and cannot be a default.)",
             raw, _VALID_DEFAULT_MODES,
         )
-        return "summary"
+        return "fast"
     return normalised
 
 
@@ -815,9 +815,11 @@ def session_search(
 
     # Mode normalisation. ``None`` / empty string / non-string → fall back to
     # the user's configured default (via ~/.hermes/config.yaml, see
-    # ``_resolve_user_default_mode``). Defaults to "summary" if unset. We only
-    # resolve the user default when the caller didn't pass an explicit mode —
-    # an explicit "fast" or "summary" or "guided" wins regardless of config.
+    # ``_resolve_user_default_mode``). Defaults to "fast" if unset. An explicit
+    # "fast" / "summary" / "guided" wins regardless of config. An unknown
+    # string also falls back to the resolved user default rather than silently
+    # coercing to a hard-coded mode — silent coercion of typos would otherwise
+    # mask user errors.
     if not isinstance(mode, str) or not mode.strip():
         mode = _resolve_user_default_mode()
     else:
@@ -827,7 +829,7 @@ def session_search(
     if mode in ("drill", "drilldown", "drill-down", "anchor", "around"):
         mode = "guided"
     if mode not in ("fast", "summary", "guided"):
-        mode = "summary"
+        mode = _resolve_user_default_mode()
 
     # Normalise sort. Only "newest" / "oldest" are accepted; anything else
     # (including None) collapses to None = FTS5 rank-only ordering, which is
