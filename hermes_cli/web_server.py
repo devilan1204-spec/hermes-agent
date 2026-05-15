@@ -253,6 +253,41 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def api_error_logging_middleware(request: Request, call_next):
+    """Emit compact diagnostics for API failures and crashes."""
+    path = request.url.path
+    is_api = path.startswith("/api/")
+    start = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        if is_api:
+            _log.exception("api-crash method=%s path=%s", request.method, path)
+        raise
+
+    if is_api:
+        elapsed_ms = (time.monotonic() - start) * 1000
+        status = int(response.status_code)
+        if status >= 500:
+            _log.error(
+                "api-failure method=%s path=%s status=%d elapsed_ms=%.1f",
+                request.method,
+                path,
+                status,
+                elapsed_ms,
+            )
+        elif status >= 400 and status not in {401, 403}:
+            _log.warning(
+                "api-failure method=%s path=%s status=%d elapsed_ms=%.1f",
+                request.method,
+                path,
+                status,
+                elapsed_ms,
+            )
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Config schema — auto-generated from DEFAULT_CONFIG
 # ---------------------------------------------------------------------------
@@ -3950,6 +3985,15 @@ def _ws_client_is_allowed(ws: "WebSocket") -> bool:
         return True
     return client_host in _LOOPBACK_HOSTS
 
+
+def _ws_client_label(ws: "WebSocket") -> str:
+    """Best-effort peer label for websocket diagnostics."""
+    if ws.client is None:
+        return "unknown"
+    host = ws.client.host or "unknown"
+    port = ws.client.port
+    return f"{host}:{port}" if port is not None else host
+
 # Per-channel subscriber registry used by /api/pub (PTY-side gateway → dashboard)
 # and /api/events (dashboard → browser sidebar).  Keyed by an opaque channel id
 # the chat tab generates on mount; entries auto-evict when the last subscriber
@@ -4045,10 +4089,10 @@ async def _broadcast_event(channel: str, payload: str) -> None:
     for sub in subs:
         try:
             await sub.send_text(payload)
-        except Exception:
+        except Exception as exc:
             # Subscriber went away mid-send; the /api/events finally clause
             # will remove it from the registry on its next iteration.
-            pass
+            _log.debug("event broadcast drop channel=%s error=%s", channel, exc)
 
 
 def _channel_or_close_code(ws: WebSocket) -> Optional[str]:
@@ -4060,7 +4104,9 @@ def _channel_or_close_code(ws: WebSocket) -> Optional[str]:
 
 @app.websocket("/api/pty")
 async def pty_ws(ws: WebSocket) -> None:
+    peer = _ws_client_label(ws)
     if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
+        _log.debug("pty-ws reject peer=%s reason=embedded_chat_disabled", peer)
         await ws.close(code=4403)
         return
 
@@ -4068,10 +4114,12 @@ async def pty_ws(ws: WebSocket) -> None:
     token = ws.query_params.get("token", "")
     expected = _SESSION_TOKEN
     if not hmac.compare_digest(token.encode(), expected.encode()):
+        _log.warning("pty-ws reject peer=%s reason=bad_token", peer)
         await ws.close(code=4401)
         return
 
     if not _ws_client_is_allowed(ws):
+        _log.warning("pty-ws reject peer=%s reason=non_loopback_client", peer)
         await ws.close(code=4403)
         return
 
@@ -4080,6 +4128,7 @@ async def pty_ws(ws: WebSocket) -> None:
     # On native Windows, the POSIX PTY bridge can't be imported.  Tell the
     # client and close cleanly rather than pretending the feature works.
     if not _PTY_BRIDGE_AVAILABLE:
+        _log.warning("pty-ws unavailable peer=%s reason=pty_bridge_missing", peer)
         await ws.send_text(
             "\r\n\x1b[31mChat unavailable: the embedded terminal requires a "
             "POSIX PTY, which native Windows Python doesn't provide.\x1b[0m\r\n"
@@ -4093,43 +4142,68 @@ async def pty_ws(ws: WebSocket) -> None:
     resume = ws.query_params.get("resume") or None
     channel = _channel_or_close_code(ws)
     sidecar_url = _build_sidecar_url(channel) if channel else None
+    _log.info(
+        "pty-ws connect peer=%s resume=%s channel=%s",
+        peer,
+        bool(resume),
+        channel or "-",
+    )
 
     try:
         argv, cwd, env = _resolve_chat_argv(resume=resume, sidecar_url=sidecar_url)
     except SystemExit as exc:
         # _make_tui_argv calls sys.exit(1) when node/npm is missing.
+        _log.warning("pty-ws argv resolution failed peer=%s error=%s", peer, exc)
         await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc}\x1b[0m\r\n")
         await ws.close(code=1011)
         return
 
+    _log.debug(
+        "pty-ws spawn peer=%s argv0=%s cwd=%s sidecar=%s",
+        peer,
+        argv[0] if argv else "",
+        cwd,
+        bool(sidecar_url),
+    )
 
     try:
         bridge = PtyBridge.spawn(argv, cwd=cwd, env=env)
     except PtyUnavailableError as exc:
+        _log.warning("pty-ws spawn unavailable peer=%s error=%s", peer, exc)
         await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc}\x1b[0m\r\n")
         await ws.close(code=1011)
         return
     except (FileNotFoundError, OSError) as exc:
+        _log.exception("pty-ws spawn failed peer=%s", peer)
         await ws.send_text(f"\r\n\x1b[31mChat failed to start: {exc}\x1b[0m\r\n")
         await ws.close(code=1011)
         return
 
+    _log.info("pty-ws spawned peer=%s pid=%s", peer, bridge.pid)
     loop = asyncio.get_running_loop()
+    bytes_to_client = 0
+    bytes_to_pty = 0
+    resize_events = 0
+    disconnect_reason = "closed"
 
     # --- reader task: PTY master → WebSocket ----------------------------
     async def pump_pty_to_ws() -> None:
+        nonlocal bytes_to_client, disconnect_reason
         while True:
             chunk = await loop.run_in_executor(
                 None, bridge.read, _PTY_READ_CHUNK_TIMEOUT
             )
             if chunk is None:  # EOF
+                disconnect_reason = "pty_eof"
                 return
             if not chunk:  # no data this tick; yield control and retry
                 await asyncio.sleep(0)
                 continue
+            bytes_to_client += len(chunk)
             try:
                 await ws.send_bytes(chunk)
             except Exception:
+                disconnect_reason = "ws_send_failed"
                 return
 
     reader_task = asyncio.create_task(pump_pty_to_ws())
@@ -4140,6 +4214,7 @@ async def pty_ws(ws: WebSocket) -> None:
             msg = await ws.receive()
             msg_type = msg.get("type")
             if msg_type == "websocket.disconnect":
+                disconnect_reason = "ws_disconnect"
                 break
             raw = msg.get("bytes")
             if raw is None:
@@ -4154,11 +4229,13 @@ async def pty_ws(ws: WebSocket) -> None:
                 cols = int(match.group(1))
                 rows = int(match.group(2))
                 bridge.resize(cols=cols, rows=rows)
+                resize_events += 1
                 continue
 
             bridge.write(raw)
+            bytes_to_pty += len(raw)
     except WebSocketDisconnect:
-        pass
+        disconnect_reason = "ws_disconnect"
     finally:
         reader_task.cancel()
         try:
@@ -4166,6 +4243,15 @@ async def pty_ws(ws: WebSocket) -> None:
         except (asyncio.CancelledError, Exception):
             pass
         bridge.close()
+        _log.info(
+            "pty-ws closed peer=%s pid=%s reason=%s bytes_out=%d bytes_in=%d resizes=%d",
+            peer,
+            bridge.pid,
+            disconnect_reason,
+            bytes_to_client,
+            bytes_to_pty,
+            resize_events,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -4181,22 +4267,34 @@ async def pty_ws(ws: WebSocket) -> None:
 
 @app.websocket("/api/ws")
 async def gateway_ws(ws: WebSocket) -> None:
+    peer = _ws_client_label(ws)
     if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
+        _log.debug("gateway-ws reject peer=%s reason=embedded_chat_disabled", peer)
         await ws.close(code=4403)
         return
 
     token = ws.query_params.get("token", "")
     if not hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        _log.warning("gateway-ws reject peer=%s reason=bad_token", peer)
         await ws.close(code=4401)
         return
 
     if not _ws_client_is_allowed(ws):
+        _log.warning("gateway-ws reject peer=%s reason=non_loopback_client", peer)
         await ws.close(code=4403)
         return
 
     from tui_gateway.ws import handle_ws
-
-    await handle_ws(ws)
+    _log.info("gateway-ws connect peer=%s", peer)
+    try:
+        await handle_ws(ws)
+    except WebSocketDisconnect:
+        _log.info("gateway-ws disconnect peer=%s", peer)
+    except Exception:
+        _log.exception("gateway-ws error peer=%s", peer)
+        raise
+    else:
+        _log.info("gateway-ws closed peer=%s", peer)
 
 
 # ---------------------------------------------------------------------------
@@ -4213,54 +4311,69 @@ async def gateway_ws(ws: WebSocket) -> None:
 
 @app.websocket("/api/pub")
 async def pub_ws(ws: WebSocket) -> None:
+    peer = _ws_client_label(ws)
     if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
+        _log.debug("pub-ws reject peer=%s reason=embedded_chat_disabled", peer)
         await ws.close(code=4403)
         return
 
     token = ws.query_params.get("token", "")
     if not hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        _log.warning("pub-ws reject peer=%s reason=bad_token", peer)
         await ws.close(code=4401)
         return
 
     if not _ws_client_is_allowed(ws):
+        _log.warning("pub-ws reject peer=%s reason=non_loopback_client", peer)
         await ws.close(code=4403)
         return
 
     channel = _channel_or_close_code(ws)
     if not channel:
+        _log.warning("pub-ws reject peer=%s reason=invalid_channel", peer)
         await ws.close(code=4400)
         return
 
     await ws.accept()
+    _log.info("pub-ws connect peer=%s channel=%s", peer, channel)
+    messages = 0
 
     try:
         while True:
-            await _broadcast_event(channel, await ws.receive_text())
+            payload = await ws.receive_text()
+            messages += 1
+            await _broadcast_event(channel, payload)
     except WebSocketDisconnect:
-        pass
+        _log.info("pub-ws disconnect peer=%s channel=%s messages=%d", peer, channel, messages)
 
 
 @app.websocket("/api/events")
 async def events_ws(ws: WebSocket) -> None:
+    peer = _ws_client_label(ws)
     if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
+        _log.debug("events-ws reject peer=%s reason=embedded_chat_disabled", peer)
         await ws.close(code=4403)
         return
 
     token = ws.query_params.get("token", "")
     if not hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        _log.warning("events-ws reject peer=%s reason=bad_token", peer)
         await ws.close(code=4401)
         return
 
     if not _ws_client_is_allowed(ws):
+        _log.warning("events-ws reject peer=%s reason=non_loopback_client", peer)
         await ws.close(code=4403)
         return
 
     channel = _channel_or_close_code(ws)
     if not channel:
+        _log.warning("events-ws reject peer=%s reason=invalid_channel", peer)
         await ws.close(code=4400)
         return
 
     await ws.accept()
+    _log.info("events-ws connect peer=%s channel=%s", peer, channel)
 
     async with _event_lock:
         _event_channels.setdefault(channel, set()).add(ws)
@@ -4272,7 +4385,7 @@ async def events_ws(ws: WebSocket) -> None:
             # browser holds it.
             await ws.receive_text()
     except WebSocketDisconnect:
-        pass
+        _log.info("events-ws disconnect peer=%s channel=%s", peer, channel)
     finally:
         async with _event_lock:
             subs = _event_channels.get(channel)
@@ -5175,6 +5288,14 @@ def start_server(
     embedded_chat: bool = False,
 ):
     """Start the web UI server."""
+    try:
+        from hermes_logging import setup_logging as _setup_logging
+
+        log_dir = _setup_logging(mode="gui")
+        _log.info("GUI logging enabled: %s", log_dir / "gui.log")
+    except Exception:
+        pass
+
     import uvicorn
 
     global _DASHBOARD_EMBEDDED_CHAT_ENABLED
@@ -5231,5 +5352,12 @@ def start_server(
                 "(headless Linux). Pass --no-open to suppress this detection."
             )
 
+    _log.info(
+        "dashboard starting host=%s port=%s embedded_chat=%s open_browser=%s",
+        host,
+        port,
+        embedded_chat,
+        open_browser,
+    )
     print(f"  Hermes Web UI → http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="warning")

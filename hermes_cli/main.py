@@ -9421,6 +9421,14 @@ def cmd_dashboard(args):
         remaining = _find_stale_dashboard_pids()
         sys.exit(1 if remaining else 0)
 
+    # Attach gui.log early so dashboard startup/build failures are captured in
+    # the same logs directory as every other Hermes surface.
+    try:
+        from hermes_logging import setup_logging as _setup_logging_gui
+        _setup_logging_gui(mode="gui")
+    except Exception:
+        pass
+
     try:
         import fastapi  # noqa: F401
         import uvicorn  # noqa: F401
@@ -12097,7 +12105,7 @@ Examples:
     logs_parser = subparsers.add_parser(
         "logs",
         help="View and filter Hermes log files",
-        description="View, tail, and filter agent.log / errors.log / gateway.log",
+        description="View, tail, and filter agent.log / errors.log / gateway.log / gui.log",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Examples:
@@ -12105,6 +12113,7 @@ Examples:
     hermes logs -f                 Follow agent.log in real time
     hermes logs errors             Show last 50 lines of errors.log
     hermes logs gateway -n 100     Show last 100 lines of gateway.log
+    hermes logs gui -f             Follow gui.log in real time
     hermes logs --level WARNING    Only show WARNING and above
     hermes logs --session abc123   Filter by session ID
     hermes logs --component tools  Only show tool-related lines
@@ -12117,7 +12126,7 @@ Examples:
         "log_name",
         nargs="?",
         default="agent",
-        help="Log to view: agent (default), errors, gateway, or 'list' to show available files",
+        help="Log to view: agent (default), errors, gateway, gui, or 'list' to show available files",
     )
     logs_parser.add_argument(
         "-n",
@@ -12150,7 +12159,7 @@ Examples:
     logs_parser.add_argument(
         "--component",
         metavar="NAME",
-        help="Filter by component: gateway, agent, tools, cli, cron",
+        help="Filter by component: gateway, agent, tools, cli, cron, gui",
     )
     logs_parser.set_defaults(func=cmd_logs)
 
