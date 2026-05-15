@@ -13135,21 +13135,27 @@ class HermesCLI:
         _original_on_resize = app._on_resize
 
         def _resize_clear_ghosts():
-            # Re-set scroll region for new viewport size, then erase the
-            # region's contents using \x1b[J (erase from cursor to end of
-            # screen).  Unlike \x1b[2J, \x1b[J does NOT push erased content
-            # to terminal scrollback — verified empirically.  This wipes
-            # the old reflowed chrome WITHOUT polluting history.  Tell pt
-            # to do a full redraw by clearing its diff cache, then call
-            # pt's native _on_resize directly to repaint.
+            # Re-set scroll region for new viewport size, then erase ONLY
+            # the bottom chrome rows (status bar + 2 separator rules +
+            # input area + a couple of safety rows = ~6 rows max).  This
+            # leaves chat output intact while wiping any ghost chrome
+            # rows that the column-shrink reflow left visible.
+            #
+            # \x1b[2K erases a single line (no scrollback push).  We
+            # walk up from the bottom for CHROME_ROWS rows, erasing each.
             _set_scroll_region()
             try:
                 size = _output_obj.get_size()
-                _output_obj.write_raw(
-                    "\x1b[2;1H"                  # cursor to row 2 (inside region)
-                    "\x1b[0J"                    # erase from cursor to end of screen
-                    f"\x1b[{size.rows};1H"       # cursor to bottom row, col 1
-                )
+                CHROME_ROWS = 8  # generous: chrome + reflow slack
+                start_row = max(2, size.rows - CHROME_ROWS + 1)
+                # Position cursor at the top of the chrome band, then
+                # for each row: erase entire line, move down.
+                buf = []
+                for i, row in enumerate(range(start_row, size.rows + 1)):
+                    buf.append(f"\x1b[{row};1H\x1b[2K")
+                # Park cursor at bottom row so pt's repaint anchors there.
+                buf.append(f"\x1b[{size.rows};1H")
+                _output_obj.write_raw("".join(buf))
                 _output_obj.flush()
                 try:
                     from prompt_toolkit.data_structures import Point
