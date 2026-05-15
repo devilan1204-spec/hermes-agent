@@ -1022,6 +1022,68 @@ class TestSessionSearch:
         assert result["mode"] == "fast"
         assert result["count"] == 1
 
+    def test_bogus_mode_string_falls_back_to_resolved_default_with_no_config(self, monkeypatch):
+        """Unknown mode= string at the dispatch site falls back via the resolver, not a hardcoded literal.
+
+        With no config (resolver returns the fallback default), a bogus mode like
+        ``mode='garbage'`` lands on the fallback. This proves the dispatch site
+        actually calls the resolver rather than hardcoding any specific mode.
+        """
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        self._clear_default_mode_cache()
+        # Force the config loader to be unavailable so the resolver uses its fallback.
+        import sys
+        monkeypatch.setitem(sys.modules, "hermes_cli.config", None)
+
+        async def fail_summarize(*_args, **_kwargs):
+            raise AssertionError("fallback (fast) must not invoke the summariser")
+        monkeypatch.setattr("tools.session_search_tool._summarize_session", fail_summarize)
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = [
+            {"session_id": "sid", "id": 1, "snippet": "hit", "context": [], "source": "cli"},
+        ]
+        mock_db.get_session.return_value = {"parent_session_id": None, "source": "cli"}
+
+        result = json.loads(session_search(query="x", db=mock_db, mode="garbage"))
+        # With no config, resolver returns "fast" — same as the documented fallback.
+        assert result["mode"] == "fast"
+
+    def test_bogus_mode_string_respects_config_default_summary(self, monkeypatch):
+        """If the user configured default_mode=summary, an unknown mode= argument lands on summary.
+
+        This is the corollary to the previous test: the dispatch-site invalid-mode
+        coercion uses the user's configured default, not a hardcoded literal.
+        """
+        from unittest.mock import MagicMock
+        from tools.session_search_tool import session_search
+
+        self._clear_default_mode_cache()
+        monkeypatch.setattr(
+            "hermes_cli.config.load_config",
+            lambda: {"auxiliary": {"session_search": {"default_mode": "summary"}}},
+        )
+
+        async def fake_summarize(*_args, **_kwargs):
+            return "summary text", None
+        monkeypatch.setattr("tools.session_search_tool._summarize_session", fake_summarize)
+        monkeypatch.setattr("model_tools._run_async", lambda coro: asyncio.run(coro))
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = [
+            {"session_id": "sid", "source": "cli", "session_started": 1709400000, "model": "m"},
+        ]
+        mock_db.get_session.return_value = {"parent_session_id": None, "source": "cli", "started_at": 1709400000}
+        mock_db.get_messages_as_conversation.return_value = [
+            {"role": "user", "content": "transcript"},
+        ]
+
+        result = json.loads(session_search(query="x", db=mock_db, mode="garbage"))
+        # Resolver said summary; dispatch site should honour it for unknown modes too.
+        assert result["mode"] == "summary"
+
     def test_current_child_session_excludes_parent_lineage(self):
         """Compression/delegation parents should be excluded for the active child session."""
         from unittest.mock import MagicMock

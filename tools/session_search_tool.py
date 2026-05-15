@@ -35,24 +35,26 @@ MAX_SESSION_CHARS = 100_000
 # the CLI / TUI is the typical caller and config changes need a restart
 # anyway.
 _VALID_DEFAULT_MODES = ("fast", "summary")
+_FALLBACK_DEFAULT_MODE = "fast"
 
 
 def _resolve_user_default_mode() -> str:
     """Look up ``auxiliary.session_search.default_mode`` from ~/.hermes/config.yaml.
 
-    Returns "fast" if unset, invalid, or the config loader is unavailable
-    (e.g. tests, tools loaded outside the CLI). Logs a one-time warning on
-    invalid values so users get feedback when they typo their config.
+    Returns ``_FALLBACK_DEFAULT_MODE`` (``"fast"``) if unset, invalid, or the
+    config loader is unavailable (e.g. tests, tools loaded outside the CLI).
+    Logs a one-time warning on invalid values so users get feedback when they
+    typo their config.
     """
     try:
         from hermes_cli.config import load_config
         config = load_config() or {}
     except ImportError:
-        logging.debug("hermes_cli.config not available; default_mode falls back to 'fast'")
-        return "fast"
+        logging.debug("hermes_cli.config not available; default_mode falls back to %r", _FALLBACK_DEFAULT_MODE)
+        return _FALLBACK_DEFAULT_MODE
     except Exception as e:
         logging.debug("Failed to load config for session_search default_mode: %s", e, exc_info=True)
-        return "fast"
+        return _FALLBACK_DEFAULT_MODE
 
     raw = (
         config.get("auxiliary", {})
@@ -60,21 +62,21 @@ def _resolve_user_default_mode() -> str:
         .get("default_mode")
     )
     if raw is None:
-        return "fast"
+        return _FALLBACK_DEFAULT_MODE
     if not isinstance(raw, str):
         logging.warning(
-            "auxiliary.session_search.default_mode in config.yaml must be a string, got %r — falling back to 'fast'",
-            raw,
+            "auxiliary.session_search.default_mode in config.yaml must be a string, got %r — falling back to %r",
+            raw, _FALLBACK_DEFAULT_MODE,
         )
-        return "fast"
+        return _FALLBACK_DEFAULT_MODE
     normalised = raw.strip().lower()
     if normalised not in _VALID_DEFAULT_MODES:
         logging.warning(
-            "auxiliary.session_search.default_mode=%r is not one of %s — falling back to 'fast'. "
+            "auxiliary.session_search.default_mode=%r is not one of %s — falling back to %r. "
             "(guided requires anchors and cannot be a default.)",
-            raw, _VALID_DEFAULT_MODES,
+            raw, _VALID_DEFAULT_MODES, _FALLBACK_DEFAULT_MODE,
         )
-        return "fast"
+        return _FALLBACK_DEFAULT_MODE
     return normalised
 
 
