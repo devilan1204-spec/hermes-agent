@@ -444,6 +444,10 @@ prompt_caching:
 #     model: ""
 #     timeout: 30
 #     max_concurrency: 3    # Limit parallel summaries to reduce request-burst 429s
+#     default_mode: "fast"  # 'fast' | 'summary' — mode used when caller passes none.
+#                           # fast: FTS5 snippet hits, no LLM call. Default.
+#                           # summary: LLM-generated prose synthesis across hits.
+#                           # guided requires anchors and cannot be a default.
 #     extra_body: {}        # Provider-specific OpenAI-compatible request fields
 #                           # Example for providers that support request-body
 #                           # reasoning controls:
