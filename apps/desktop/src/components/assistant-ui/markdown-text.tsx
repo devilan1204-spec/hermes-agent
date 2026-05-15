@@ -53,9 +53,8 @@ function CodeHeader({ language, code }: { language?: string; code?: string }) {
   const label = cleanLanguage && cleanLanguage !== 'unknown' ? cleanLanguage : ''
 
   return (
-    <div className="m-0 flex items-stretch justify-between gap-2 rounded-t-md border border-b-0 border-border bg-muted/60 pr-3 text-xs text-muted-foreground">
-      <span className="flex items-center gap-2.5 py-1.5 pl-0 font-mono uppercase tracking-[0.16em]">
-        <span aria-hidden="true" className="self-stretch w-[2px] -my-1.5 bg-midground/60" />
+    <div className="aui-code-header m-0 flex items-stretch justify-between gap-2 rounded-t-md border border-b-0 border-border bg-muted/60 pr-3 text-xs text-muted-foreground">
+      <span className="flex items-center gap-2.5 py-1.5 pl-3 font-mono uppercase tracking-[0.16em]">
         <span className="text-midground/85">{label || 'code'}</span>
       </span>
       <CopyButton appearance="inline" iconClassName="size-3" label="Copy code" text={normalizedCode}>
@@ -288,10 +287,10 @@ const MarkdownTextImpl = () => {
           <li className={cn('leading-(--dt-line-height)', className)} {...props} />
         ),
         table: ({ className, ...props }: ComponentProps<'table'>) => (
-          <div className="max-w-full overflow-x-auto rounded-md border border-border">
+          <div className="aui-md-table my-3 max-w-full overflow-x-auto rounded-md border border-border">
             <table
               className={cn(
-                'w-full border-collapse text-sm [&_tr]:border-b [&_tr]:border-border last:[&_tr]:border-0',
+                'm-0 w-full border-collapse text-sm [&_tr]:border-b [&_tr]:border-border last:[&_tr]:border-0',
                 className
               )}
               {...props}
@@ -299,12 +298,12 @@ const MarkdownTextImpl = () => {
           </div>
         ),
         thead: ({ className, ...props }: ComponentProps<'thead'>) => (
-          <thead className={cn('bg-muted/50 text-foreground', className)} {...props} />
+          <thead className={cn('m-0 bg-muted/50 text-foreground', className)} {...props} />
         ),
         th: ({ className, ...props }: ComponentProps<'th'>) => (
           <th
             className={cn(
-              'h-9 px-3 text-left align-middle text-xs font-semibold uppercase tracking-[0.16em] text-midground/75',
+              'px-3 py-1.5 text-left align-middle text-xs font-semibold uppercase tracking-[0.16em] text-midground/75',
               className
             )}
             {...props}

@@ -352,6 +352,44 @@ function rememberLog(chunk) {
   scheduleDesktopLogFlush()
 }
 
+function openExternalUrl(rawUrl) {
+  const raw = String(rawUrl || '').trim()
+  if (!raw) return false
+
+  let parsed
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return false
+  }
+
+  if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+    return false
+  }
+
+  const url = parsed.toString()
+
+  if (IS_WSL) {
+    rememberLog(`[link] opening via WSL→Windows: ${url}`)
+    const proc = spawn('cmd.exe', ['/c', 'start', '""', url], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    })
+    proc.on('error', error => {
+      rememberLog(`[link] cmd.exe start failed: ${error.message}; falling back to xdg-open`)
+      shell.openExternal(url).catch(fallback => rememberLog(`[link] xdg-open failed: ${fallback.message}`))
+    })
+    proc.unref()
+
+    return true
+  }
+
+  shell.openExternal(url).catch(error => rememberLog(`[link] openExternal failed: ${error.message}`))
+
+  return true
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -2067,7 +2105,7 @@ function installContextMenu(window) {
           label: 'Open Image',
           click: () => {
             if (params.srcURL && !params.srcURL.startsWith('data:')) {
-              void shell.openExternal(params.srcURL)
+              openExternalUrl(params.srcURL)
             }
           },
           enabled: !params.srcURL.startsWith('data:')
@@ -2096,7 +2134,7 @@ function installContextMenu(window) {
       template.push(
         {
           label: 'Open Link',
-          click: () => void shell.openExternal(params.linkURL)
+          click: () => openExternalUrl(params.linkURL)
         },
         {
           label: 'Copy Link',
@@ -2570,6 +2608,19 @@ function createWindow() {
   installPreviewShortcut(mainWindow)
   installDevToolsShortcut(mainWindow)
   installContextMenu(mainWindow)
+  mainWindow.webContents.setWindowOpenHandler(details => {
+    openExternalUrl(details.url)
+
+    return { action: 'deny' }
+  })
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if ((DEV_SERVER && url.startsWith(DEV_SERVER)) || (!DEV_SERVER && url.startsWith('file:'))) {
+      return
+    }
+
+    event.preventDefault()
+    openExternalUrl(url)
+  })
 
   if (DEV_SERVER) {
     mainWindow.loadURL(DEV_SERVER)
@@ -2731,7 +2782,11 @@ ipcMain.on('hermes:titlebar-theme', (_event, payload) => {
   mainWindow?.setTitleBarOverlay?.(getTitleBarOverlayOptions())
 })
 
-ipcMain.handle('hermes:openExternal', (_event, url) => shell.openExternal(url))
+ipcMain.handle('hermes:openExternal', (_event, url) => {
+  if (!openExternalUrl(url)) {
+    throw new Error('Invalid external URL')
+  }
+})
 
 ipcMain.handle('hermes:fetchLinkTitle', (_event, url) => fetchLinkTitle(url))
 

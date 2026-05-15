@@ -1,14 +1,13 @@
 import { useStore } from '@nanostores/react'
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import type { CommandCenterSection } from '@/app/command-center'
 import { GatewayMenuPanel } from '@/app/shell/gateway-menu-panel'
-import { restartGateway } from '@/hermes'
 import { Activity, AlertCircle, Clock, Command, Cpu, FolderOpen, GitBranch, Hash, Loader2, Sparkles } from '@/lib/icons'
+import type { RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { compactPath, contextBarLabel, LiveDuration, usageContextLabel } from '@/lib/statusbar'
 import { cn } from '@/lib/utils'
 import { $desktopActionTasks } from '@/store/activity'
-import { notify, notifyError } from '@/store/notifications'
 import { $previewServerRestartStatus } from '@/store/preview'
 import {
   $busy,
@@ -36,6 +35,8 @@ interface StatusbarItemsOptions {
   extraLeftItems: readonly StatusbarItem[]
   extraRightItems: readonly StatusbarItem[]
   gatewayLogLines: readonly string[]
+  gatewayState: string
+  inferenceStatus: RuntimeReadinessResult | null
   openAgents: () => void
   openCommandCenterSection: (section: CommandCenterSection) => void
   statusSnapshot: StatusResponse | null
@@ -49,6 +50,8 @@ export function useStatusbarItems({
   extraLeftItems,
   extraRightItems,
   gatewayLogLines,
+  gatewayState,
+  inferenceStatus,
   openAgents,
   openCommandCenterSection,
   statusSnapshot,
@@ -73,40 +76,17 @@ export function useStatusbarItems({
   const contextUsage = useMemo(() => usageContextLabel(currentUsage), [currentUsage])
   const contextBar = useMemo(() => contextBarLabel(currentUsage), [currentUsage])
 
-  const [restartingGateway, setRestartingGateway] = useState(false)
-
-  const handleRestartGateway = useCallback(async () => {
-    if (restartingGateway) {
-      return
-    }
-
-    setRestartingGateway(true)
-
-    try {
-      await restartGateway()
-      notify({
-        kind: 'success',
-        title: 'Gateway restart requested',
-        message: 'Status will update once the gateway reconnects.'
-      })
-    } catch (err) {
-      notifyError(err, 'Failed to restart gateway')
-    } finally {
-      setRestartingGateway(false)
-    }
-  }, [restartingGateway])
-
   const gatewayMenuContent = useMemo(
     () => (
       <GatewayMenuPanel
         logLines={gatewayLogLines}
         onOpenSystem={() => openCommandCenterSection('system')}
-        onRestart={() => void handleRestartGateway()}
-        restarting={restartingGateway}
+        gatewayState={gatewayState}
+        inferenceStatus={inferenceStatus}
         statusSnapshot={statusSnapshot}
       />
     ),
-    [gatewayLogLines, handleRestartGateway, openCommandCenterSection, restartingGateway, statusSnapshot]
+    [gatewayLogLines, gatewayState, inferenceStatus, openCommandCenterSection, statusSnapshot]
   )
 
   const { bgFailed, bgRunning, subagentsRunning } = useMemo(() => {
@@ -124,7 +104,22 @@ export function useStatusbarItems({
     }
   }, [desktopActionTasks, previewServerRestartStatus, subagentsBySession, workingSessionIds])
 
-  const gatewayUp = Boolean(statusSnapshot?.gateway_running)
+  const gatewayOpen = gatewayState === 'open'
+  const inferenceReady = gatewayOpen && inferenceStatus?.ready === true
+  const gatewayDetail = gatewayOpen
+    ? inferenceStatus
+      ? inferenceReady
+        ? 'ready'
+        : 'needs setup'
+      : 'checking'
+    : gatewayState === 'connecting'
+      ? 'connecting'
+      : 'offline'
+  const gatewayClassName = inferenceReady
+    ? undefined
+    : gatewayOpen || gatewayState === 'connecting'
+      ? 'text-amber-600 hover:text-amber-600'
+      : 'text-destructive hover:text-destructive'
 
   const versionItem = useMemo<StatusbarItem>(() => {
     const appVersion = desktopVersion?.appVersion
@@ -182,14 +177,14 @@ export function useStatusbarItems({
         variant: 'action'
       },
       {
-        className: gatewayUp ? undefined : 'text-destructive hover:text-destructive',
-        detail: gatewayUp ? statusSnapshot?.gateway_state || 'online' : 'offline',
-        icon: gatewayUp ? <Activity className="size-3" /> : <AlertCircle className="size-3" />,
+        className: gatewayClassName,
+        detail: gatewayDetail,
+        icon: inferenceReady ? <Activity className="size-3" /> : <AlertCircle className="size-3" />,
         id: 'gateway-health',
         label: 'Gateway',
         menuClassName: 'w-72',
         menuContent: gatewayMenuContent,
-        title: 'Gateway and platform health',
+        title: inferenceStatus?.reason || 'Hermes inference gateway status',
         variant: 'menu'
       },
       {
@@ -234,9 +229,11 @@ export function useStatusbarItems({
       bgRunning,
       commandCenterOpen,
       gatewayMenuContent,
-      gatewayUp,
+      gatewayClassName,
+      gatewayDetail,
+      inferenceReady,
+      inferenceStatus?.reason,
       openAgents,
-      statusSnapshot?.gateway_state,
       subagentsRunning,
       toggleCommandCenter
     ]

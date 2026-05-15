@@ -29,6 +29,9 @@ export const SyntaxHighlighter: FC<HermesSyntaxHighlighterProps> = ({
   code,
   defer = false
 }) => {
+  const preClassName =
+    'aui-shiki m-0 overflow-hidden rounded-b-md border border-t-0 border-border bg-card font-mono text-sm leading-relaxed [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:bg-transparent! [&_pre]:px-4 [&_pre]:py-3 [&_pre]:font-mono [&_pre]:leading-relaxed'
+
   // Streamdown may hand us fence contents with edge newlines. Strip blank
   // fence padding without touching indentation on the first real line.
   const trimmed = (code ?? '').replace(/^\n+/, '').trimEnd()
@@ -45,14 +48,14 @@ export const SyntaxHighlighter: FC<HermesSyntaxHighlighterProps> = ({
 
   if (defer) {
     return (
-      <Pre className="aui-shiki m-0 overflow-hidden rounded-b-md border border-t-0 border-border bg-card font-mono text-sm leading-relaxed [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:bg-transparent! [&_pre]:px-4 [&_pre]:py-3 [&_pre]:font-mono [&_pre]:leading-relaxed">
+      <Pre className={preClassName}>
         <code className="block whitespace-pre">{trimmed}</code>
       </Pre>
     )
   }
 
   return (
-    <Pre className="aui-shiki m-0 overflow-hidden rounded-b-md border border-t-0 border-border bg-card font-mono text-sm leading-relaxed [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:bg-transparent! [&_pre]:px-4 [&_pre]:py-3 [&_pre]:font-mono [&_pre]:leading-relaxed">
+    <Pre className={preClassName}>
       <ShikiHighlighter
         addDefaultStyles={false}
         as="div"

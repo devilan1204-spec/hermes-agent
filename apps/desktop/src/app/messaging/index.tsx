@@ -33,7 +33,7 @@ const STATE_LABELS: Record<string, string> = {
   connecting: 'Connecting',
   disabled: 'Disabled',
   fatal: 'Error',
-  gateway_stopped: 'Gateway stopped',
+  gateway_stopped: 'Messaging gateway stopped',
   not_configured: 'Needs setup',
   pending_restart: 'Restart needed',
   retrying: 'Retrying',
@@ -502,7 +502,7 @@ function PlatformDetail({
                 <SetupPill active={platform.configured}>
                   {platform.configured ? 'Credentials set' : 'Needs setup'}
                 </SetupPill>
-                {!platform.gateway_running && <SetupPill active={false}>Gateway stopped</SetupPill>}
+                {!platform.gateway_running && <SetupPill active={false}>Messaging gateway stopped</SetupPill>}
               </div>
               <PlatformHint platform={platform} />
             </div>

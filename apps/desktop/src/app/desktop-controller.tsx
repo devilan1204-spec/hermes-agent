@@ -208,7 +208,7 @@ export function DesktopController() {
     }
   }, [])
 
-  const { gatewayLogLines, statusSnapshot } = useStatusSnapshot(gatewayState)
+  const { gatewayLogLines, inferenceStatus, statusSnapshot } = useStatusSnapshot(gatewayState, requestGateway)
 
   const { browseSessionCwd, changeSessionCwd, refreshProjectBranch } = useCwdActions({
     activeSessionId,
@@ -393,6 +393,8 @@ export function DesktopController() {
     extraLeftItems: statusbarItemGroups.flat.left,
     extraRightItems: statusbarItemGroups.flat.right,
     gatewayLogLines,
+    gatewayState,
+    inferenceStatus,
     openAgents,
     openCommandCenterSection,
     statusSnapshot,

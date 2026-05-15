@@ -867,7 +867,7 @@ export function CommandCenterView({
                             )}
                           />
                           <span className="font-medium text-foreground">
-                            {status.gateway_running ? 'Gateway running' : 'Gateway not running'}
+                            {status.gateway_running ? 'Messaging gateway running' : 'Messaging gateway stopped'}
                           </span>
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
@@ -876,7 +876,7 @@ export function CommandCenterView({
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                         <OverlayActionButton className="h-7 px-2.5" onClick={() => void runSystemAction('restart')}>
-                          Restart gateway
+                          Restart messaging
                         </OverlayActionButton>
                         <OverlayActionButton className="h-7 px-2.5" onClick={() => void runSystemAction('update')}>
                           Update Hermes
