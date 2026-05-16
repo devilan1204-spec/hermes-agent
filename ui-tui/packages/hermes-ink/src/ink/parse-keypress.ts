@@ -68,10 +68,12 @@ const SGR_MOUSE_FRAGMENT_RE = /(?<!\d)(?:\[<|<)?(?:[0-9]|[1-9][0-9]|1\d{2}|2[0-4
 // (digits, separators, terminators, prefix). Used to detect degraded bursts
 // where the tokenizer or upstream stripped enough context that no single
 // fragment matches SGR_MOUSE_FRAGMENT_RE but the run is clearly mouse noise.
-// Requires ≥3 M/m terminators — `1234;56;78M9;10;11M` (two events worth of
-// digits + 2 M's) is ambiguous and stays as text; real mouse bursts during
-// scroll/drag have many more terminators.
-const MOUSE_BURST_NOISE_RE = /^[;\d<\[Mm]*[Mm][;\d<\[Mm]*[Mm][;\d<\[Mm]*[Mm][;\d<\[Mm]*$/
+// Requires ≥3 M/m terminators AND at least one digit AND at least one `;`
+// — plain text like `Mmm` / `MMM` (no digits, no separators) stays put;
+// `1234;56;78M9;10;11M` (only 2 terminators) is ambiguous and stays put;
+// real mouse bursts during scroll/drag/motion have many more terminators
+// plus coordinate digits and `;` separators between params.
+const MOUSE_BURST_NOISE_RE = /^(?=[^]*\d)(?=[^]*;)[;\d<\[Mm]*[Mm][;\d<\[Mm]*[Mm][;\d<\[Mm]*[Mm][;\d<\[Mm]*$/
 
 function createPasteKey(content: string): ParsedKey {
   return {
@@ -656,9 +658,10 @@ function parseTextWithSgrMouseFragments(text: string): ParsedInput[] | null {
   const matches = [...text.matchAll(SGR_MOUSE_FRAGMENT_RE)]
 
   // Degraded burst: no full fragment matched, but the entire text is mouse-leak
-  // alphabet with ≥2 terminators. Tokenizer/upstream stripped the button code
-  // (or the ESC[< prefix and the button), leaving e.g. `;col;rowM` or worse.
-  // Swallow rather than leak into the prompt. Bounded by alphabet + ≥2 [Mm].
+  // alphabet with ≥3 terminators plus at least one digit and one `;`. Tokenizer
+  // or upstream stripped the button code (or the ESC[< prefix and the button),
+  // leaving e.g. `;col;rowM` or worse. Swallow rather than leak into the prompt.
+  // Threshold lives on MOUSE_BURST_NOISE_RE — keep this comment in sync.
   if (matches.length === 0) {
     return MOUSE_BURST_NOISE_RE.test(text) ? [] : null
   }

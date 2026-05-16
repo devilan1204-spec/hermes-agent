@@ -155,4 +155,13 @@ describe('fragmented SGR mouse recovery', () => {
 
     expect(visibleKeys).toEqual([])
   })
+
+  it.each(['Mmm', 'MMM', 'Mmmmm', 'mmm yum'])(
+    'keeps plain text %p that lacks digits/separators despite many M/m chars',
+    text => {
+      const [[key]] = parseMultipleKeypresses(INITIAL_STATE, text)
+
+      expect(key).toMatchObject({ kind: 'key', sequence: text })
+    }
+  )
 })
