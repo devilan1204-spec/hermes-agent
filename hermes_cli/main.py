@@ -240,15 +240,14 @@ except Exception:
 try:
     from hermes_logging import setup_logging as _setup_logging
 
-    _early_mode = "cli"
-    for _arg in sys.argv[1:]:
-        if _arg.startswith("-"):
-            continue
-        if _arg == "dashboard":
-            _early_mode = "gui"
-        break
-
-    _setup_logging(mode=_early_mode)
+    _setup_logging(
+        mode=(
+            "gui"
+            if next((arg for arg in sys.argv[1:] if not arg.startswith("-")), "")
+            == "dashboard"
+            else "cli"
+        )
+    )
 except Exception:
     pass  # best-effort — don't crash the CLI if logging setup fails
 

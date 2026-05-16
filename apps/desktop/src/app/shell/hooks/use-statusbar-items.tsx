@@ -105,19 +105,21 @@ export function useStatusbarItems({
   }, [desktopActionTasks, previewServerRestartStatus, subagentsBySession, workingSessionIds])
 
   const gatewayOpen = gatewayState === 'open'
+  const gatewayConnecting = gatewayState === 'connecting'
   const inferenceReady = gatewayOpen && inferenceStatus?.ready === true
+  const gatewayDegraded = gatewayOpen || gatewayConnecting
   const gatewayDetail = gatewayOpen
-    ? inferenceStatus
-      ? inferenceReady
-        ? 'ready'
-        : 'needs setup'
-      : 'checking'
-    : gatewayState === 'connecting'
+    ? inferenceStatus?.ready
+      ? 'ready'
+      : inferenceStatus
+        ? 'needs setup'
+        : 'checking'
+    : gatewayConnecting
       ? 'connecting'
       : 'offline'
   const gatewayClassName = inferenceReady
     ? undefined
-    : gatewayOpen || gatewayState === 'connecting'
+    : gatewayDegraded
       ? 'text-amber-600 hover:text-amber-600'
       : 'text-destructive hover:text-destructive'
 
