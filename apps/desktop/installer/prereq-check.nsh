@@ -32,7 +32,7 @@
 ;   Node.js: winget-managed install; installer package may request elevation.
 ;
 ; Detection:
-;   Python: try `py -3.11`/`-3.12`/`-3.13`/`-3.14`. The Python launcher
+;   Python: try `py -3.11`/`-3.12`/`-3.13`. The Python launcher
 ;     returns exit 0 only when that specific version is installed. The
 ;     Microsoft Store "Python stub" doesn't install py.exe, so users with
 ;     only the stub get correctly classified as not-installed.
@@ -227,7 +227,7 @@ FunctionEnd
 ; install exists at one of the standard locations. FileExists never runs
 ; the binary so this is safe even if the user has the MS Store stub on
 ; their PATH. We probe both system-wide (Program Files) and per-user
-; (LocalAppData\Programs) install locations for versions 3.11–3.14.
+; (LocalAppData\Programs) install locations for versions 3.11–3.13.
 ; ----------------------------------------------------------------------------
 Function HermesDetectPythonViaFilesystem
   ${HermesLog} "filesystem: probing standard Python install paths"
@@ -509,7 +509,7 @@ Function HermesPrereqPageCreate
     Pop $HermesNodeStatusLabel
   ${Else}
     ${If} $HermesHasWinget == "1"
-      ${NSD_CreateLabel} 8u 59u 95% 9u "Not detected. Required by Hermes browser and UI tooling."
+      ${NSD_CreateLabel} 8u 59u 95% 9u "Not detected. Required by Hermes browser tools and Node-backed capabilities."
       Pop $HermesNodeStatusLabel
       ${NSD_CreateCheckbox} 8u 69u 95% 9u "Install Node.js LTS"
       Pop $HermesNodeCheckbox
