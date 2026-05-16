@@ -65,16 +65,16 @@ Var HermesPyStatusLabel
 Var HermesPyCheckbox
 Var HermesNodeStatusLabel
 Var HermesNodeCheckbox
-Var HermesGitStatusLabel
-Var HermesGitCheckbox
+Var HermesGitBashStatusLabel
+Var HermesGitBashCheckbox
 Var HermesFooterLabel
 Var HermesHasWinget
 Var HermesHasPython
 Var HermesHasNode
-Var HermesHasGit
+Var HermesHasGitBash
 Var HermesInstallPython
 Var HermesInstallNode
-Var HermesInstallGit
+Var HermesInstallGitBash
 Var HermesLogHandle
 Var HermesLogPath
 
@@ -309,7 +309,7 @@ FunctionEnd
 
 ; ----------------------------------------------------------------------------
 ; HermesDetectPrereqs — populates $HermesHasWinget / $HermesHasPython /
-; $HermesHasNode / $HermesHasGit with "0" or "1". Called from the
+; $HermesHasNode / $HermesHasGitBash with "0" or "1". Called from the
 ; page-create function. Every probe is logged via HermesProbe.
 ; ----------------------------------------------------------------------------
 Function HermesDetectPrereqs
@@ -406,27 +406,27 @@ Function HermesDetectPrereqs
   ${HermesLogKV} "HermesHasNode" "$HermesHasNode"
 
   ; --- Git Bash ---
-  StrCpy $HermesHasGit "0"
+  StrCpy $HermesHasGitBash "0"
   ${If} ${FileExists} "$LOCALAPPDATA\hermes\git\bin\bash.exe"
-    StrCpy $HermesHasGit "1"
+    StrCpy $HermesHasGitBash "1"
   ${ElseIf} ${FileExists} "$LOCALAPPDATA\hermes\git\usr\bin\bash.exe"
-    StrCpy $HermesHasGit "1"
+    StrCpy $HermesHasGitBash "1"
   ${ElseIf} ${FileExists} "$PROGRAMFILES64\Git\bin\bash.exe"
-    StrCpy $HermesHasGit "1"
+    StrCpy $HermesHasGitBash "1"
   ${ElseIf} ${FileExists} "$PROGRAMFILES\Git\bin\bash.exe"
-    StrCpy $HermesHasGit "1"
+    StrCpy $HermesHasGitBash "1"
   ${ElseIf} ${FileExists} "$PROGRAMFILES32\Git\bin\bash.exe"
-    StrCpy $HermesHasGit "1"
+    StrCpy $HermesHasGitBash "1"
   ${ElseIf} ${FileExists} "$LOCALAPPDATA\Programs\Git\bin\bash.exe"
-    StrCpy $HermesHasGit "1"
+    StrCpy $HermesHasGitBash "1"
   ${Else}
     Push 'cmd.exe /c where bash'
     Call HermesProbe
     ${If} $0 == 0
-      StrCpy $HermesHasGit "1"
+      StrCpy $HermesHasGitBash "1"
     ${EndIf}
   ${EndIf}
-  ${HermesLogKV} "HermesHasGit" "$HermesHasGit"
+  ${HermesLogKV} "HermesHasGitBash" "$HermesHasGitBash"
 
   ${HermesLog} "=== HermesDetectPrereqs: end ==="
 FunctionEnd
@@ -483,12 +483,12 @@ Function HermesPrereqPageCreate
 
   ${If} $HermesHasPython == "1"
   ${AndIf} $HermesHasNode == "1"
-  ${AndIf} $HermesHasGit == "1"
+  ${AndIf} $HermesHasGitBash == "1"
     ${HermesLog} "page: all prereqs detected, auto-skipping prereq page"
     Abort
   ${EndIf}
 
-  ${HermesLog} "page: rendering prereq page (winget=$HermesHasWinget python=$HermesHasPython node=$HermesHasNode git=$HermesHasGit)"
+  ${HermesLog} "page: rendering prereq page (winget=$HermesHasWinget python=$HermesHasPython node=$HermesHasNode git_bash=$HermesHasGitBash)"
 
   ; Set the wizard's standard header (top blue/gradient bar). 1037 is the
   ; title control, 1038 is the subtitle. Without this, the header still
@@ -506,7 +506,7 @@ Function HermesPrereqPageCreate
 
   StrCpy $HermesInstallPython "0"
   StrCpy $HermesInstallNode "0"
-  StrCpy $HermesInstallGit "0"
+  StrCpy $HermesInstallGitBash "0"
 
   ; Page body intro. The wizard's header (set above) shows the title
   ; "System Requirements" and subtitle, so we don't repeat them here.
@@ -558,28 +558,36 @@ Function HermesPrereqPageCreate
   ; --- Git panel ---
   ${NSD_CreateGroupBox} 0u 82u 100% 30u "Git for Windows"
   Pop $0
-  ${If} $HermesHasGit == "1"
+  ${If} $HermesHasGitBash == "1"
     ${NSD_CreateLabel} 8u 92u 95% 10u "Detected on your system."
-    Pop $HermesGitStatusLabel
+    Pop $HermesGitBashStatusLabel
   ${Else}
     ${If} $HermesHasWinget == "1"
       ${NSD_CreateLabel} 8u 91u 95% 9u "Not detected. Provides Git Bash for Hermes terminal commands."
-      Pop $HermesGitStatusLabel
+      Pop $HermesGitBashStatusLabel
       ${NSD_CreateCheckbox} 8u 101u 95% 9u "Install Git for Windows"
-      Pop $HermesGitCheckbox
-      ${NSD_Check} $HermesGitCheckbox
+      Pop $HermesGitBashCheckbox
+      ${NSD_Check} $HermesGitBashCheckbox
     ${Else}
       ${NSD_CreateLabel} 8u 91u 95% 14u "Not detected. Install manually from https://git-scm.com/download/win for terminal commands."
-      Pop $HermesGitStatusLabel
+      Pop $HermesGitBashStatusLabel
     ${EndIf}
   ${EndIf}
 
-  ${If} $HermesHasGit == "0"
+  ${If} $HermesHasPython == "1"
+  ${AndIf} $HermesHasNode == "1"
+  ${AndIf} $HermesHasGitBash == "1"
+    ${NSD_CreateLabel} 0u 116u 100% 18u "After launch, Hermes will finish installing the bundled agent files and Python dependencies in the GUI."
+    Pop $HermesFooterLabel
+  ${ElseIf} $HermesHasWinget == "0"
+    ${NSD_CreateLabel} 0u 116u 100% 18u "Continue setup, then install missing dependencies manually and relaunch Hermes."
+    Pop $HermesFooterLabel
+  ${ElseIf} $HermesHasGitBash == "0"
   ${AndIf} $HermesHasWinget == "1"
     ${NSD_CreateLabel} 0u 116u 100% 18u "Note: Git for Windows may request administrator approval. Check your taskbar if the prompt is hidden."
     Pop $HermesFooterLabel
   ${Else}
-    ${NSD_CreateLabel} 0u 116u 100% 18u "After launch, Hermes will finish installing the bundled agent files and Python dependencies in the GUI."
+    ${NSD_CreateLabel} 0u 116u 100% 18u "Selected missing items will install before launch; Hermes finishes setup in the GUI."
     Pop $HermesFooterLabel
   ${EndIf}
 
@@ -600,11 +608,11 @@ Function HermesPrereqPageLeave
   ${AndIf} $HermesHasWinget == "1"
     ${NSD_GetState} $HermesNodeCheckbox $HermesInstallNode
   ${EndIf}
-  ${If} $HermesHasGit == "0"
+  ${If} $HermesHasGitBash == "0"
   ${AndIf} $HermesHasWinget == "1"
-    ${NSD_GetState} $HermesGitCheckbox $HermesInstallGit
+    ${NSD_GetState} $HermesGitBashCheckbox $HermesInstallGitBash
   ${EndIf}
-  ${HermesLog} "page: user choices — install_python=$HermesInstallPython install_node=$HermesInstallNode install_git=$HermesInstallGit"
+  ${HermesLog} "page: user choices — install_python=$HermesInstallPython install_node=$HermesInstallNode install_git_bash=$HermesInstallGitBash"
 FunctionEnd
 
 ; ----------------------------------------------------------------------------
@@ -716,7 +724,7 @@ hermes_prereq_not_silent:
     ${EndIf}
   ${EndIf}
 
-  ${If} $HermesInstallGit == "1"
+  ${If} $HermesInstallGitBash == "1"
     DetailPrint "Installing Git for Windows via winget..."
     ${HermesLog} "Git: starting ExecShellWait — UAC may appear; no stdout capture possible"
     ${HermesLog} "  command: winget install -e --id Git.Git --silent --disable-interactivity --accept-package-agreements --accept-source-agreements"
