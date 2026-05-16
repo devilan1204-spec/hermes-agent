@@ -630,6 +630,14 @@ function findSystemPython() {
   return null
 }
 
+function pythonInstallHint() {
+  if (IS_WINDOWS) {
+    return 'On Windows, install Python 3.11, 3.12, or 3.13 from https://www.python.org/downloads/, then relaunch Hermes.'
+  }
+
+  return 'Install Python 3.11+ from https://www.python.org/downloads/ or your system package manager, then relaunch Hermes.'
+}
+
 function getVenvPython(venvRoot) {
   return path.join(venvRoot, IS_WINDOWS ? path.join('Scripts', 'python.exe') : path.join('bin', 'python'))
 }
@@ -1069,11 +1077,7 @@ function resolveHermesBackend(dashboardArgs) {
   const factoryPresent = isHermesSourceRoot(FACTORY_HERMES_ROOT)
   const activePresent = isHermesSourceRoot(ACTIVE_HERMES_ROOT)
   if (factoryPresent || activePresent) {
-    throw new Error(
-      'Hermes payload is present but no supported Python interpreter could be found. ' +
-        'On Windows, install Python 3.11, 3.12, or 3.13 from https://www.python.org/downloads/, ' +
-        'then relaunch Hermes.'
-    )
+    throw new Error(`Hermes payload is present but no supported Python interpreter could be found. ${pythonInstallHint()}`)
   }
   throw new Error(
     'Could not find Hermes. Install the Hermes CLI ' +
@@ -1134,10 +1138,7 @@ async function ensureRuntime(backend) {
   if (!fileExists(venvPython)) {
     const systemPython = findSystemPython()
     if (!systemPython) {
-      throw new Error(
-        'A supported Python interpreter is required to bootstrap Hermes. ' +
-          'On Windows, install Python 3.11, 3.12, or 3.13 from https://www.python.org/downloads/, then relaunch Hermes.'
-      )
+      throw new Error(`A supported Python interpreter is required to bootstrap Hermes. ${pythonInstallHint()}`)
     }
     await advanceBootProgress('runtime.venv', 'Creating Hermes virtual environment', 50)
     await runProcess(systemPython, ['-m', 'venv', VENV_ROOT])

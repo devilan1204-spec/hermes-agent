@@ -766,9 +766,9 @@ hermes_prereq_not_silent:
       DetailPrint "Node.js installed successfully."
       ${HermesLog} "Node.js install succeeded (version probe positive)"
     ${Else}
-      DetailPrint "Node.js install did not complete (Node 20+ not found at standard install locations)."
-      ${HermesLog} "Node.js install failed or needs a restart (version probe negative)."
-      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Node.js install via winget did not complete successfully.$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nInstall Node.js 20+ manually from https://nodejs.org/en/download/ if Hermes browser tools or Node-backed capabilities fail."
+      DetailPrint "Node.js 20+ could not be validated after install."
+      ${HermesLog} "Node.js install failed, needs a restart, or installed an unsupported version (version probe negative)."
+      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Node.js 20+ could not be validated after winget.$\r$\n$\r$\nA restart may be required. See log: $HermesLogPath$\r$\n$\r$\nInstall Node.js 20+ manually from https://nodejs.org/en/download/ if Hermes browser tools or Node-backed capabilities fail."
     ${EndIf}
   ${EndIf}
 
