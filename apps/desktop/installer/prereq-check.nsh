@@ -4,7 +4,7 @@
 ;
 ; A native NSIS Wizard page (using nsDialogs) inserted between the directory
 ; selection page and the install-files page. Detects the baseline runtime
-; prerequisites (Python 3.11+, Node.js, and Git for Windows); offers to
+; prerequisites (Python 3.11-3.13, Node.js, and Git for Windows); offers to
 ; install missing items via winget.
 ;
 ; Page sequence:
@@ -509,13 +509,16 @@ Function HermesPrereqPageCreate
   StrCpy $HermesInstallGit "0"
 
   ; Page body intro. The wizard's header (set above) shows the title
-  ; "System Requirements" and subtitle, so we don't repeat them here —
-  ; just one short explanatory line.
-  ${NSD_CreateLabel} 0u 0u 100% 16u "Items already installed are listed as detected. Missing items can be installed automatically via winget."
+  ; "System Requirements" and subtitle, so we don't repeat them here.
+  ${If} $HermesHasWinget == "1"
+    ${NSD_CreateLabel} 0u 0u 100% 16u "Detected items are listed below. Missing items can be installed automatically via winget."
+  ${Else}
+    ${NSD_CreateLabel} 0u 0u 100% 16u "Detected items are listed below. Install missing items manually, then re-run this installer."
+  ${EndIf}
   Pop $0
 
   ; --- Python panel ---
-  ${NSD_CreateGroupBox} 0u 18u 100% 30u "Python 3.11+"
+  ${NSD_CreateGroupBox} 0u 18u 100% 30u "Python 3.11-3.13"
   Pop $0
   ${If} $HermesHasPython == "1"
     ${NSD_CreateLabel} 8u 28u 95% 10u "Detected on your system."
@@ -684,16 +687,16 @@ hermes_prereq_not_silent:
     ; Python with --scope user installs to %LOCALAPPDATA%\Programs\Python\
     ; — no UAC, no foreground chain to preserve. HermesRunWinget captures
     ; both the Details-panel output AND a copy to the installer log.
-    DetailPrint "Installing Python 3.11+ via winget (silent per-user install, no admin prompt)..."
+    DetailPrint "Installing Python 3.11 via winget (silent per-user install, no admin prompt)..."
     Push 'install -e --id Python.Python.3.11 --scope user --silent --disable-interactivity --accept-package-agreements --accept-source-agreements'
     Push 'Python 3.11'
     Call HermesRunWinget
     ${If} $0 != 0
       DetailPrint "Python install via winget exited with code $0."
       ${HermesLog} "Python install FAILED (exit $0). User notified via MessageBox."
-      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Python install via winget did not complete successfully (exit code $0).$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nYou can install Python 3.11+ manually from https://www.python.org/downloads/ after Hermes setup finishes. Hermes will not run until Python is installed."
+      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Python install via winget did not complete successfully (exit code $0).$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nInstall Python 3.11, 3.12, or 3.13 manually from https://www.python.org/downloads/ after Hermes setup finishes. Hermes will not run until Python is installed."
     ${Else}
-      DetailPrint "Python 3.11+ installed successfully."
+      DetailPrint "Python 3.11 installed successfully."
       ${HermesLog} "Python install succeeded"
     ${EndIf}
   ${EndIf}

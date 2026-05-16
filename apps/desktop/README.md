@@ -12,7 +12,7 @@ npm install
 
 For Python, you have two options:
 
-**Option A — let the desktop provision it for you (recommended for first-time setup):** just run `npm run dev`. On first launch the desktop creates a venv at `HERMES_HOME/hermes-agent/venv` and runs `pip install -e .` against the resolved Hermes source automatically. Requires Python 3.11+ on `PATH`.
+**Option A — let the desktop provision it for you (recommended for first-time setup):** just run `npm run dev`. On first launch the desktop creates a venv at `HERMES_HOME/hermes-agent/venv` and runs `pip install -e .` against the resolved Hermes source automatically. Requires Python 3.11-3.13 on Windows.
 
 **Option B — share an existing CLI install:** if you already ran `scripts/install.ps1` / `scripts/install.sh`, that's the same layout the desktop uses. The desktop reuses your existing venv and editable install — no extra steps. See [Runtime Bootstrap](#runtime-bootstrap) below for details.
 
@@ -26,11 +26,11 @@ HERMES_DESKTOP_HERMES_ROOT=/path/to/your/clone npm run dev
 
 Hermes Desktop's baseline installer dependencies are:
 
-- **Python 3.11+** — for the agent runtime, dashboard backend, and tool execution.
+- **Python 3.11-3.13** — for the agent runtime, dashboard backend, and tool execution.
 - **Node.js LTS** — for browser tools and Node-backed capabilities.
 - **Git for Windows** — for Git Bash, which powers Hermes terminal commands on Windows.
 
-The packaged Windows installer (`Hermes-*.exe`) is intentionally barebones: it installs the GUI and offers to install Python 3.11, Node.js, and Git for Windows via `winget` when possible. On first launch, the GUI handles the Hermes-specific work: syncing the bundled agent payload, creating the virtualenv, installing Python dependencies, and showing progress in the onboarding UI. The MSI installer does not run the prerequisite page, so enterprise deploys should preinstall these dependencies out-of-band.
+The packaged Windows installer (`Hermes-*.exe`) is intentionally barebones: it installs the GUI and offers to install Python 3.11, Node.js, and Git for Windows via `winget` when possible. Python 3.14 is not accepted yet because several Hermes dependencies do not publish compatible wheels. On first launch, the GUI handles the Hermes-specific work: syncing the bundled agent payload, creating the virtualenv, installing Python dependencies, and showing progress in the onboarding UI. The MSI installer does not run the prerequisite page, so enterprise deploys should preinstall these dependencies out-of-band.
 
 For dev (`npm run dev`) the Python check happens at first launch via the Electron bootstrapper. Manual install commands you can run yourself:
 
@@ -218,7 +218,7 @@ The desktop resolves a Hermes backend in this order:
 ### First-launch flow on a packaged install
 
 1. Sync factory image → `HERMES_HOME/hermes-agent`. Skipped if a `.git` directory exists at the destination (developer install) — never overwrites a user's local repo.
-2. Create venv at `HERMES_HOME/hermes-agent/venv` using system Python (errors out with a Python-install hint if no Python 3.11+ is found).
+2. Create venv at `HERMES_HOME/hermes-agent/venv` using system Python (errors out with a Python-install hint if no supported Python is found).
 3. `pip install -e HERMES_HOME/hermes-agent` — `pyproject.toml` is the single source of truth for dependencies.
 4. Stamp `.hermes-desktop-runtime.json` with the schema version + pyproject hash + factory version.
 
