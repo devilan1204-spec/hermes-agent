@@ -133,4 +133,26 @@ describe('fragmented SGR mouse recovery', () => {
 
     expect(key).toMatchObject({ kind: 'key', sequence: '1234;56;78M9;10;11M' })
   })
+
+  it('swallows degraded windows-terminal mouse bursts without leaking to the prompt', () => {
+    // Real capture from Windows Terminal during a wheel-scroll storm: button
+    // codes / ESC[< prefixes have been chewed off, leaving pure mouse-leak
+    // alphabet with many M/m terminators.
+    const leak =
+      ';76;50mM1M68;36M;73;35M;74;38M74;41M75;41M66;38M37M2;38M;49;38M35;40;39M9M5;37;39M39M;32;39M29;39M0M0MM6MMMMM'
+    const [events] = parseMultipleKeypresses(INITIAL_STATE, leak)
+    const visibleKeys = events.filter(e => e.kind === 'key' && !e.isPasted)
+
+    expect(visibleKeys).toEqual([])
+  })
+
+  it('swallows a degraded mouse burst that surrounds a real fragment with leak chars', () => {
+    // Real fragment in the middle, noise on both sides — the surrounding
+    // noise should not leak as typed keys.
+    const text = ';12;34m<32;76;50M;78;52M;99;9M0MM'
+    const [events] = parseMultipleKeypresses(INITIAL_STATE, text)
+    const visibleKeys = events.filter(e => e.kind === 'key' && !e.isPasted)
+
+    expect(visibleKeys).toEqual([])
+  })
 })

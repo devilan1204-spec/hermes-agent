@@ -64,6 +64,14 @@ const XTVERSION_RE = /^\x1bP>\|(.*?)(?:\x07|\x1b\\)$/s
 // eslint-disable-next-line no-control-regex
 const SGR_MOUSE_RE = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/
 const SGR_MOUSE_FRAGMENT_RE = /(?<!\d)(?:\[<|<)?(?:[0-9]|[1-9][0-9]|1\d{2}|2[0-4]\d|25[0-5]);\d+;\d+[Mm]/g
+// Mouse-leak "alphabet": chars that can appear inside an SGR mouse burst
+// (digits, separators, terminators, prefix). Used to detect degraded bursts
+// where the tokenizer or upstream stripped enough context that no single
+// fragment matches SGR_MOUSE_FRAGMENT_RE but the run is clearly mouse noise.
+// Requires ≥3 M/m terminators — `1234;56;78M9;10;11M` (two events worth of
+// digits + 2 M's) is ambiguous and stays as text; real mouse bursts during
+// scroll/drag have many more terminators.
+const MOUSE_BURST_NOISE_RE = /^[;\d<\[Mm]*[Mm][;\d<\[Mm]*[Mm][;\d<\[Mm]*[Mm][;\d<\[Mm]*$/
 
 function createPasteKey(content: string): ParsedKey {
   return {
@@ -646,8 +654,13 @@ function parseTextWithSgrMouseFragments(text: string): ParsedInput[] | null {
   SGR_MOUSE_FRAGMENT_RE.lastIndex = 0
 
   const matches = [...text.matchAll(SGR_MOUSE_FRAGMENT_RE)]
+
+  // Degraded burst: no full fragment matched, but the entire text is mouse-leak
+  // alphabet with ≥2 terminators. Tokenizer/upstream stripped the button code
+  // (or the ESC[< prefix and the button), leaving e.g. `;col;rowM` or worse.
+  // Swallow rather than leak into the prompt. Bounded by alphabet + ≥2 [Mm].
   if (matches.length === 0) {
-    return null
+    return MOUSE_BURST_NOISE_RE.test(text) ? [] : null
   }
 
   const parsed: ParsedInput[] = []
@@ -673,8 +686,21 @@ function parseTextWithSgrMouseFragments(text: string): ParsedInput[] | null {
       continue
     }
 
-    if (first.index! > cursor) {
-      parsed.push(parseKeypress(text.slice(cursor, first.index!)))
+    // Extend the burst over adjacent mouse-leak noise. The tokenizer or
+    // upstream may have dropped button codes / extra prefixes on follow-up
+    // events, so they don't match SGR_MOUSE_FRAGMENT_RE but they're still
+    // noise we want to swallow rather than type into the prompt.
+    let burstStart = first.index!
+    while (burstStart > cursor && /[;\d<\[Mm]/.test(text[burstStart - 1]!)) {
+      burstStart--
+    }
+
+    while (runEnd < text.length && /[;\d<\[Mm]/.test(text[runEnd]!)) {
+      runEnd++
+    }
+
+    if (burstStart > cursor) {
+      parsed.push(parseKeypress(text.slice(cursor, burstStart)))
     }
 
     for (const match of run) {
@@ -686,7 +712,10 @@ function parseTextWithSgrMouseFragments(text: string): ParsedInput[] | null {
   }
 
   if (!consumedAny) {
-    return null
+    // Matched fragments existed but none had enough evidence to be promoted
+    // to mouse events. If the entire text is mouse-leak alphabet anyway,
+    // swallow it as noise rather than typing it into the prompt.
+    return MOUSE_BURST_NOISE_RE.test(text) ? [] : null
   }
 
   if (cursor < text.length) {
