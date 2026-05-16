@@ -513,7 +513,7 @@ Function HermesPrereqPageCreate
   ${If} $HermesHasWinget == "1"
     ${NSD_CreateLabel} 0u 0u 100% 16u "Detected items are listed below. Missing items can be installed automatically via winget."
   ${Else}
-    ${NSD_CreateLabel} 0u 0u 100% 16u "Detected items are listed below. Install missing items manually, then re-run this installer."
+    ${NSD_CreateLabel} 0u 0u 100% 16u "Detected items are listed below. Continue setup, then install missing items manually."
   ${EndIf}
   Pop $0
 
@@ -531,7 +531,7 @@ Function HermesPrereqPageCreate
       Pop $HermesPyCheckbox
       ${NSD_Check} $HermesPyCheckbox
     ${Else}
-      ${NSD_CreateLabel} 8u 27u 95% 14u "Not detected. Install manually from https://www.python.org/downloads/ and re-run this installer."
+      ${NSD_CreateLabel} 8u 27u 95% 14u "Not detected. Install manually from https://www.python.org/downloads/, then relaunch Hermes."
       Pop $HermesPyStatusLabel
     ${EndIf}
   ${EndIf}
@@ -550,7 +550,7 @@ Function HermesPrereqPageCreate
       Pop $HermesNodeCheckbox
       ${NSD_Check} $HermesNodeCheckbox
     ${Else}
-      ${NSD_CreateLabel} 8u 59u 95% 14u "Not detected. Install manually from https://nodejs.org/en/download/ and re-run this installer."
+      ${NSD_CreateLabel} 8u 59u 95% 14u "Not detected. Install manually from https://nodejs.org/en/download/, then relaunch Hermes."
       Pop $HermesNodeStatusLabel
     ${EndIf}
   ${EndIf}
