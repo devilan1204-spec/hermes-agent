@@ -42,7 +42,7 @@
 ;     Installer. If unavailable, the page shows manual download URLs.
 ;
 ; Required vs. recommended:
-;   Python and Node.js are REQUIRED baseline dependencies. The GUI handles the
+;   Python and Node.js are baseline dependencies. The GUI handles the
 ;   Hermes source payload, virtualenv, and Python dependency install on first
 ;   launch.
 ;
@@ -465,7 +465,7 @@ Function HermesPrereqPageCreate
   GetDlgItem $0 $HWNDPARENT 1037
   SendMessage $0 ${WM_SETTEXT} 0 "STR:System Requirements"
   GetDlgItem $0 $HWNDPARENT 1038
-  SendMessage $0 ${WM_SETTEXT} 0 "STR:Hermes needs Python 3.11+ and Node.js before the GUI finishes setup."
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:Install baseline runtime dependencies before the GUI finishes Hermes setup."
 
   nsDialogs::Create 1018
   Pop $HermesDialog
@@ -482,8 +482,8 @@ Function HermesPrereqPageCreate
   ${NSD_CreateLabel} 0u 0u 100% 16u "Items already installed are listed as detected. Missing items can be installed automatically via winget."
   Pop $0
 
-  ; --- Python panel (REQUIRED) ---
-  ${NSD_CreateGroupBox} 0u 18u 100% 30u "Python 3.11+  (required)"
+  ; --- Python panel ---
+  ${NSD_CreateGroupBox} 0u 18u 100% 30u "Python 3.11+"
   Pop $0
   ${If} $HermesHasPython == "1"
     ${NSD_CreateLabel} 8u 28u 95% 10u "Detected on your system."
@@ -501,15 +501,15 @@ Function HermesPrereqPageCreate
     ${EndIf}
   ${EndIf}
 
-  ; --- Node.js panel (REQUIRED) ---
-  ${NSD_CreateGroupBox} 0u 50u 100% 30u "Node.js LTS  (required)"
+  ; --- Node.js panel ---
+  ${NSD_CreateGroupBox} 0u 50u 100% 30u "Node.js LTS"
   Pop $0
   ${If} $HermesHasNode == "1"
     ${NSD_CreateLabel} 8u 60u 95% 10u "Detected on your system."
     Pop $HermesNodeStatusLabel
   ${Else}
     ${If} $HermesHasWinget == "1"
-      ${NSD_CreateLabel} 8u 59u 95% 9u "Not detected. Required by Hermes browser tools and Node-backed capabilities."
+      ${NSD_CreateLabel} 8u 59u 95% 9u "Not detected. Used by Hermes browser tools and Node-backed capabilities."
       Pop $HermesNodeStatusLabel
       ${NSD_CreateCheckbox} 8u 69u 95% 9u "Install Node.js LTS"
       Pop $HermesNodeCheckbox

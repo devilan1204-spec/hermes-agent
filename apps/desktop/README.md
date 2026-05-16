@@ -24,12 +24,12 @@ HERMES_DESKTOP_HERMES_ROOT=/path/to/your/clone npm run dev
 
 ### Runtime prerequisites
 
-Hermes Desktop's baseline installer prerequisites are:
+Hermes Desktop's baseline installer dependencies are:
 
-- **Python 3.11+** — for the agent runtime, dashboard backend, and tool execution. (required)
-- **Node.js LTS** — for browser tools and Node-backed capabilities. (required)
+- **Python 3.11+** — for the agent runtime, dashboard backend, and tool execution.
+- **Node.js LTS** — for browser tools and Node-backed capabilities.
 
-The packaged Windows installer (`Hermes-*.exe`) is intentionally barebones: it installs the GUI and ensures Python 3.11 + Node.js are present via `winget` when possible. On first launch, the GUI handles the Hermes-specific work: syncing the bundled agent payload, creating the virtualenv, installing Python dependencies, and showing progress in the onboarding UI. The MSI installer does not run the prerequisite page, so enterprise deploys should preinstall Python and Node.js out-of-band.
+The packaged Windows installer (`Hermes-*.exe`) is intentionally barebones: it installs the GUI and offers to install Python 3.11 + Node.js via `winget` when possible. On first launch, the GUI handles the Hermes-specific work: syncing the bundled agent payload, creating the virtualenv, installing Python dependencies, and showing progress in the onboarding UI. The MSI installer does not run the prerequisite page, so enterprise deploys should preinstall Python and Node.js out-of-band.
 
 For dev (`npm run dev`) the Python check happens at first launch via the Electron bootstrapper. Manual install commands you can run yourself:
 
