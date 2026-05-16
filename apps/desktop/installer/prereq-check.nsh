@@ -20,9 +20,9 @@
 ; Diagnostics:
 ;   $TEMP\Hermes-Installer.log captures every detection probe (command,
 ;   exit code, captured output), the user's checkbox choices, and full
-;   winget stdout/stderr for Python and Node.js installs. Git install goes via
-;   ExecShellWait so UAC comes forward; for Git we log start/end and a
-;   post-install bash.exe probe. Users hitting bugs should attach this file.
+;   winget stdout/stderr for Python installs. Node.js and Git installs go via
+;   ExecShellWait so UAC comes forward; for those we log start/end plus a
+;   post-install filesystem probe. Users hitting bugs should attach this file.
 ;
 ; The Function declarations live at top-level in this file so they're parsed
 ; at include time; the customPageAfterChangeDir macro references them via
@@ -90,9 +90,9 @@ Var HermesLogPath
 ;   - NSIS's built-in `LogSet on` / `LogText` requires the "advanced logging"
 ;     build of makensis (NSIS_CONFIG_LOG=1), which electron-builder's bundled
 ;     binary doesn't include. So we roll our own with FileWrite.
-;   - Every winget invocation streams its full stdout/stderr into the log via
-;     nsExec::ExecToStack — the same data the Details panel shows, but
-;     captured for post-mortem.
+;   - Python's winget invocation streams stdout/stderr into the log via
+;     nsExec::ExecToStack. Node.js and Git use ExecShellWait instead because
+;     their installers may elevate; this keeps UAC in front of the wizard.
 ;   - Detection probes also log exit codes + captured output, so when a user
 ;     reports "the page said Python isn't installed but I have it", we can
 ;     see exactly which probes ran and what they returned.
@@ -582,10 +582,15 @@ Function HermesPrereqPageCreate
   ${ElseIf} $HermesHasWinget == "0"
     ${NSD_CreateLabel} 0u 116u 100% 18u "Continue setup, then install missing dependencies manually and relaunch Hermes."
     Pop $HermesFooterLabel
-  ${ElseIf} $HermesHasGitBash == "0"
-  ${AndIf} $HermesHasWinget == "1"
-    ${NSD_CreateLabel} 0u 116u 100% 18u "Note: Git for Windows may request administrator approval. Check your taskbar if the prompt is hidden."
-    Pop $HermesFooterLabel
+  ${ElseIf} $HermesHasWinget == "1"
+    ${If} $HermesHasNode == "0"
+    ${OrIf} $HermesHasGitBash == "0"
+      ${NSD_CreateLabel} 0u 116u 100% 18u "Note: Node.js or Git for Windows may request administrator approval. Check your taskbar if hidden."
+      Pop $HermesFooterLabel
+    ${Else}
+      ${NSD_CreateLabel} 0u 116u 100% 18u "Selected missing items will install before launch; Hermes finishes setup in the GUI."
+      Pop $HermesFooterLabel
+    ${EndIf}
   ${Else}
     ${NSD_CreateLabel} 0u 116u 100% 18u "Selected missing items will install before launch; Hermes finishes setup in the GUI."
     Pop $HermesFooterLabel
@@ -711,16 +716,29 @@ hermes_prereq_not_silent:
 
   ${If} $HermesInstallNode == "1"
     DetailPrint "Installing Node.js LTS via winget..."
-    Push 'install -e --id OpenJS.NodeJS.LTS --silent --disable-interactivity --accept-package-agreements --accept-source-agreements'
-    Push 'Node.js LTS'
-    Call HermesRunWinget
-    ${If} $0 != 0
-      DetailPrint "Node.js install via winget exited with code $0."
-      ${HermesLog} "Node.js install FAILED (exit $0). User notified via MessageBox."
-      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Node.js install via winget did not complete successfully (exit code $0).$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nYou can install Node.js manually from https://nodejs.org/en/download/ after Hermes setup finishes. Some Hermes tools will not work until Node.js is installed."
-    ${Else}
+    ${HermesLog} "Node.js: starting ExecShellWait — UAC may appear; no stdout capture possible"
+    ${HermesLog} "  command: winget install -e --id OpenJS.NodeJS.LTS --silent --disable-interactivity --accept-package-agreements --accept-source-agreements"
+    ExecShellWait "open" "winget" "install -e --id OpenJS.NodeJS.LTS --silent --disable-interactivity --accept-package-agreements --accept-source-agreements" SW_SHOWNORMAL
+    ${HermesLog} "Node.js: ExecShellWait returned"
+
+    StrCpy $0 "0"
+    ${If} ${FileExists} "$PROGRAMFILES64\nodejs\node.exe"
+      StrCpy $0 "1"
+    ${ElseIf} ${FileExists} "$PROGRAMFILES\nodejs\node.exe"
+      StrCpy $0 "1"
+    ${ElseIf} ${FileExists} "$PROGRAMFILES32\nodejs\node.exe"
+      StrCpy $0 "1"
+    ${ElseIf} ${FileExists} "$LOCALAPPDATA\Programs\nodejs\node.exe"
+      StrCpy $0 "1"
+    ${EndIf}
+
+    ${If} $0 == "1"
       DetailPrint "Node.js installed successfully."
-      ${HermesLog} "Node.js install succeeded"
+      ${HermesLog} "Node.js install succeeded (filesystem probe positive)"
+    ${Else}
+      DetailPrint "Node.js install did not complete (node.exe not found at standard install locations)."
+      ${HermesLog} "Node.js install failed or needs a restart (filesystem probe negative)."
+      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Node.js install via winget did not complete successfully.$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nInstall Node.js manually from https://nodejs.org/en/download/ if Hermes browser tools or Node-backed capabilities fail."
     ${EndIf}
   ${EndIf}
 
