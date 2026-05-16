@@ -112,7 +112,7 @@
     --radius-scalar: 0.2;
 
     /* Space under last message vs overlay composer — driven by the measured composer height (see composer/index.tsx). */
-    --thread-last-message-clearance: calc(var(--composer-measured-height) + 1.25rem);
+    --thread-last-message-clearance: calc(var(--composer-measured-height) + 3rem);
 
     --composer-shell-pad-block-end: 2.5rem;
     --message-text-indent: 1.5rem;
@@ -413,20 +413,20 @@ canvas {
   }
 }
 
-/* Last thread row with a message root — avoids composer overlap (Chromium/Electron). */
-[data-slot='aui_thread-content']
-  > :nth-last-child(
-    1
-      of
-      :is(
+/* Keep the floating composer from covering the final thread row. */
+[data-slot='aui_thread-content']:has(
+    > :is(
         [data-slot='aui_assistant-message-root'],
         [data-slot='aui_user-message-root'],
         [data-slot='aui_system-message-root'],
         [data-slot='aui_edit-composer-root'],
         [data-slot='aui_response-loading']
       )
-  ) {
-  margin-bottom: var(--thread-last-message-clearance);
+  )::after {
+  content: '';
+  display: block;
+  flex: 0 0 var(--thread-last-message-clearance);
+  width: 100%;
 }
 
 [data-slot='aui_assistant-message-content'] {
