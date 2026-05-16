@@ -55,7 +55,15 @@ function compareRanges(
  * handling, callers should pre-clamp `col` to the on-screen column index
  * of the desired character. This function performs no width conversion.
  *
- * If `visualLine >= visualLineCount`, the offset clamps to outerSource.length.
+ * If `visualLine >= visualLineCount`, defers to `getOffset` with the
+ * last-row index — the offset map's own clamping kicks in there. This
+ * avoids snapping to `outerSource.length` when the block had no
+ * fragment hit and the visual row is just a soft-wrap continuation
+ * past the block's tracked source-line count (a common case: source
+ * line wraps to multiple visual rows, but the block was registered
+ * with `visualLineCount = source-line-count`).
+ *
+ * If `visualLine < 0`, returns 0.
  */
 function pointToOffset(range: SourceRange, visualLine: number, col: number): number {
   if (visualLine < 0) {
@@ -63,7 +71,11 @@ function pointToOffset(range: SourceRange, visualLine: number, col: number): num
   }
 
   if (visualLine >= range.visualLineCount) {
-    return range.outerSource.length
+    // Defer to the last tracked row + the column. The offset map's
+    // per-row clamping will cap at the row's source-end. This is more
+    // useful than `outerSource.length`, which would copy the entire
+    // remaining block on what's likely just a wrap-continuation click.
+    return range.getOffset(Math.max(0, range.visualLineCount - 1), Math.max(0, col))
   }
 
   return range.getOffset(visualLine, Math.max(0, col))

@@ -137,4 +137,123 @@ describe('copyPointAt gap adjacency', () => {
       expect(result.rangeId).toBe(1)
     }
   })
+
+  it('wrap-continuation row: per-row fragment gives byte-exact sourceOffset, not whole-line', () => {
+    // Regression for: dragging from mid-row 0 to col 0 of row 1 (a
+    // wrap-continuation row of a single source line) was copying the
+    // WHOLE source line because the block's visualLineCount was the
+    // SOURCE-line count (1), not the WRAPPED count (2). visualLine=1
+    // therefore clamped pointToOffset to outerSource.length.
+    //
+    // The fix: per-row fragments on the ink-text node carry the
+    // source-byte slice for each wrapped row, so the hit-test on
+    // continuation rows returns `sourceOffset` and toCopyText skips
+    // the buggy pointToOffset path entirely.
+    const root = createNode('ink-root')
+    nodeCache.set(root, { x: 0, y: 0, width: 15, height: 2 })
+
+    const box = createNode('ink-box')
+    box.style = { copyRangeId: 7 } as DOMElement['style']
+    nodeCache.set(box, { x: 0, y: 0, width: 15, height: 2 })
+    appendChildNode(root, box)
+
+    const text = createNode('ink-text')
+    nodeCache.set(text, {
+      x: 0,
+      y: 0,
+      width: 15,
+      height: 2,
+      // "the quick brown" on row 0 [source 0..15) +
+      // "fox jumps over"  on row 1 [source 16..30) (the space at byte
+      // 15 is wrap-trimmed away).
+      fragments: [
+        { row: 0, colStart: 0, colEnd: 15, start: 0, end: 15, verbatim: true },
+        { row: 1, colStart: 0, colEnd: 14, start: 16, end: 30, verbatim: true }
+      ]
+    })
+    appendChildNode(box, text)
+
+    // Click at col 0 of the wrap-continuation row.
+    const result = copyPointAt(root, 0, 1)
+    expect(result.kind).toBe('in-range')
+
+    if (result.kind === 'in-range') {
+      expect(result.rangeId).toBe(7)
+      // Critical: sourceOffset is set so toCopyText bypasses pointToOffset.
+      // Without per-row fragments this was undefined and pointToOffset
+      // returned outerSource.length, leaking the whole line.
+      expect(result.sourceOffset).toBe(16)
+    }
+  })
+
+  it('wrap-continuation row with NO fragments: degrades to in-range with bad visualLine (documents the regression)', () => {
+    // What happens when the renderer didn't emit fragments for the
+    // wrap (e.g. paragraph rendered without the MdInline wrap()
+    // wrapper, or fragments were stale-evicted). The hit-test still
+    // returns in-range, but with `visualLine = row - rect.y` = the
+    // visual row index relative to the ink-text rect.
+    //
+    // For a wrapped block whose CopySource was registered with
+    // visualLineCount = source-line-count (1, not the wrapped count
+    // 2), pointToOffset(visualLine=1, ...) clamps to outerSource.length
+    // and toCopyText emits the whole source line. This test pins down
+    // exactly what the host receives in that scenario so we can spot
+    // it from logs.
+    const root = createNode('ink-root')
+    nodeCache.set(root, { x: 0, y: 0, width: 15, height: 2 })
+
+    const box = createNode('ink-box')
+    box.style = { copyRangeId: 11 } as DOMElement['style']
+    nodeCache.set(box, { x: 0, y: 0, width: 15, height: 2 })
+    appendChildNode(root, box)
+
+    const text = createNode('ink-text')
+    // NOTE: no `fragments` set — simulating the broken state.
+    nodeCache.set(text, { x: 0, y: 0, width: 15, height: 2 })
+    appendChildNode(box, text)
+
+    const result = copyPointAt(root, 0, 1)
+    expect(result.kind).toBe('in-range')
+    if (result.kind === 'in-range') {
+      expect(result.rangeId).toBe(11)
+      expect(result.visualLine).toBe(1)
+      expect(result.col).toBe(0)
+      // sourceOffset is undefined → falls through to the
+      // pointToOffset(visualLine=1, col=0) path in toCopyText, which
+      // clamps to outerSource.length when visualLineCount=1.
+      expect(result.sourceOffset).toBeUndefined()
+    }
+  })
+
+  it('wrap-continuation row mid-fragment: sourceOffset uses verbatim cell→byte math', () => {
+    // Same wrapped paragraph, click at col 5 of row 1 → should give
+    // source byte 21 (16 + 5), not the whole-line clamp.
+    const root = createNode('ink-root')
+    nodeCache.set(root, { x: 0, y: 0, width: 15, height: 2 })
+
+    const box = createNode('ink-box')
+    box.style = { copyRangeId: 9 } as DOMElement['style']
+    nodeCache.set(box, { x: 0, y: 0, width: 15, height: 2 })
+    appendChildNode(root, box)
+
+    const text = createNode('ink-text')
+    nodeCache.set(text, {
+      x: 0,
+      y: 0,
+      width: 15,
+      height: 2,
+      fragments: [
+        { row: 0, colStart: 0, colEnd: 15, start: 0, end: 15, verbatim: true },
+        { row: 1, colStart: 0, colEnd: 14, start: 16, end: 30, verbatim: true }
+      ]
+    })
+    appendChildNode(box, text)
+
+    const result = copyPointAt(root, 5, 1)
+    expect(result.kind).toBe('in-range')
+
+    if (result.kind === 'in-range') {
+      expect(result.sourceOffset).toBe(21)
+    }
+  })
 })

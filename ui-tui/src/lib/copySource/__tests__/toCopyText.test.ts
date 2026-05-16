@@ -275,6 +275,61 @@ describe('toCopyText — soft-wrap', () => {
       })
     ).toBe('abcdefghij')
   })
+
+  test('visualLine past visualLineCount defers to last-row offset (no whole-doc clamp)', () => {
+    // Regression: a paragraph that's a single source line gets
+    // registered with visualLineCount=1, but when rendered the
+    // terminal wraps it to multiple visual rows. A click on a
+    // wrap-continuation row (e.g. row 1) would arrive at toCopyText
+    // with visualLine=1. The OLD pointToOffset clamped to
+    // outerSource.length on this — copying the WHOLE source line
+    // instead of just the prefix the user dragged across. The fix
+    // is to defer to the last tracked row's getOffset(col), which
+    // is bounded by the row's source-end.
+    const source = 'the quick brown fox jumps over'
+    const r = registerSimple('m1', 0, source)
+
+    // Anchor at col 5 on the (sole) tracked row 0, focus on the
+    // hypothetical wrap-continuation row 1 col 0. The old behavior
+    // gave the whole 30-char line; the new behavior gives the row 0
+    // portion up to its source-end (the line's whole content since
+    // there's only one source line — but key thing: it's bounded by
+    // line content not by `outerSource.length`, which matters when
+    // the range has further content past this line).
+    const result = toCopyText({
+      anchor: ptInRange(r, 0, 5),
+      focus: ptInRange(r, 1, 0),
+      transcript: msgs('m1')
+    })
+
+    // For a single-source-line range, the deferred-to-last-row offset
+    // at col=0 gives byte 0 of row 0. The selection slice from byte 5
+    // back to byte 0 is `'the q'` (reversed, but toCopyText orders).
+    expect(result).toBe('the q')
+  })
+
+  test('multi-source-line range: visualLine past count clamps to LAST line end', () => {
+    // Same defensive scenario but the range has multiple source lines.
+    // The wrap-continuation click should NOT include subsequent lines —
+    // it should clamp to the end of the last tracked visual row.
+    const source = 'first line here\nsecond line'
+    // Two source lines. rowStarts = [0, 16] (16 = "first line here\n".length).
+    const r = registerCustom('m1', 0, source, [0, 16])
+
+    // Anchor mid-first-line, focus on a "wrap continuation" row that
+    // doesn't exist (visualLine=5). Should NOT include the second
+    // source line — should clamp to end of last known row.
+    const result = toCopyText({
+      anchor: ptInRange(r, 0, 5),
+      focus: ptInRange(r, 5, 0),
+      transcript: msgs('m1')
+    })
+
+    // visualLine=5 past visualLineCount=2 → defers to getOffset(1, 0)
+    // = start of "second line" (byte 16). Slice [5, 16) = byte index
+    // 5 to 16 of "first line here\n" = " line here\n" (leading space).
+    expect(result).toBe(' line here\n')
+  })
 })
 
 describe('toCopyText — boundary points', () => {

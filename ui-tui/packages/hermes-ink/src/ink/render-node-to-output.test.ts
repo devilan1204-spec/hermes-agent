@@ -183,4 +183,30 @@ describe('computeFragmentsForWrappedText', () => {
     // After row 0, charIndex skips the '\n' so row 1 starts at byte 3.
     expect(fragments[1]).toEqual({ row: 1, colStart: 0, colEnd: 3, start: 3, end: 6, verbatim: true })
   })
+
+  it('wrap-trim eats inter-row whitespace: row 1 maps past the eaten char', () => {
+    // Single source line "the quick brown fox jumps over" wraps at 15
+    // cols. wrap-trim removes the space at byte 15 from the visual
+    // output but it's still in originalPlain. The function must skip
+    // that char when advancing charIndex between rows, otherwise the
+    // row-1 fragment would think it covers bytes 15+ instead of 16+
+    // and clicks on row 1 would map to the wrong source position.
+    const source = 'the quick brown fox jumps over'
+    const segments = [mkSeg(source, { start: 0, end: 30, verbatim: true })]
+    const charToSegment = Array.from({ length: 30 }, () => 0)
+
+    const fragments = computeFragmentsForWrappedText(
+      'the quick brown\nfox jumps over',
+      segments,
+      charToSegment,
+      source,
+      /* trimEnabled */ true
+    )
+
+    expect(fragments).toHaveLength(2)
+    expect(fragments[0]).toEqual({ row: 0, colStart: 0, colEnd: 15, start: 0, end: 15, verbatim: true })
+    // CRITICAL: row 1's source byte starts at 16 (past the eaten space
+    // at byte 15), not at 15.
+    expect(fragments[1]).toEqual({ row: 1, colStart: 0, colEnd: 14, start: 16, end: 30, verbatim: true })
+  })
 })
