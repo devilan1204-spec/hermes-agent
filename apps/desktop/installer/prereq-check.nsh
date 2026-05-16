@@ -10,10 +10,19 @@
 ;   Welcome → Directory → [PrereqPage] → InstFiles → Finish
 ;
 ; Hooks used:
+;   customInit               — open $TEMP\Hermes-Installer.log for diagnostics
 ;   customPageAfterChangeDir — page declaration (electron-builder's hook for
 ;                              inserting a page between Directory and InstFiles)
 ;   customInstall            — execute winget for any prereqs the user
-;                              checked on the page
+;                              checked on the page; close the log file
+;
+; Diagnostics:
+;   $TEMP\Hermes-Installer.log captures every detection probe (command,
+;   exit code, captured output), the user's checkbox choices, and full
+;   winget stdout/stderr for Python and ripgrep installs. Git install
+;   goes via ExecShellWait (for UAC focus reasons) which cannot capture
+;   output, so for Git we log start/end + the post-install filesystem
+;   probe result only. Users hitting bugs should attach this file.
 ;
 ; The Function declarations live at top-level in this file so they're parsed
 ; at include time; the customPageAfterChangeDir macro references them via
@@ -54,6 +63,7 @@
 !include "LogicLib.nsh"
 !include "nsDialogs.nsh"
 !include "WinMessages.nsh"
+!include "FileFunc.nsh"
 
 Var HermesDialog
 Var HermesPyStatusLabel
@@ -70,6 +80,90 @@ Var HermesHasRipgrep
 Var HermesInstallPython
 Var HermesInstallGit
 Var HermesInstallRipgrep
+Var HermesLogHandle
+Var HermesLogPath
+
+; ----------------------------------------------------------------------------
+; Installer logging
+; ----------------------------------------------------------------------------
+; We write a structured log to $TEMP\Hermes-Installer.log so users can attach
+; it to bug reports when prereq detection or winget installs misbehave.
+;
+; Why this design:
+;   - The wizard's built-in Details panel only exists at runtime; once the
+;     user clicks Finish (or Cancel) it's gone. The file persists.
+;   - NSIS's built-in `LogSet on` / `LogText` requires the "advanced logging"
+;     build of makensis (NSIS_CONFIG_LOG=1), which electron-builder's bundled
+;     binary doesn't include. So we roll our own with FileWrite.
+;   - Every winget invocation streams its full stdout/stderr into the log via
+;     nsExec::ExecToStack — the same data the Details panel shows, but
+;     captured for post-mortem.
+;   - Detection probes also log exit codes + captured output, so when a user
+;     reports "the page said Python isn't installed but I have it", we can
+;     see exactly which probes ran and what they returned.
+;   - File is opened (truncate mode) in customInit and explicitly closed at
+;     the end of customInstall. If the installer crashes or the user
+;     cancels before customInstall completes, the file remains on disk —
+;     whatever we wrote up to that point survives. FileWrite per-line is a
+;     normal Windows I/O call that hits the kernel buffer cache; the OS
+;     flushes that buffer when the process exits, so even on hard cancel
+;     the user can attach a partial log.
+;
+; Macros:
+;   ${HermesLog} "free-form text"          — emit a timestamped line
+;   ${HermesLogKV} "key" "value"           — emit a "key = value" line
+;   ${HermesLogBlock} "label" "varname"    — emit a delimited block (no `$`)
+;
+; The macros are no-ops when $HermesLogHandle is empty (e.g. if FileOpen
+; failed because $TEMP was unwritable — rare but defensive).
+; ----------------------------------------------------------------------------
+!macro _HermesLogRaw Line
+  ${If} $HermesLogHandle != ""
+    FileWrite $HermesLogHandle "${Line}$\r$\n"
+  ${EndIf}
+!macroend
+
+!macro _HermesLogTimestamped Msg
+  ; ${__TIMESTAMP__} is the BUILD-time stamp, not runtime. We want runtime,
+  ; so use ${GetTime} from FileFunc.nsh. $R0..$R6 = day, month, year, dow,
+  ; hour, minute, second. Stash callers' $R0–$R6 first.
+  Push $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  Push $R4
+  Push $R5
+  Push $R6
+  ${GetTime} "" "L" $R0 $R1 $R2 $R3 $R4 $R5 $R6
+  ${If} $HermesLogHandle != ""
+    FileWrite $HermesLogHandle "[$R2-$R1-$R0 $R4:$R5:$R6] ${Msg}$\r$\n"
+  ${EndIf}
+  Pop $R6
+  Pop $R5
+  Pop $R4
+  Pop $R3
+  Pop $R2
+  Pop $R1
+  Pop $R0
+!macroend
+!define HermesLog "!insertmacro _HermesLogTimestamped"
+
+!macro _HermesLogKV Key Value
+  ${HermesLog} "${Key} = ${Value}"
+!macroend
+!define HermesLogKV "!insertmacro _HermesLogKV"
+
+; HermesLogBlock — write a multi-line block (typically captured command
+; output) with a "--- begin/end ---" frame so it's clear in the log where
+; the captured payload starts and stops. The `Payload` parameter is the
+; NSIS variable name (without `$`) holding the captured string.
+!macro _HermesLogBlock Label PayloadVar
+  ${HermesLog} "--- begin ${Label} ---"
+  !insertmacro _HermesLogRaw "$${PayloadVar}"
+  ${HermesLog} "--- end ${Label} ---"
+!macroend
+!define HermesLogBlock "!insertmacro _HermesLogBlock"
+
 
 ; ----------------------------------------------------------------------------
 ; HermesDetectPythonViaRegistry — sets $HermesHasPython="1" if a PEP 514
@@ -84,6 +178,8 @@ Function HermesDetectPythonViaRegistry
   Push $1
   Push $2
 
+  ${HermesLog} "registry: scanning HKLM/HKCU SOFTWARE\Python\PythonCore for 3.11/3.12/3.13"
+
   ; Set view to 64-bit on x64 systems so we read the right hive — the
   ; default 32-bit view would miss a 64-bit Python install on 64-bit
   ; Windows. SetRegView 32 restored at function exit.
@@ -94,35 +190,43 @@ Function HermesDetectPythonViaRegistry
   ; copies is clearer than gymnastics with $R0-$R9.
   ReadRegStr $1 HKLM "SOFTWARE\Python\PythonCore\3.11\InstallPath" ""
   ${If} $1 != ""
+    ${HermesLog} "  hit: HKLM\Python\PythonCore\3.11\InstallPath = $1"
     StrCpy $HermesHasPython "1"
     Goto hermes_py_reg_done
   ${EndIf}
   ReadRegStr $1 HKLM "SOFTWARE\Python\PythonCore\3.12\InstallPath" ""
   ${If} $1 != ""
+    ${HermesLog} "  hit: HKLM\Python\PythonCore\3.12\InstallPath = $1"
     StrCpy $HermesHasPython "1"
     Goto hermes_py_reg_done
   ${EndIf}
   ReadRegStr $1 HKLM "SOFTWARE\Python\PythonCore\3.13\InstallPath" ""
   ${If} $1 != ""
+    ${HermesLog} "  hit: HKLM\Python\PythonCore\3.13\InstallPath = $1"
     StrCpy $HermesHasPython "1"
     Goto hermes_py_reg_done
   ${EndIf}
 
   ReadRegStr $1 HKCU "SOFTWARE\Python\PythonCore\3.11\InstallPath" ""
   ${If} $1 != ""
+    ${HermesLog} "  hit: HKCU\Python\PythonCore\3.11\InstallPath = $1"
     StrCpy $HermesHasPython "1"
     Goto hermes_py_reg_done
   ${EndIf}
   ReadRegStr $1 HKCU "SOFTWARE\Python\PythonCore\3.12\InstallPath" ""
   ${If} $1 != ""
+    ${HermesLog} "  hit: HKCU\Python\PythonCore\3.12\InstallPath = $1"
     StrCpy $HermesHasPython "1"
     Goto hermes_py_reg_done
   ${EndIf}
   ReadRegStr $1 HKCU "SOFTWARE\Python\PythonCore\3.13\InstallPath" ""
   ${If} $1 != ""
+    ${HermesLog} "  hit: HKCU\Python\PythonCore\3.13\InstallPath = $1"
     StrCpy $HermesHasPython "1"
     Goto hermes_py_reg_done
   ${EndIf}
+
+  ${HermesLog} "  no registry keys matched"
 
 hermes_py_reg_done:
   SetRegView 32
@@ -138,16 +242,21 @@ FunctionEnd
 ; (LocalAppData\Programs) install locations for versions 3.11–3.14.
 ; ----------------------------------------------------------------------------
 Function HermesDetectPythonViaFilesystem
+  ${HermesLog} "filesystem: probing standard Python install paths"
+
   ; System-wide installs (default location for python.org with admin)
   ${If} ${FileExists} "$PROGRAMFILES64\Python311\python.exe"
+    ${HermesLog} "  hit: $PROGRAMFILES64\Python311\python.exe"
     StrCpy $HermesHasPython "1"
     Return
   ${EndIf}
   ${If} ${FileExists} "$PROGRAMFILES64\Python312\python.exe"
+    ${HermesLog} "  hit: $PROGRAMFILES64\Python312\python.exe"
     StrCpy $HermesHasPython "1"
     Return
   ${EndIf}
   ${If} ${FileExists} "$PROGRAMFILES64\Python313\python.exe"
+    ${HermesLog} "  hit: $PROGRAMFILES64\Python313\python.exe"
     StrCpy $HermesHasPython "1"
     Return
   ${EndIf}
@@ -155,33 +264,71 @@ Function HermesDetectPythonViaFilesystem
   ; Per-user installs (default location for python.org without admin
   ; or with "Install for me only"). Covers the user-reported case.
   ${If} ${FileExists} "$LOCALAPPDATA\Programs\Python\Python311\python.exe"
+    ${HermesLog} "  hit: $LOCALAPPDATA\Programs\Python\Python311\python.exe"
     StrCpy $HermesHasPython "1"
     Return
   ${EndIf}
   ${If} ${FileExists} "$LOCALAPPDATA\Programs\Python\Python312\python.exe"
+    ${HermesLog} "  hit: $LOCALAPPDATA\Programs\Python\Python312\python.exe"
     StrCpy $HermesHasPython "1"
     Return
   ${EndIf}
   ${If} ${FileExists} "$LOCALAPPDATA\Programs\Python\Python313\python.exe"
+    ${HermesLog} "  hit: $LOCALAPPDATA\Programs\Python\Python313\python.exe"
     StrCpy $HermesHasPython "1"
     Return
   ${EndIf}
+
+  ${HermesLog} "  no filesystem paths matched"
+FunctionEnd
+
+; ----------------------------------------------------------------------------
+; HermesProbe — small wrapper around nsExec::ExecToStack that captures both
+; exit code and stdout/stderr into a single log entry. Used instead of bare
+; nsExec::Exec so we have evidence for "the page said X isn't installed but
+; I have it" bug reports.
+;
+; Caller pushes command string onto the stack before Call.
+; On return:
+;   $0 = exit code (0 = success on Windows)
+;   $1 = captured stdout+stderr (truncated by NSIS to ~64KB)
+; Caller's $0/$1 are clobbered; $9 is preserved.
+; ----------------------------------------------------------------------------
+Function HermesProbe
+  ; Stack on entry (top → bottom): <command>, <caller-return-addr>, ...
+  ; Save $9 so we can use it as a local. Standard NSIS stack-arg idiom:
+  ;   Exch $9   ; $9 = arg, old $9 pushed onto stack
+  ;   ... work ...
+  ;   Pop $9    ; restore old $9 (discards arg)
+  Exch $9
+  nsExec::ExecToStack '$9'
+  Pop $0    ; exit code
+  Pop $1    ; captured output
+  ${HermesLog} "probe: $9"
+  ${HermesLog} "  exit = $0"
+  ${If} $1 != ""
+    ${HermesLogBlock} "probe output" "1"
+  ${EndIf}
+  Pop $9    ; restore caller's $9 (discards the command arg)
 FunctionEnd
 
 ; ----------------------------------------------------------------------------
 ; HermesDetectPrereqs — populates $HermesHasWinget / $HermesHasPython /
 ; $HermesHasGit / $HermesHasRipgrep with "0" or "1". Called from the
-; page-create function.
+; page-create function. Every probe is logged via HermesProbe.
 ; ----------------------------------------------------------------------------
 Function HermesDetectPrereqs
+  ${HermesLog} "=== HermesDetectPrereqs: begin ==="
+
   ; --- winget ---
-  nsExec::Exec 'cmd.exe /c where winget >nul 2>&1'
-  Pop $0
+  Push 'cmd.exe /c where winget'
+  Call HermesProbe
   ${If} $0 == 0
     StrCpy $HermesHasWinget "1"
   ${Else}
     StrCpy $HermesHasWinget "0"
   ${EndIf}
+  ${HermesLogKV} "HermesHasWinget" "$HermesHasWinget"
 
   ; --- Python 3.11 / 3.12 / 3.13 ---
   ; We deliberately accept 3.11–3.13 only and NOT 3.14, because some of
@@ -209,23 +356,24 @@ Function HermesDetectPrereqs
   ;     "Install launcher for all users" is checked (default for some
   ;     paths, not for per-user installs without elevation). When
   ;     present, py -3.X --version returns 0 iff that version exists.
-  nsExec::Exec 'cmd.exe /c py -3.11 --version >nul 2>&1'
-  Pop $0
+  Push 'cmd.exe /c py -3.11 --version'
+  Call HermesProbe
   ${If} $0 == 0
     StrCpy $HermesHasPython "1"
   ${Else}
-    nsExec::Exec 'cmd.exe /c py -3.12 --version >nul 2>&1'
-    Pop $0
+    Push 'cmd.exe /c py -3.12 --version'
+    Call HermesProbe
     ${If} $0 == 0
       StrCpy $HermesHasPython "1"
     ${Else}
-      nsExec::Exec 'cmd.exe /c py -3.13 --version >nul 2>&1'
-      Pop $0
+      Push 'cmd.exe /c py -3.13 --version'
+      Call HermesProbe
       ${If} $0 == 0
         StrCpy $HermesHasPython "1"
       ${EndIf}
     ${EndIf}
   ${EndIf}
+  ${HermesLogKV} "after py-launcher probes, HermesHasPython" "$HermesHasPython"
 
   ; (2) PEP 514 registry probe. Every standards-compliant Python
   ;     installer registers itself under HKLM or HKCU at
@@ -237,6 +385,7 @@ Function HermesDetectPrereqs
   ;     similar keys under a different vendor name.
   ${If} $HermesHasPython == "0"
     Call HermesDetectPythonViaRegistry
+    ${HermesLogKV} "after registry probe, HermesHasPython" "$HermesHasPython"
   ${EndIf}
 
   ; (3) Filesystem probe of common install locations. Catches edge
@@ -246,25 +395,72 @@ Function HermesDetectPrereqs
   ;     would risk spawning the Store stub.
   ${If} $HermesHasPython == "0"
     Call HermesDetectPythonViaFilesystem
+    ${HermesLogKV} "after filesystem probe, HermesHasPython" "$HermesHasPython"
   ${EndIf}
 
   ; --- Git ---
-  nsExec::Exec 'cmd.exe /c where git >nul 2>&1'
-  Pop $0
+  Push 'cmd.exe /c where git'
+  Call HermesProbe
   ${If} $0 == 0
     StrCpy $HermesHasGit "1"
   ${Else}
     StrCpy $HermesHasGit "0"
   ${EndIf}
+  ${HermesLogKV} "HermesHasGit" "$HermesHasGit"
 
   ; --- ripgrep ---
-  nsExec::Exec 'cmd.exe /c where rg >nul 2>&1'
-  Pop $0
+  Push 'cmd.exe /c where rg'
+  Call HermesProbe
   ${If} $0 == 0
     StrCpy $HermesHasRipgrep "1"
   ${Else}
     StrCpy $HermesHasRipgrep "0"
   ${EndIf}
+  ${HermesLogKV} "HermesHasRipgrep" "$HermesHasRipgrep"
+
+  ${HermesLog} "=== HermesDetectPrereqs: end ==="
+FunctionEnd
+
+; ----------------------------------------------------------------------------
+; HermesRunWinget — invoke `winget install ...` and capture both exit code
+; and full stdout/stderr to the log. Also replays the captured output to the
+; install Details panel via DetailPrint so the user sees progress (batched
+; at end rather than live — acceptable trade-off; winget installs take 30-90
+; seconds and emit ~10-30 lines).
+;
+; Caller pushes:  <args-after-winget>     (e.g. 'install -e --id Python...')
+;                 <human-name>            (e.g. 'Python 3.11')
+; On return:      $0 = winget exit code, $1 = full captured output
+; ----------------------------------------------------------------------------
+Function HermesRunWinget
+  Exch $9       ; $9 = human-name
+  Exch
+  Exch $8       ; $8 = args
+  Push $2       ; preserve for caller
+
+  ${HermesLog} "winget: invoking for $9"
+  ${HermesLog} "  command: winget $8"
+  DetailPrint "Running: winget $8"
+
+  ; ExecToStack captures up to ~64KB of combined stdout+stderr.
+  ; The 'cmd.exe /c' wrapper ensures we use the user's PATH-resolved winget
+  ; and that I/O redirection works portably.
+  nsExec::ExecToStack 'cmd.exe /c winget $8'
+  Pop $0    ; exit code
+  Pop $1    ; captured output
+
+  ${HermesLog} "  exit code = $0"
+  ${If} $1 != ""
+    ${HermesLogBlock} "winget output ($9)" "1"
+    ; Echo captured output to Details panel so user sees what winget did.
+    ; DetailPrint takes one line; the captured blob may contain $\r$\n. We
+    ; pass it whole — DetailPrint handles embedded newlines reasonably.
+    DetailPrint "$1"
+  ${EndIf}
+
+  Pop $2
+  Pop $8
+  Pop $9
 FunctionEnd
 
 ; ----------------------------------------------------------------------------
@@ -278,8 +474,11 @@ Function HermesPrereqPageCreate
   ${If} $HermesHasPython == "1"
   ${AndIf} $HermesHasGit == "1"
   ${AndIf} $HermesHasRipgrep == "1"
+    ${HermesLog} "page: all prereqs detected, auto-skipping prereq page"
     Abort
   ${EndIf}
+
+  ${HermesLog} "page: rendering prereq page (winget=$HermesHasWinget python=$HermesHasPython git=$HermesHasGit rg=$HermesHasRipgrep)"
 
   ; Set the wizard's standard header (top blue/gradient bar). 1037 is the
   ; title control, 1038 is the subtitle. Without this, the header still
@@ -390,6 +589,7 @@ Function HermesPrereqPageLeave
   ${AndIf} $HermesHasWinget == "1"
     ${NSD_GetState} $HermesRgCheckbox $HermesInstallRipgrep
   ${EndIf}
+  ${HermesLog} "page: user choices — install_python=$HermesInstallPython install_git=$HermesInstallGit install_ripgrep=$HermesInstallRipgrep"
 FunctionEnd
 
 ; ----------------------------------------------------------------------------
@@ -410,56 +610,117 @@ FunctionEnd
 !macroend
 
 ; ----------------------------------------------------------------------------
+; customInit — runs at installer startup, before any page. We use it to open
+; the installer log file. The log path is $TEMP\Hermes-Installer.log; we
+; truncate (mode "w") on each install so users don't get an ever-growing
+; file. Users hitting bugs are asked to attach this file.
+;
+; If FileOpen fails (e.g. $TEMP unwritable, AV blocking) we just leave
+; $HermesLogHandle empty — every log macro is a no-op when the handle is
+; empty, so the installer still works, we just lose the diagnostic.
+; ----------------------------------------------------------------------------
+!macro customInit
+  StrCpy $HermesLogPath "$TEMP\Hermes-Installer.log"
+  ClearErrors
+  FileOpen $HermesLogHandle "$HermesLogPath" w
+  ${If} ${Errors}
+    StrCpy $HermesLogHandle ""
+    ; Don't MessageBox — installers shouldn't bother the user about logging
+    ; failures. We still install successfully; we just won't have a log.
+  ${Else}
+    ; UTF-8 BOM so Notepad / editors don't garble any non-ASCII in winget
+    ; output (which uses ✓ characters and other glyphs in some locales).
+    FileWriteByte $HermesLogHandle "239"
+    FileWriteByte $HermesLogHandle "187"
+    FileWriteByte $HermesLogHandle "191"
+    ${HermesLog} "================================================================"
+    ${HermesLog} "Hermes Desktop installer log"
+    ${HermesLog} "================================================================"
+    ${HermesLogKV} "log path" "$HermesLogPath"
+    ${HermesLogKV} "installer name" "$EXEFILE"
+    ${HermesLogKV} "installer dir" "$EXEDIR"
+    ${HermesLogKV} "install target dir" "$INSTDIR"
+    ${HermesLogKV} "TEMP" "$TEMP"
+    ${HermesLogKV} "WINDIR" "$WINDIR"
+    ${HermesLogKV} "PROGRAMFILES64" "$PROGRAMFILES64"
+    ${HermesLogKV} "LOCALAPPDATA" "$LOCALAPPDATA"
+    ${HermesLog} "================================================================"
+  ${EndIf}
+!macroend
+
+; ----------------------------------------------------------------------------
 ; customInstall — runs the actual winget commands for whatever prereqs the
-; user checked on the page. Output streams to the install progress log.
+; user checked on the page. Output streams to the install progress log AND
+; to $HermesLogPath via HermesRunWinget.
 ; ----------------------------------------------------------------------------
 !macro customInstall
+  ${HermesLog} "=== customInstall: begin ==="
+
+  ; Tell the user where the log lives so they can attach it if anything
+  ; goes wrong. Shown in the install Details panel.
+  ${If} $HermesLogHandle != ""
+    DetailPrint "Installer log: $HermesLogPath"
+  ${EndIf}
+
   ; Skip on silent installs (managed deploys handle prereqs out-of-band).
-  IfSilent hermes_prereq_install_done
+  IfSilent 0 hermes_prereq_not_silent
+  ${HermesLog} "silent install (/S) — skipping prereq winget block"
+  Goto hermes_prereq_install_done
+hermes_prereq_not_silent:
 
   ${If} $HermesInstallPython == "1"
     ; Python with --scope user installs to %LOCALAPPDATA%\Programs\Python\
-    ; — no UAC, no foreground chain to preserve. nsExec::ExecToLog gives
-    ; us live output streaming to the install log.
+    ; — no UAC, no foreground chain to preserve. HermesRunWinget captures
+    ; both the Details-panel output AND a copy to the installer log.
     DetailPrint "Installing Python 3.11+ via winget (silent per-user install, no admin prompt)..."
-    nsExec::ExecToLog 'winget install -e --id Python.Python.3.11 --scope user --silent --disable-interactivity --accept-package-agreements --accept-source-agreements'
-    Pop $0
+    Push 'install -e --id Python.Python.3.11 --scope user --silent --disable-interactivity --accept-package-agreements --accept-source-agreements'
+    Push 'Python 3.11'
+    Call HermesRunWinget
     ${If} $0 != 0
       DetailPrint "Python install via winget exited with code $0."
-      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Python install via winget did not complete successfully (exit code $0).$\r$\n$\r$\nYou can install Python 3.11+ manually from https://www.python.org/downloads/ after Hermes setup finishes. Hermes will not run until Python is installed."
+      ${HermesLog} "Python install FAILED (exit $0). User notified via MessageBox."
+      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Python install via winget did not complete successfully (exit code $0).$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nYou can install Python 3.11+ manually from https://www.python.org/downloads/ after Hermes setup finishes. Hermes will not run until Python is installed."
     ${Else}
       DetailPrint "Python 3.11+ installed successfully."
+      ${HermesLog} "Python install succeeded"
     ${EndIf}
   ${EndIf}
 
   ${If} $HermesInstallRipgrep == "1"
     ; ripgrep with --scope user — ~5MB, no UAC needed. Failure is non-fatal:
     ; Hermes' search_files tool falls back to grep/find from Git Bash.
-    ; nsExec::ExecToLog streams output to the install log.
     DetailPrint "Installing ripgrep via winget (silent per-user install, no admin prompt)..."
-    nsExec::ExecToLog 'winget install -e --id BurntSushi.ripgrep.MSVC --scope user --silent --disable-interactivity --accept-package-agreements --accept-source-agreements'
-    Pop $0
+    Push 'install -e --id BurntSushi.ripgrep.MSVC --scope user --silent --disable-interactivity --accept-package-agreements --accept-source-agreements'
+    Push 'ripgrep'
+    Call HermesRunWinget
     ${If} $0 != 0
       DetailPrint "ripgrep install via winget exited with code $0 (non-fatal — Hermes will fall back to grep/find)."
+      ${HermesLog} "ripgrep install failed (exit $0) — non-fatal"
     ${Else}
       DetailPrint "ripgrep installed successfully."
+      ${HermesLog} "ripgrep install succeeded"
     ${EndIf}
   ${EndIf}
 
   ${If} $HermesInstallGit == "1"
     ; Git for Windows always installs per-machine and triggers UAC. We use
     ; ExecShellWait (NSIS's wrapper around Windows ShellExecute) instead of
-    ; nsExec::ExecToLog because ShellExecute preserves the foreground focus
-    ; chain across non-elevated → elevated process spawns. With nsExec the
+    ; nsExec because ShellExecute preserves the foreground focus chain
+    ; across non-elevated → elevated process spawns. With nsExec the
     ; intermediate hidden winget.exe breaks that chain and UAC ends up
     ; behind the installer window.
     ;
     ; Trade-off: ExecShellWait doesn't capture output, so winget runs in
     ; its own console window. The console flashes briefly while winget
     ; downloads, then UAC fires for the elevated Git installer with
-    ; correct foreground promotion.
+    ; correct foreground promotion. We CANNOT log winget's stdout/stderr
+    ; for this case; we only log start time, end time, and the post-
+    ; install filesystem probe result.
     DetailPrint "Installing Git for Windows via winget (UAC prompt will appear)..."
+    ${HermesLog} "Git: starting ExecShellWait — UAC will fire; no stdout capture possible"
+    ${HermesLog} "  command: winget install -e --id Git.Git --silent --disable-interactivity --accept-package-agreements --accept-source-agreements"
     ExecShellWait "open" "winget" "install -e --id Git.Git --silent --disable-interactivity --accept-package-agreements --accept-source-agreements" SW_SHOWNORMAL
+    ${HermesLog} "Git: ExecShellWait returned (no exit code available from ShellExecute)"
 
     ; ExecShellWait returns no exit code, so verify by checking the file
     ; system directly. Don't use `where git` — that reads OUR process's
@@ -468,22 +729,39 @@ FunctionEnd
     ; visible to us. Probe Git's standard install locations instead.
     StrCpy $0 "0"  ; "git found" flag
     ${If} ${FileExists} "$PROGRAMFILES64\Git\bin\bash.exe"
+      ${HermesLog} "Git: found bash.exe at $PROGRAMFILES64\Git\bin\bash.exe"
       StrCpy $0 "1"
     ${ElseIf} ${FileExists} "$PROGRAMFILES\Git\bin\bash.exe"
+      ${HermesLog} "Git: found bash.exe at $PROGRAMFILES\Git\bin\bash.exe"
       StrCpy $0 "1"
     ${ElseIf} ${FileExists} "$PROGRAMFILES32\Git\bin\bash.exe"
+      ${HermesLog} "Git: found bash.exe at $PROGRAMFILES32\Git\bin\bash.exe"
       StrCpy $0 "1"
     ${ElseIf} ${FileExists} "$LOCALAPPDATA\Programs\Git\bin\bash.exe"
+      ${HermesLog} "Git: found bash.exe at $LOCALAPPDATA\Programs\Git\bin\bash.exe"
       StrCpy $0 "1"
+    ${Else}
+      ${HermesLog} "Git: bash.exe NOT found at any standard location"
     ${EndIf}
 
     ${If} $0 == "1"
       DetailPrint "Git for Windows installed successfully."
+      ${HermesLog} "Git install succeeded (filesystem probe positive)"
     ${Else}
       DetailPrint "Git for Windows install did not complete (bash.exe not found at standard install locations)."
-      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Git for Windows install via winget did not complete successfully.$\r$\n$\r$\nYou can install Git for Windows manually from https://git-scm.com/download/win after Hermes setup finishes. Hermes' terminal tool will not work until Git Bash is available."
+      ${HermesLog} "Git install FAILED (filesystem probe negative). User notified via MessageBox."
+      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Git for Windows install via winget did not complete successfully.$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nYou can install Git for Windows manually from https://git-scm.com/download/win after Hermes setup finishes. Hermes' terminal tool will not work until Git Bash is available."
     ${EndIf}
   ${EndIf}
 
   hermes_prereq_install_done:
+  ${HermesLog} "=== customInstall: end ==="
+  ; Flush by closing the log handle. NSIS doesn't expose fflush; FileClose
+  ; both flushes and releases the handle. Subsequent macros become no-ops
+  ; because we null out the handle. This is fine — there are no more log
+  ; sites after customInstall in the install path.
+  ${If} $HermesLogHandle != ""
+    FileClose $HermesLogHandle
+    StrCpy $HermesLogHandle ""
+  ${EndIf}
 !macroend
