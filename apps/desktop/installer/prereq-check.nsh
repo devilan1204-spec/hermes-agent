@@ -707,7 +707,7 @@ hermes_prereq_not_silent:
     ${If} $0 != 0
       DetailPrint "Python install via winget exited with code $0."
       ${HermesLog} "Python install FAILED (exit $0). User notified via MessageBox."
-      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Python install via winget did not complete successfully (exit code $0).$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nInstall Python 3.11, 3.12, or 3.13 manually from https://www.python.org/downloads/ after Hermes setup finishes. Hermes will not run until Python is installed."
+      MessageBox MB_OK|MB_ICONEXCLAMATION|MB_TOPMOST "Python install via winget did not complete successfully (exit code $0).$\r$\n$\r$\nSee log: $HermesLogPath$\r$\n$\r$\nAfter this installer finishes, install Python 3.11, 3.12, or 3.13 manually from https://www.python.org/downloads/, then relaunch Hermes. Hermes will not run until Python is installed."
     ${Else}
       DetailPrint "Python 3.11 installed successfully."
       ${HermesLog} "Python install succeeded"
