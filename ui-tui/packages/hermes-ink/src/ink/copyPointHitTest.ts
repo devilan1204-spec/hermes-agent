@@ -162,19 +162,27 @@ function hitDeepest(node: DOMElement, col: number, row: number): DOMElement | nu
 /**
  * Walk the tree collecting every node with `copyRangeId`, then bucket
  * each by whether its rect ends strictly above `row` (→ candidate for
- * `beforeRangeId`) or starts strictly below `row` (→ candidate for
- * `afterRangeId`). Ranges straddling `row` are ignored — they would
- * have been picked up by the in-range path before us.
+ * `afterRangeId`: the gap is AFTER this range) or starts strictly
+ * below `row` (→ candidate for `beforeRangeId`: the gap is BEFORE
+ * this range). Ranges straddling `row` are ignored — they would have
+ * been picked up by the in-range path before us.
+ *
+ * Naming convention (matches SelectionPoint.kind === 'gap' in
+ * lib/copySource/types.ts):
+ *   - `afterRangeId` = the range the gap comes AFTER (i.e. the range
+ *     ABOVE the click, in document order BEFORE the gap)
+ *   - `beforeRangeId` = the range the gap comes BEFORE (i.e. the range
+ *     BELOW the click, in document order AFTER the gap)
  *
  * "Nearest" is measured by row distance (Manhattan-y). Ties are broken
  * by the smaller rangeId, which approximates document order (ids are
  * allocated in mount order).
  */
 function findAdjacentRanges(root: DOMElement, row: number): { afterRangeId: null | number; beforeRangeId: null | number } {
-  let beforeRangeId: null | number = null
-  let beforeDist = Number.POSITIVE_INFINITY
   let afterRangeId: null | number = null
   let afterDist = Number.POSITIVE_INFINITY
+  let beforeRangeId: null | number = null
+  let beforeDist = Number.POSITIVE_INFINITY
 
   const visit = (node: DOMElement): void => {
     const rangeId = (node.style as { copyRangeId?: number }).copyRangeId
@@ -187,18 +195,22 @@ function findAdjacentRanges(root: DOMElement, row: number): { afterRangeId: null
         const bottom = rect.y + rect.height // exclusive
 
         if (bottom <= row) {
+          // Range is ABOVE the click → the gap comes AFTER this range
+          // → it's a candidate for `afterRangeId`.
           const d = row - (bottom - 1)
-
-          if (d < beforeDist || (d === beforeDist && (beforeRangeId === null || rangeId < beforeRangeId))) {
-            beforeDist = d
-            beforeRangeId = rangeId
-          }
-        } else if (top > row) {
-          const d = top - row
 
           if (d < afterDist || (d === afterDist && (afterRangeId === null || rangeId < afterRangeId))) {
             afterDist = d
             afterRangeId = rangeId
+          }
+        } else if (top > row) {
+          // Range is BELOW the click → the gap comes BEFORE this range
+          // → it's a candidate for `beforeRangeId`.
+          const d = top - row
+
+          if (d < beforeDist || (d === beforeDist && (beforeRangeId === null || rangeId < beforeRangeId))) {
+            beforeDist = d
+            beforeRangeId = rangeId
           }
         }
         // Straddling row — leave to the in-range path; we wouldn't be
@@ -212,7 +224,7 @@ function findAdjacentRanges(root: DOMElement, row: number): { afterRangeId: null
         continue
       }
 
-      visit(child)
+      visit(child as DOMElement)
     }
   }
 
