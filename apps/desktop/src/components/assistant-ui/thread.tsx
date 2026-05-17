@@ -1,22 +1,18 @@
 import type { Unstable_TriggerAdapter, Unstable_TriggerItem } from '@assistant-ui/core'
 import {
   ActionBarPrimitive,
-  AuiIf,
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
   MessagePrimitive,
-  ThreadPrimitive,
   type ToolCallMessagePartProps,
   useAui,
-  useAuiEvent,
   useAuiState
 } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
 import { IconPlayerStopFilled } from '@tabler/icons-react'
 import {
   type ClipboardEvent,
-  type ComponentProps,
   type FC,
   type FocusEvent,
   type FormEvent,
@@ -29,7 +25,6 @@ import {
   useRef,
   useState
 } from 'react'
-import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom'
 
 import { COMPOSER_DROP_ACTIVE_CLASS, COMPOSER_DROP_FADE_CLASS } from '@/app/chat/composer/drop-affordance'
 import {
@@ -56,6 +51,7 @@ import { ClarifyTool } from '@/components/assistant-ui/clarify-tool'
 import { DirectiveContent, DirectiveText } from '@/components/assistant-ui/directive-text'
 import { hermesDirectiveFormatter } from '@/components/assistant-ui/directive-text'
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
+import { VirtualizedThread } from '@/components/assistant-ui/thread-virtualizer'
 import { HoistedTodoPanel, todosFromMessageContent } from '@/components/assistant-ui/todo-tool'
 import { ToolFallback, ToolGroupSlot } from '@/components/assistant-ui/tool-fallback'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
@@ -85,15 +81,9 @@ import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { playSpeechText, stopVoicePlayback } from '@/lib/voice-playback'
 import { notifyError } from '@/store/notifications'
-import { setThreadScrolledUp } from '@/store/thread-scroll'
 import { $voicePlayback } from '@/store/voice-playback'
 
 type ThreadLoadingState = 'response' | 'session'
-
-interface StickyStateFlags {
-  escapedFromLock: boolean
-  isAtBottom: boolean
-}
 
 interface MessageActionProps {
   messageId: string
@@ -129,17 +119,6 @@ const INTERRUPTED_ONLY_RE = /^_?\[interrupted\]_?$/i
 
 const isInterruptedOnlyMessage = (text: string) => INTERRUPTED_ONLY_RE.test(text.trim())
 
-function resetStickyState(state: StickyStateFlags) {
-  state.escapedFromLock = false
-  state.isAtBottom = true
-}
-
-function pinElementToBottom(el: HTMLElement) {
-  el.scrollTop = el.scrollHeight
-
-  return el.scrollTop
-}
-
 export const Thread: FC<{
   clampToComposer?: boolean
   cwd?: string | null
@@ -161,8 +140,6 @@ export const Thread: FC<{
   sessionId = null,
   sessionKey
 }) => {
-  const introHero = useAuiState(s => Boolean(intro) && s.thread.isEmpty)
-
   const messageComponents = useMemo(
     () => ({
       AssistantMessage: () => <AssistantMessage onBranchInNewChat={onBranchInNewChat} />,
@@ -173,277 +150,29 @@ export const Thread: FC<{
     [cwd, gateway, onBranchInNewChat, onCancel, sessionId]
   )
 
+  const emptyPlaceholder = intro ? (
+    <div
+      className="flex min-h-0 w-full flex-col items-center justify-center"
+      style={{ paddingBottom: 'var(--composer-measured-height)' }}
+    >
+      <Intro {...intro} />
+    </div>
+  ) : undefined
+
   return (
     <GeneratedImageProvider>
-      <ThreadPrimitive.Root className="relative grid h-full min-h-0 max-w-full grid-rows-[minmax(0,1fr)] overflow-hidden bg-transparent contain-[layout_paint]">
-        <ThreadPrimitive.ViewportProvider>
-          <StickToBottom
-            className="relative min-h-0 max-w-full overflow-hidden contain-[layout_paint]"
-            initial="instant"
-            resize="instant"
-            style={{ height: clampToComposer ? 'var(--thread-viewport-height)' : '100%' }}
-          >
-            <ThreadScrollSync sessionKey={sessionKey} />
-            <StickToBottom.Content
-              className={cn(
-                'scroll-auto mx-auto min-h-full w-full max-w-(--composer-width) min-w-0 gap-(--conversation-turn-gap) px-6',
-                introHero
-                  ? 'grid grid-rows-[minmax(0,1fr)_auto] py-8'
-                  : 'flex flex-col pt-[calc(var(--titlebar-height)+1.5rem)]'
-              )}
-              data-slot="aui_thread-content"
-              scrollClassName="overflow-x-hidden overflow-y-auto overscroll-contain"
-            >
-              <AuiIf condition={s => Boolean(intro) && s.thread.isEmpty}>
-                {intro ? (
-                  <div
-                    className="flex min-h-0 w-full flex-col items-center justify-center"
-                    style={{ paddingBottom: 'var(--composer-measured-height)' }}
-                  >
-                    <Intro {...intro} />
-                  </div>
-                ) : null}
-              </AuiIf>
-              <GroupedThreadMessages components={messageComponents} />
-              {loading === 'response' && <ResponseLoadingIndicator />}
-              {clampToComposer && (
-                <div
-                  aria-hidden="true"
-                  className="shrink-0"
-                  style={{ height: 'var(--thread-last-message-clearance)' }}
-                />
-              )}
-            </StickToBottom.Content>
-          </StickToBottom>
-        </ThreadPrimitive.ViewportProvider>
+      <div className="relative grid h-full min-h-0 max-w-full grid-rows-[minmax(0,1fr)] overflow-hidden bg-transparent contain-[layout_paint]">
+        <VirtualizedThread
+          clampToComposer={clampToComposer}
+          components={messageComponents}
+          emptyPlaceholder={emptyPlaceholder}
+          loadingIndicator={loading === 'response' ? <ResponseLoadingIndicator /> : null}
+          sessionKey={sessionKey}
+        />
         {loading === 'session' && <CenteredThreadSpinner />}
-      </ThreadPrimitive.Root>
+      </div>
     </GeneratedImageProvider>
   )
-}
-
-type ThreadMessageComponents = ComponentProps<typeof ThreadPrimitive.MessageByIndex>['components']
-
-function GroupedThreadMessages({ components }: { components: ThreadMessageComponents }) {
-  const messageSignature = useAuiState(s =>
-    s.thread.messages.map((message, index) => `${index}:${message.id}:${message.role}`).join('\n')
-  )
-
-  const groups = useMemo(() => {
-    const messages = messageSignature
-      ? messageSignature.split('\n').map(row => {
-          const [index, id, role] = row.split(':')
-
-          return { id, index: Number(index), role }
-        })
-      : []
-
-    const result: Array<{ id: string; indices: number[]; role: string }> = []
-
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i]
-
-      if (message.role !== 'user') {
-        result.push({ id: message.id, indices: [message.index], role: message.role })
-
-        continue
-      }
-
-      const indices = [message.index]
-      let j = i + 1
-
-      while (j < messages.length && messages[j].role !== 'user') {
-        indices.push(messages[j].index)
-        j++
-      }
-
-      result.push({ id: message.id, indices, role: 'turn' })
-      i = j - 1
-    }
-
-    return result
-  }, [messageSignature])
-
-  return (
-    <>
-      {groups.map(group =>
-        group.role === 'turn' ? (
-          <div
-            className="composer-human-ai-pair-container relative flex min-w-0 flex-col gap-(--conversation-turn-gap)"
-            data-slot="aui_turn-pair"
-            key={group.id}
-          >
-            {group.indices.map(index => (
-              <ThreadPrimitive.MessageByIndex components={components} index={index} key={index} />
-            ))}
-          </div>
-        ) : (
-          <ThreadPrimitive.MessageByIndex components={components} index={group.indices[0]} key={group.id} />
-        )
-      )}
-    </>
-  )
-}
-
-const ThreadScrollSync: FC<{ sessionKey?: string | null }> = ({ sessionKey }) => {
-  const { scrollRef, isAtBottom, state } = useStickToBottomContext()
-  const sessionKeyRef = useRef<string | null>(sessionKey ?? null)
-
-  const armedRef = useRef<ScrollBehavior | null>(null)
-  const pinRafRef = useRef<number | null>(null)
-  const previousScrollTopRef = useRef(0)
-  const suppressNextScrollEventRef = useRef(false)
-
-  const messageCount = useAuiState(s => s.thread.messages.length)
-  const prevMessageCountRef = useRef(messageCount)
-
-  useEffect(() => {
-    setThreadScrolledUp(!isAtBottom)
-  }, [isAtBottom])
-
-  useEffect(() => {
-    return () => {
-      setThreadScrolledUp(false)
-    }
-  }, [])
-
-  const armAndPin = useCallback(
-    (behavior: ScrollBehavior) => {
-      const el = scrollRef.current
-
-      if (!el) {
-        return
-      }
-
-      armedRef.current = behavior
-      resetStickyState(state)
-      suppressNextScrollEventRef.current = true
-      previousScrollTopRef.current = pinElementToBottom(el)
-    },
-    [scrollRef, state]
-  )
-
-  useEffect(() => {
-    const el = scrollRef.current
-
-    if (!el) {
-      return
-    }
-
-    const observer = new ResizeObserver(() => {
-      if (pinRafRef.current !== null) {
-        return
-      }
-
-      pinRafRef.current = window.requestAnimationFrame(() => {
-        pinRafRef.current = null
-
-        if (!armedRef.current) {
-          return
-        }
-
-        const distance = el.scrollHeight - (el.scrollTop + el.clientHeight)
-
-        if (distance < 2) {
-          armedRef.current = null
-
-          return
-        }
-
-        suppressNextScrollEventRef.current = true
-        previousScrollTopRef.current = pinElementToBottom(el)
-      })
-    })
-
-    observer.observe(el)
-
-    const content = el.firstElementChild
-
-    if (content) {
-      observer.observe(content)
-    }
-
-    return () => {
-      observer.disconnect()
-
-      if (pinRafRef.current !== null) {
-        window.cancelAnimationFrame(pinRafRef.current)
-        pinRafRef.current = null
-      }
-    }
-  }, [scrollRef])
-
-  useEffect(() => {
-    const el = scrollRef.current
-
-    if (!el) {
-      return
-    }
-
-    const onWheel = (e: WheelEvent) => {
-      if (e.deltaY < 0) {
-        armedRef.current = null
-      }
-    }
-
-    const onTouch = () => {
-      armedRef.current = null
-    }
-
-    const onScroll = () => {
-      const currentTop = el.scrollTop
-
-      if (suppressNextScrollEventRef.current) {
-        suppressNextScrollEventRef.current = false
-        previousScrollTopRef.current = currentTop
-
-        return
-      }
-
-      if (currentTop + 1 < previousScrollTopRef.current) {
-        armedRef.current = null
-      }
-
-      previousScrollTopRef.current = currentTop
-    }
-
-    el.addEventListener('wheel', onWheel, { passive: true })
-    el.addEventListener('touchmove', onTouch, { passive: true })
-    el.addEventListener('scroll', onScroll, { passive: true })
-
-    return () => {
-      el.removeEventListener('wheel', onWheel)
-      el.removeEventListener('touchmove', onTouch)
-      el.removeEventListener('scroll', onScroll)
-    }
-  }, [scrollRef])
-
-  useEffect(() => {
-    const next = sessionKey ?? null
-
-    if (sessionKeyRef.current === next) {
-      return
-    }
-
-    sessionKeyRef.current = next
-    prevMessageCountRef.current = 0
-    armAndPin('auto')
-  }, [armAndPin, sessionKey])
-
-  useEffect(() => {
-    const prev = prevMessageCountRef.current
-    prevMessageCountRef.current = messageCount
-
-    if (prev === 0 && messageCount > 0) {
-      armAndPin('auto')
-    }
-  }, [armAndPin, messageCount])
-
-  useAuiEvent('thread.runStart', () => {
-    armAndPin('instant')
-  })
-
-  return null
 }
 
 function pickPrimaryPreviewTarget(targets: string[]): string[] {
@@ -1108,7 +837,7 @@ const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sessionId }
   const [triggerPlacement, setTriggerPlacement] = useState<'bottom' | 'top'>('top')
   const [focusRequestId, setFocusRequestId] = useState(0)
   const [submitting, setSubmitting] = useState(false)
-  const expanded = draft.includes('\n') || draft.length > 96
+  const expanded = draft.includes('\n')
   const canSubmit = draft.trim().length > 0
   const at = useAtCompletions({ cwd, gateway, sessionId })
   const slash = useSlashCompletions({ gateway })

@@ -62,6 +62,9 @@ import { SidebarPanelLabel } from '../../shell/sidebar-label'
 import type { SidebarNavItem } from '../../types'
 
 import { SidebarSessionRow } from './session-row'
+import { VirtualSessionList } from './virtual-session-list'
+
+const VIRTUALIZE_THRESHOLD = 25
 
 const SIDEBAR_NAV: SidebarNavItem[] = [
   { id: 'new-session', label: 'New agent', icon: props => <Codicon name="robot" {...props} />, action: 'new-session' },
@@ -539,6 +542,8 @@ function SidebarSessionsSection({
       renderRows(items)
     )
 
+  const flatVirtualized = !showEmptyState && !groups?.length && sessions.length >= VIRTUALIZE_THRESHOLD
+
   let inner: React.ReactNode
 
   if (showEmptyState) {
@@ -559,6 +564,19 @@ function SidebarSessionsSection({
     ) : (
       groupNodes
     )
+  } else if (flatVirtualized) {
+    inner = (
+      <VirtualSessionList
+        activeSessionId={activeSessionId}
+        onDeleteSession={onDeleteSession}
+        onResumeSession={onResumeSession}
+        onTogglePin={onTogglePin}
+        pinned={pinned}
+        sessions={sessions}
+        sortable={sortable}
+        workingSessionIdSet={workingSessionIdSet}
+      />
+    )
   } else {
     inner = renderSessionList(sessions)
   }
@@ -572,11 +590,15 @@ function SidebarSessionsSection({
       inner
     )
 
+  // The virtualizer owns its own scroller, so suppress the wrapper's overflow
+  // to avoid a double scroll container.
+  const resolvedContentClassName = cn(contentClassName, flatVirtualized && 'overflow-y-visible')
+
   return (
     <SidebarGroup className={rootClassName}>
       <SidebarSectionHeader action={headerAction} label={label} meta={labelMeta} onToggle={onToggle} open={open} />
       {open && (
-        <SidebarGroupContent className={contentClassName}>
+        <SidebarGroupContent className={resolvedContentClassName}>
           {body}
           {footer}
         </SidebarGroupContent>

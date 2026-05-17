@@ -626,21 +626,8 @@ canvas {
   }
 }
 
-/* Last thread row with a message root — avoids composer overlap (Chromium/Electron). */
-[data-slot='aui_thread-content']
-  > :nth-last-child(
-    1
-      of
-      :is(
-        [data-slot='aui_assistant-message-root'],
-        [data-slot='aui_user-message-root'],
-        [data-slot='aui_system-message-root'],
-        [data-slot='aui_edit-composer-root'],
-        [data-slot='aui_response-loading']
-      )
-  ) {
-  margin-bottom: var(--thread-last-message-clearance);
-}
+/* Bottom clearance lives on [data-slot='aui_composer-clearance'] —
+   virtualized items unmount, so :nth-last-child can't fire reliably. */
 
 [data-slot='aui_assistant-message-content'] {
   padding-left: var(--message-text-indent);
