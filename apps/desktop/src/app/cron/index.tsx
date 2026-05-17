@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,6 @@ import {
   triggerCronJob,
   updateCronJob
 } from '@/hermes'
-import { Codicon } from '@/components/ui/codicon'
 import { AlertTriangle, Clock, Pause, Pencil, Play, Trash2, Zap } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
@@ -216,11 +216,23 @@ function scheduleOptionForExpr(expr: string): ScheduleOption {
     return SCHEDULE_OPTIONS.find(option => option.value === 'weekdays') ?? SCHEDULE_OPTIONS[0]
   }
 
-  if (dayOfMonth === '*' && month === '*' && isIntegerToken(dayOfWeek) && isIntegerToken(minute) && isIntegerToken(hour)) {
+  if (
+    dayOfMonth === '*' &&
+    month === '*' &&
+    isIntegerToken(dayOfWeek) &&
+    isIntegerToken(minute) &&
+    isIntegerToken(hour)
+  ) {
     return SCHEDULE_OPTIONS.find(option => option.value === 'weekly') ?? SCHEDULE_OPTIONS[0]
   }
 
-  if (month === '*' && dayOfWeek === '*' && isIntegerToken(dayOfMonth) && isIntegerToken(minute) && isIntegerToken(hour)) {
+  if (
+    month === '*' &&
+    dayOfWeek === '*' &&
+    isIntegerToken(dayOfMonth) &&
+    isIntegerToken(minute) &&
+    isIntegerToken(hour)
+  ) {
     return SCHEDULE_OPTIONS.find(option => option.value === 'monthly') ?? SCHEDULE_OPTIONS[0]
   }
 
@@ -297,10 +309,7 @@ interface CronViewProps extends React.ComponentProps<'section'> {
   setStatusbarItemGroup?: SetStatusbarItemGroup
 }
 
-export function CronView({
-  setStatusbarItemGroup: _setStatusbarItemGroup,
-  ...props
-}: CronViewProps) {
+export function CronView({ setStatusbarItemGroup: _setStatusbarItemGroup, ...props }: CronViewProps) {
   const [jobs, setJobs] = useState<CronJob[] | null>(null)
   const [query, setQuery] = useState('')
   const [refreshing, setRefreshing] = useState(false)
@@ -475,9 +484,7 @@ export function CronView({
           </div>
         </div>
       )}
-      <div className="hidden">
-        {totalCount === 0 ? 'No scheduled jobs' : `${enabledCount}/${totalCount} active`}
-      </div>
+      <div className="hidden">{totalCount === 0 ? 'No scheduled jobs' : `${enabledCount}/${totalCount} active`}</div>
 
       <CronEditorDialog editor={editor} onClose={() => setEditor({ mode: 'closed' })} onSave={handleEditorSave} />
 
@@ -488,7 +495,8 @@ export function CronView({
             <DialogDescription>
               {pendingDelete ? (
                 <>
-                  This will remove <span className="font-medium text-foreground">{truncate(jobTitle(pendingDelete), 60)}</span>{' '}
+                  This will remove{' '}
+                  <span className="font-medium text-foreground">{truncate(jobTitle(pendingDelete), 60)}</span>{' '}
                   permanently. It will stop firing immediately.
                 </>
               ) : null}
@@ -586,13 +594,14 @@ function CronJobRow({
   )
 }
 
-function IconAction({
-  children,
-  className,
-  ...props
-}: Omit<React.ComponentProps<typeof Button>, 'size' | 'variant'>) {
+function IconAction({ children, className, ...props }: Omit<React.ComponentProps<typeof Button>, 'size' | 'variant'>) {
   return (
-    <Button className={cn('size-7 text-muted-foreground hover:text-foreground', className)} size="icon" variant="ghost" {...props}>
+    <Button
+      className={cn('size-7 text-muted-foreground hover:text-foreground', className)}
+      size="icon"
+      variant="ghost"
+      {...props}
+    >
       {children}
     </Button>
   )
@@ -600,7 +609,9 @@ function IconAction({
 
 function StatePill({ children, tone }: { children: string; tone: keyof typeof PILL_TONE }) {
   return (
-    <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.64rem] capitalize', PILL_TONE[tone])}>
+    <span
+      className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.64rem] capitalize', PILL_TONE[tone])}
+    >
       {children}
     </span>
   )

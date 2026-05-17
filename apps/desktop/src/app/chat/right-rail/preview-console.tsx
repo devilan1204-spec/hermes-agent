@@ -2,10 +2,10 @@ import { useStore } from '@nanostores/react'
 import type { CSSProperties, MutableRefObject, PointerEvent as ReactPointerEvent, RefObject } from 'react'
 import { useEffect, useMemo, useRef } from 'react'
 
+import { requestComposerInsert } from '@/app/chat/composer/focus'
 import { CopyButton } from '@/components/ui/copy-button'
 import { PanelBottom, Send, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import { requestComposerInsert } from '@/app/chat/composer/focus'
 import { notify } from '@/store/notifications'
 
 import type { ConsoleEntry, PreviewConsoleState } from './preview-console-state'

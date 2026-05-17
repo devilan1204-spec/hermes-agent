@@ -1,7 +1,7 @@
 import {
   Brain,
-  Lock,
   type IconComponent,
+  Lock,
   MessageCircle,
   Mic,
   Monitor,

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageLoader } from '@/components/page-loader'
 import { StatusDot, type StatusTone } from '@/components/status-dot'
 import { Button } from '@/components/ui/button'
+import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -12,7 +13,6 @@ import {
   type MessagingPlatformInfo,
   updateMessagingPlatform
 } from '@/hermes'
-import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { AlertTriangle, ExternalLink, Save, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
@@ -206,10 +206,7 @@ function fieldCopy(field: MessagingEnvVarInfo) {
   }
 }
 
-export function MessagingView({
-  setStatusbarItemGroup: _setStatusbarItemGroup,
-  ...props
-}: MessagingViewProps) {
+export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, ...props }: MessagingViewProps) {
   const [platforms, setPlatforms] = useState<MessagingPlatformInfo[] | null>(null)
   const [edits, setEdits] = useState<EditMap>({})
   const [query, setQuery] = useState('')
@@ -375,42 +372,42 @@ export function MessagingView({
         <PageLoader label="Loading messaging platforms..." />
       ) : (
         <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[14rem_minmax(0,1fr)]">
-            <aside className="min-h-0 overflow-y-auto border-b border-(--ui-stroke-tertiary) p-2 lg:border-b-0 lg:border-r">
-              <ul className="space-y-1">
-                {visiblePlatforms.map(platform => (
-                  <li key={platform.id}>
-                    <PlatformRow
-                      active={selected?.id === platform.id}
-                      onSelect={() => setSelectedId(platform.id)}
-                      platform={platform}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </aside>
+          <aside className="min-h-0 overflow-y-auto border-b border-(--ui-stroke-tertiary) p-2 lg:border-b-0 lg:border-r">
+            <ul className="space-y-1">
+              {visiblePlatforms.map(platform => (
+                <li key={platform.id}>
+                  <PlatformRow
+                    active={selected?.id === platform.id}
+                    onSelect={() => setSelectedId(platform.id)}
+                    platform={platform}
+                  />
+                </li>
+              ))}
+            </ul>
+          </aside>
 
-            <main className="min-h-0 overflow-hidden">
-              {selected && (
-                <PlatformDetail
-                  edits={edits[selected.id] || {}}
-                  onClear={key => void handleClear(selected, key)}
-                  onEdit={(key, value) =>
-                    setEdits(current => ({
-                      ...current,
-                      [selected.id]: {
-                        ...(current[selected.id] || {}),
-                        [key]: value
-                      }
-                    }))
-                  }
-                  onSave={() => void handleSave(selected)}
-                  onToggle={enabled => void handleToggle(selected, enabled)}
-                  platform={selected}
-                  saving={saving}
-                />
-              )}
-            </main>
-          </div>
+          <main className="min-h-0 overflow-hidden">
+            {selected && (
+              <PlatformDetail
+                edits={edits[selected.id] || {}}
+                onClear={key => void handleClear(selected, key)}
+                onEdit={(key, value) =>
+                  setEdits(current => ({
+                    ...current,
+                    [selected.id]: {
+                      ...(current[selected.id] || {}),
+                      [key]: value
+                    }
+                  }))
+                }
+                onSave={() => void handleSave(selected)}
+                onToggle={enabled => void handleToggle(selected, enabled)}
+                platform={selected}
+                saving={saving}
+              />
+            )}
+          </main>
+        </div>
       )}
     </PageSearchShell>
   )
@@ -429,7 +426,9 @@ function PlatformRow({
     <button
       className={cn(
         'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
-        active ? 'bg-(--ui-bg-tertiary) text-foreground' : 'text-(--ui-text-secondary) hover:bg-(--chrome-action-hover) hover:text-foreground'
+        active
+          ? 'bg-(--ui-bg-tertiary) text-foreground'
+          : 'text-(--ui-text-secondary) hover:bg-(--chrome-action-hover) hover:text-foreground'
       )}
       onClick={onSelect}
       type="button"
@@ -490,7 +489,9 @@ function PlatformDetail({
             <PlatformAvatar platformId={platform.id} platformName={platform.name} />
             <div className="min-w-0 flex-1">
               <h3 className="text-[0.9375rem] font-semibold tracking-tight">{platform.name}</h3>
-              <p className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">{platform.description}</p>
+              <p className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+                {platform.description}
+              </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <StatePill tone={stateTone(platform)}>{stateLabel(platform.state)}</StatePill>
                 <SetupPill active={platform.configured}>
@@ -511,7 +512,9 @@ function PlatformDetail({
 
           <section>
             <SectionTitle>Get your credentials</SectionTitle>
-            <p className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">{introCopy(platform)}</p>
+            <p className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+              {introCopy(platform)}
+            </p>
             <div className="mt-3">
               <Button asChild size="sm" variant="outline">
                 <a href={platform.docs_url} rel="noreferrer" target="_blank">
@@ -591,7 +594,7 @@ function PlatformDetail({
         </div>
       </div>
 
-      <footer className="border-t border-(--ui-stroke-tertiary) bg-(--glass-chat-surface-background) px-5 py-2.5">
+      <footer className="border-t border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background) px-5 py-2.5">
         <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2">
           <label className="flex shrink-0 items-center gap-2 rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-2.5 py-1.5 text-[length:var(--conversation-text-font-size)]">
             <Switch

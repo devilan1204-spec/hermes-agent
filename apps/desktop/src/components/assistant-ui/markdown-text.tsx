@@ -63,7 +63,7 @@ async function mediaSrc(path: string): Promise<string> {
 function OpenMediaButton({ kind, path }: { kind: 'audio' | 'video'; path: string }) {
   return (
     <button
-      className="mt-2 bg-transparent text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+      className="mt-2 bg-transparent text-xs font-medium text-muted-foreground underline underline-offset-4 decoration-current/20 hover:text-foreground"
       onClick={() => void window.hermesDesktop?.openExternal(mediaExternalUrl(path))}
       type="button"
     >
@@ -146,7 +146,7 @@ function MediaAttachment({ path }: { path: string }) {
 
   return (
     <a
-      className="font-semibold text-foreground underline underline-offset-4 decoration-current wrap-anywhere"
+      className="font-semibold text-foreground underline underline-offset-4 decoration-current/20 wrap-anywhere"
       href="#"
       onClick={event => {
         event.preventDefault()
@@ -189,7 +189,7 @@ function MarkdownLink({ children, className, href, ...props }: ComponentProps<'a
     return (
       <a
         className={cn(
-          'font-semibold text-foreground underline underline-offset-4 decoration-current wrap-anywhere',
+          'font-semibold text-foreground underline underline-offset-4 decoration-current/20 wrap-anywhere',
           className
         )}
         href={href}
@@ -266,8 +266,12 @@ const MarkdownTextImpl = () => {
             {...props}
           />
         ),
-        ul: ({ className, ...props }: ComponentProps<'ul'>) => <ul className={cn('my-1 gap-0', className)} {...props} />,
-        ol: ({ className, ...props }: ComponentProps<'ol'>) => <ol className={cn('my-1 gap-0', className)} {...props} />,
+        ul: ({ className, ...props }: ComponentProps<'ul'>) => (
+          <ul className={cn('my-1 gap-0', className)} {...props} />
+        ),
+        ol: ({ className, ...props }: ComponentProps<'ol'>) => (
+          <ol className={cn('my-1 gap-0', className)} {...props} />
+        ),
         li: ({ className, ...props }: ComponentProps<'li'>) => (
           <li className={cn('leading-(--dt-line-height)', className)} {...props} />
         ),

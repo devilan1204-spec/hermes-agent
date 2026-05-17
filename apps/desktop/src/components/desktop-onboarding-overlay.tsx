@@ -144,8 +144,8 @@ export function DesktopOnboardingOverlay({ enabled, onCompleted, requestGateway 
   const showPicker = flow.status === 'idle' || flow.status === 'success'
 
   return (
-    <div className="fixed inset-0 z-1300 flex items-center justify-center bg-(--glass-chat-surface-background) p-6">
-      <div className="w-full max-w-[45rem] overflow-hidden rounded-xl border border-(--ui-stroke-secondary) bg-(--glass-chat-bubble-background) shadow-sm">
+    <div className="fixed inset-0 z-1300 flex items-center justify-center bg-(--ui-chat-surface-background) p-6">
+      <div className="w-full max-w-[45rem] overflow-hidden rounded-xl border border-(--ui-stroke-secondary) bg-(--ui-chat-bubble-background) shadow-sm">
         <Header />
         <div className="grid gap-5 p-6">
           {reason ? <ReasonNotice reason={reason} /> : null}
@@ -209,7 +209,7 @@ function Preparing({ boot }: { boot: DesktopBootState }) {
 
 function Header() {
   return (
-    <div className="border-b border-(--ui-stroke-tertiary) bg-(--glass-chat-bubble-background) px-6 py-5">
+    <div className="border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background) px-6 py-5">
       <div className="flex items-start gap-3">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-(--ui-bg-tertiary) text-(--ui-text-tertiary)">
           <Sparkles className="size-5" />
@@ -252,7 +252,7 @@ function FooterLink({ children, onClick }: { children: React.ReactNode; onClick:
   return (
     <div className="pt-2 text-center">
       <button
-        className="text-sm font-semibold text-foreground underline-offset-4 hover:underline"
+        className="text-sm font-semibold text-foreground underline-offset-4 decoration-current/20 hover:underline"
         onClick={onClick}
         type="button"
       >

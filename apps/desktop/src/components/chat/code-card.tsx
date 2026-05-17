@@ -58,11 +58,7 @@ function CodeCardIcon({ className, ...props }: CodiconProps) {
 
 function CodeCardSubtitle({ className, ...props }: React.ComponentProps<'span'>) {
   return (
-    <span
-      className={cn('font-normal text-muted-foreground', className)}
-      data-slot="code-card-subtitle"
-      {...props}
-    />
+    <span className={cn('font-normal text-muted-foreground', className)} data-slot="code-card-subtitle" {...props} />
   )
 }
 

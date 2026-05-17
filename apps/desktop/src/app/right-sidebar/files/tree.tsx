@@ -143,8 +143,8 @@ function ProjectTreeRow({
       aria-expanded={isFolder ? node.isOpen : undefined}
       aria-selected={node.isSelected}
       className={cn(
-        'group/row flex h-full cursor-pointer select-none items-center gap-1 border border-transparent px-3 text-xs font-normal leading-(--file-tree-row-height) text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
-        node.isSelected && 'bg-(--ui-bg-tertiary) text-foreground',
+        'group/row flex h-full cursor-pointer select-none items-center gap-1 border border-transparent px-3 text-xs font-normal leading-(--file-tree-row-height) text-(--ui-text-secondary) transition-colors hover:bg-(--ui-row-hover-background) hover:text-foreground',
+        node.isSelected && 'bg-(--ui-row-active-background) text-foreground',
         isPlaceholder && 'pointer-events-none italic text-muted-foreground/70'
       )}
       draggable={!isPlaceholder}
@@ -192,7 +192,11 @@ function ProjectTreeRow({
     >
       {isFolder && !isPlaceholder && (
         <span aria-hidden className="flex w-3 items-center justify-center">
-          <Codicon className="text-(--ui-text-tertiary)" name={node.isOpen ? 'chevron-down' : 'chevron-right'} size="0.75rem" />
+          <Codicon
+            className="text-(--ui-text-tertiary)"
+            name={node.isOpen ? 'chevron-down' : 'chevron-right'}
+            size="0.75rem"
+          />
         </span>
       )}
       {!isFolder && <span aria-hidden className="w-3 shrink-0" />}

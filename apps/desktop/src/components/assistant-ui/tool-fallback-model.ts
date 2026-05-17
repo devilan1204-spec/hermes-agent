@@ -834,9 +834,17 @@ export function inlineDiffFromResult(result: unknown): string {
 // Falls back to a string only when there's something concrete to render —
 // counts of opaque items/fields are noise, not signal.
 function minimalValueSummary(value: unknown): string {
-  if (value == null) return ''
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (value == null) {
+    return ''
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
 
   return ''
 }
@@ -1193,6 +1201,7 @@ export function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
 
   const searchHits =
     part.toolName === 'web_search' && status !== 'error' ? extractSearchResults(part.result) : undefined
+
   const resultCount = status === 'error' ? null : toolResultCount(part, argsRecord, resultRecord)
 
   return {

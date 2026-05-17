@@ -67,7 +67,7 @@ export function AppearanceSettings() {
           </p>
         </div>
 
-        <section className="rounded-xl border border-(--ui-stroke-tertiary) bg-(--glass-chat-bubble-background) p-3 shadow-sm">
+        <section className="rounded-xl border border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background) p-3 shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-medium">Color Mode</div>
@@ -105,14 +105,16 @@ export function AppearanceSettings() {
                     )}
                   </div>
                   <div className="mt-2 text-[length:var(--conversation-text-font-size)] font-medium">{label}</div>
-                  <div className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">{description}</div>
+                  <div className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+                    {description}
+                  </div>
                 </button>
               )
             })}
           </div>
         </section>
 
-        <section className="rounded-xl border border-(--ui-stroke-tertiary) bg-(--glass-chat-bubble-background) p-3 shadow-sm">
+        <section className="rounded-xl border border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background) p-3 shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-medium">Tool Call Display</div>
@@ -160,14 +162,16 @@ export function AppearanceSettings() {
                       </span>
                     )}
                   </div>
-                  <div className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">{option.description}</div>
+                  <div className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+                    {option.description}
+                  </div>
                 </button>
               )
             })}
           </div>
         </section>
 
-        <section className="rounded-xl border border-(--ui-stroke-tertiary) bg-(--glass-chat-bubble-background) p-3 shadow-sm">
+        <section className="rounded-xl border border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background) p-3 shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-medium">Theme</div>
@@ -197,7 +201,9 @@ export function AppearanceSettings() {
                   <ThemePreview name={theme.name} />
                   <div className="mt-3 flex items-start justify-between gap-3 px-1">
                     <div className="min-w-0">
-                      <div className="truncate text-[length:var(--conversation-text-font-size)] font-medium">{theme.label}</div>
+                      <div className="truncate text-[length:var(--conversation-text-font-size)] font-medium">
+                        {theme.label}
+                      </div>
                       <div className="mt-0.5 line-clamp-2 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
                         {theme.description}
                       </div>

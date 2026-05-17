@@ -93,7 +93,7 @@ export function ComposerControls({
               <span className="block size-3 rounded-[0.1875rem] bg-current" />
             )
           ) : (
-          <Codicon name="arrow-up" size="1rem" />
+            <Codicon name="arrow-up" size="1rem" />
           )}
         </Button>
       )}

@@ -1,13 +1,13 @@
 import { useCallback } from 'react'
 
+import { requestComposerFocus, requestComposerInsert } from '@/app/chat/composer/focus'
 import { formatRefValue } from '@/components/assistant-ui/directive-text'
 import { attachmentId, contextPath, pathLabel } from '@/lib/chat-runtime'
-import { requestComposerFocus, requestComposerInsert } from '@/app/chat/composer/focus'
 import {
   addComposerAttachment,
-  setComposerTerminalSelection,
   type ComposerAttachment,
-  removeComposerAttachment
+  removeComposerAttachment,
+  setComposerTerminalSelection
 } from '@/store/composer'
 import { notify, notifyError } from '@/store/notifications'
 

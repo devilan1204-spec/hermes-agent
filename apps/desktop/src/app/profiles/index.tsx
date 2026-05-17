@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,6 @@ import {
   renameProfile,
   updateProfileSoul
 } from '@/hermes'
-import { Codicon } from '@/components/ui/codicon'
 import { AlertTriangle, Pencil, Save, Terminal, Trash2, Users } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
@@ -254,15 +254,7 @@ export function ProfilesView({
   )
 }
 
-function ProfileRow({
-  active,
-  onSelect,
-  profile
-}: {
-  active: boolean
-  onSelect: () => void
-  profile: ProfileInfo
-}) {
+function ProfileRow({ active, onSelect, profile }: { active: boolean; onSelect: () => void; profile: ProfileInfo }) {
   return (
     <button
       className={cn(
@@ -364,9 +356,7 @@ function ProfileDetail({
                 {profile.model ? (
                   <>
                     <span className="font-mono">{profile.model}</span>
-                    {profile.provider && (
-                      <span className="text-muted-foreground"> · {profile.provider}</span>
-                    )}
+                    {profile.provider && <span className="text-muted-foreground"> · {profile.provider}</span>}
                   </>
                 ) : (
                   <span className="text-muted-foreground">Not set</span>
@@ -673,7 +663,8 @@ function RenameProfileDialog({
         <DialogHeader>
           <DialogTitle>Rename profile</DialogTitle>
           <DialogDescription>
-            Renaming updates the profile directory and any wrapper scripts in <span className="font-mono">~/.local/bin</span>.
+            Renaming updates the profile directory and any wrapper scripts in{' '}
+            <span className="font-mono">~/.local/bin</span>.
           </DialogDescription>
         </DialogHeader>
 

@@ -3,11 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
-import { getSkills, getToolsets, toggleSkill } from '@/hermes'
 import { Codicon } from '@/components/ui/codicon'
-import { Brain, Wrench } from '@/lib/icons'
-import type { IconComponent } from '@/lib/icons'
+import { Switch } from '@/components/ui/switch'
+import { TextTab, TextTabMeta } from '@/components/ui/text-tab'
+import { getSkills, getToolsets, toggleSkill } from '@/hermes'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import type { SkillInfo, ToolsetInfo } from '@/types/hermes'
@@ -65,10 +64,7 @@ interface SkillsViewProps extends React.ComponentProps<'section'> {
   setStatusbarItemGroup?: SetStatusbarItemGroup
 }
 
-export function SkillsView({
-  setStatusbarItemGroup: _setStatusbarItemGroup,
-  ...props
-}: SkillsViewProps) {
+export function SkillsView({ setStatusbarItemGroup: _setStatusbarItemGroup, ...props }: SkillsViewProps) {
   const [mode, setMode] = useRouteEnumParam('tab', SKILLS_MODES, 'skills')
 
   const [query, setQuery] = useState('')
@@ -157,31 +153,27 @@ export function SkillsView({
       {...props}
       filters={
         <>
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            <ModeButton active={mode === 'skills'} icon={Brain} onClick={() => setMode('skills')} text="Skills" />
-            <ModeButton
-              active={mode === 'toolsets'}
-              icon={Wrench}
-              onClick={() => setMode('toolsets')}
-              text="Toolsets"
-            />
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+            <TextTab active={mode === 'skills'} onClick={() => setMode('skills')}>
+              Skills
+            </TextTab>
+            <TextTab active={mode === 'toolsets'} onClick={() => setMode('toolsets')}>
+              Toolsets
+            </TextTab>
           </div>
           {mode === 'skills' && categories.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-1.5">
-              <CategoryButton
-                active={activeCategory === null}
-                count={totalSkills}
-                label="All"
-                onClick={() => setActiveCategory(null)}
-              />
+            <div className="flex flex-wrap justify-center gap-x-2 gap-y-1">
+              <TextTab active={activeCategory === null} onClick={() => setActiveCategory(null)}>
+                All <TextTabMeta>{totalSkills}</TextTabMeta>
+              </TextTab>
               {categories.map(category => (
-                <CategoryButton
+                <TextTab
                   active={activeCategory === category.key}
-                  count={category.count}
                   key={category.key}
-                  label={prettyName(category.key)}
                   onClick={() => setActiveCategory(activeCategory === category.key ? null : category.key)}
-                />
+                >
+                  {prettyName(category.key)} <TextTabMeta>{category.count}</TextTabMeta>
+                </TextTab>
               ))}
             </div>
           )}
@@ -192,7 +184,7 @@ export function SkillsView({
       searchTrailingAction={
         <Button
           aria-label={refreshing ? 'Refreshing skills' : 'Refresh skills'}
-          className="text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground"
+          className="text-(--ui-text-tertiary) hover:bg-transparent hover:text-foreground"
           disabled={refreshing}
           onClick={() => void refreshCapabilities()}
           size="icon-xs"
@@ -205,156 +197,93 @@ export function SkillsView({
       }
       searchValue={query}
     >
-
-        {!skills || !toolsets ? (
-          <PageLoader label="Loading capabilities..." />
-        ) : mode === 'skills' ? (
-          <div className="h-full overflow-y-auto px-4 py-3">
-            {visibleSkills.length === 0 ? (
-              <EmptyState description="Try a broader search or different category." title="No skills found" />
-            ) : (
-              <div className="space-y-4">
-                {skillGroups.map(([category, list]) => (
-                  <div className="space-y-1.5" key={category}>
-                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {prettyName(category)}
-                    </div>
-                    <div className="divide-y divide-(--ui-stroke-quaternary)">
-                      {list.map(skill => (
-                        <div
-                          className="grid gap-3 px-0 py-2.5 transition-colors hover:bg-(--ui-bg-quinary) sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                          key={skill.name}
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">{skill.name}</div>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              {asText(skill.description) || 'No description.'}
-                            </p>
-                          </div>
-                          <Switch
-                            checked={skill.enabled}
-                            disabled={savingSkill === skill.name}
-                            onCheckedChange={checked => void handleToggleSkill(skill, checked)}
-                          />
-                        </div>
-                      ))}
-                    </div>
+      {!skills || !toolsets ? (
+        <PageLoader label="Loading capabilities..." />
+      ) : mode === 'skills' ? (
+        <div className="h-full overflow-y-auto px-4 py-3">
+          {visibleSkills.length === 0 ? (
+            <EmptyState description="Try a broader search or different category." title="No skills found" />
+          ) : (
+            <div className="space-y-4">
+              {skillGroups.map(([category, list]) => (
+                <div className="space-y-1.5" key={category}>
+                  <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {prettyName(category)}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="h-full overflow-y-auto px-4 py-3">
-            {visibleToolsets.length === 0 ? (
-              <EmptyState description="Try a broader search query." title="No toolsets found" />
-            ) : (
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">
-                  {enabledToolsets}/{toolsets.length} toolsets enabled
-                </div>
-                <div className="divide-y divide-(--ui-stroke-quaternary)">
-                  {visibleToolsets.map(toolset => {
-                    const tools = toolNames(toolset)
-                    const label = asText(toolset.label || toolset.name)
-
-                    return (
-                      <div className="px-0 py-2.5 transition-colors hover:bg-(--ui-bg-quinary)" key={toolset.name}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="truncate text-sm font-medium">{label}</div>
-                          <div className="flex items-center gap-1.5">
-                            <StatusPill active={toolset.enabled}>{toolset.enabled ? 'Enabled' : 'Disabled'}</StatusPill>
-                            <StatusPill active={toolset.configured}>
-                              {toolset.configured ? 'Configured' : 'Needs keys'}
-                            </StatusPill>
-                          </div>
+                  <div className="divide-y divide-(--ui-stroke-quaternary)">
+                    {list.map(skill => (
+                      <div
+                        className="grid gap-3 px-0 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                        key={skill.name}
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">{skill.name}</div>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {asText(skill.description) || 'No description.'}
+                          </p>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {asText(toolset.description) || 'No description.'}
-                        </p>
-                        {tools.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {tools.map(name => (
-                              <span
-                                className="rounded-md bg-(--ui-bg-quinary) px-1.5 py-0.5 font-mono text-[0.65rem] text-(--ui-text-tertiary)"
-                                key={name}
-                              >
-                                {name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        <Switch
+                          checked={skill.enabled}
+                          disabled={savingSkill === skill.name}
+                          onCheckedChange={checked => void handleToggleSkill(skill, checked)}
+                        />
                       </div>
-                    )
-                  })}
+                    ))}
+                  </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="h-full overflow-y-auto px-4 py-3">
+          {visibleToolsets.length === 0 ? (
+            <EmptyState description="Try a broader search query." title="No toolsets found" />
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">
+                {enabledToolsets}/{toolsets.length} toolsets enabled
               </div>
-            )}
-          </div>
-        )}
+              <div className="divide-y divide-(--ui-stroke-quaternary)">
+                {visibleToolsets.map(toolset => {
+                  const tools = toolNames(toolset)
+                  const label = asText(toolset.label || toolset.name)
+
+                  return (
+                    <div className="px-0 py-2.5" key={toolset.name}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="truncate text-sm font-medium">{label}</div>
+                        <div className="flex items-center gap-1.5">
+                          <StatusPill active={toolset.enabled}>{toolset.enabled ? 'Enabled' : 'Disabled'}</StatusPill>
+                          <StatusPill active={toolset.configured}>
+                            {toolset.configured ? 'Configured' : 'Needs keys'}
+                          </StatusPill>
+                        </div>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {asText(toolset.description) || 'No description.'}
+                      </p>
+                      {tools.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {tools.map(name => (
+                            <span
+                              className="rounded-md bg-(--ui-bg-quinary) px-1.5 py-0.5 font-mono text-[0.65rem] text-(--ui-text-tertiary)"
+                              key={name}
+                            >
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </PageSearchShell>
-  )
-}
-
-function ModeButton({
-  active,
-  icon: Icon,
-  onClick,
-  text
-}: {
-  active: boolean
-  icon: IconComponent
-  onClick: () => void
-  text: string
-}) {
-  return (
-    <Button
-      className={cn(
-        'h-8 gap-1.5 rounded-md px-2.5 text-xs',
-        active
-          ? 'bg-(--ui-bg-tertiary) text-foreground'
-          : 'text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'
-      )}
-      onClick={onClick}
-      size="sm"
-      type="button"
-      variant="ghost"
-    >
-      <Icon className="size-3.5" />
-      {text}
-    </Button>
-  )
-}
-
-function CategoryButton({
-  active,
-  count,
-  label,
-  onClick
-}: {
-  active: boolean
-  count: number
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      className={cn(
-        'inline-flex h-7 items-center gap-1 rounded-md bg-transparent px-1.5 text-[0.68rem] transition-colors',
-        active
-          ? 'bg-(--ui-bg-tertiary) text-foreground'
-          : 'text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      <span
-        className={cn('underline-offset-4 decoration-current', active ? 'font-medium underline' : 'hover:underline')}
-      >
-        {label}
-      </span>
-      <span className="text-[0.62rem] text-muted-foreground/80 no-underline">{count}</span>
-    </button>
   )
 }
 
@@ -363,9 +292,7 @@ function StatusPill({ active, children }: { active: boolean; children: string })
     <span
       className={cn(
         'inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.64rem]',
-        active
-          ? 'bg-(--ui-bg-tertiary) text-(--ui-text-secondary)'
-          : 'bg-(--ui-bg-quinary) text-(--ui-text-tertiary)'
+        active ? 'bg-(--ui-bg-tertiary) text-(--ui-text-secondary)' : 'bg-(--ui-bg-quinary) text-(--ui-text-tertiary)'
       )}
     >
       {children}

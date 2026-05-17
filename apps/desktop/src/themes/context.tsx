@@ -148,6 +148,17 @@ function renderedModeFor(colors: DesktopThemeColors, mode: 'light' | 'dark'): 'l
 
 // ─── CSS application ────────────────────────────────────────────────────────
 
+// Per-mode mix knobs. Light/dark fallbacks live in styles.css `:root` /
+// `:root.dark`; setting them inline keeps active-skin overrides surviving
+// the boot-time paint.
+const mixesFor = (isDark: boolean): Record<string, string> => ({
+  '--theme-mix-chrome': isDark ? '74%' : '92%',
+  '--theme-mix-sidebar': '100%',
+  '--theme-mix-card': isDark ? '38%' : '22%',
+  '--theme-mix-elevated': isDark ? '46%' : '28%',
+  '--theme-mix-bubble': isDark ? '46%' : '0%'
+})
+
 function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark') {
   if (typeof document === 'undefined') {
     return
@@ -157,95 +168,54 @@ function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark') {
   const c = theme.colors
   const typo = { ...DEFAULT_TYPOGRAPHY, ...nousTheme.typography, ...theme.typography }
   const rendered = renderedModeFor(c, mode)
+  const isDark = rendered === 'dark'
   const midground = c.midground ?? c.ring
   const skinName = theme.name.endsWith(`-${mode}`) ? theme.name.slice(0, -mode.length - 1) : theme.name
-  const neutralChrome = rendered === 'dark' ? '#0d0d0e' : '#f3f3f3'
-  const neutralSidebar = rendered === 'dark' ? '#0a0a0b' : '#f3f3f3'
-  const neutralCard = rendered === 'dark' ? '#161618' : '#fcfcfc'
-  const chromeMix = rendered === 'dark' ? 36 : 44
-  const sidebarMix = rendered === 'dark' ? 42 : 36
-  const cardMix = rendered === 'dark' ? 38 : 22
-  const elevatedMix = rendered === 'dark' ? 46 : 28
-  const bubbleMix = rendered === 'dark' ? 48 : 30
 
   root.style.setProperty('color-scheme', rendered)
   root.dataset.hermesTheme = skinName
   root.dataset.hermesMode = rendered
-  root.classList.toggle('dark', rendered === 'dark')
+  root.classList.toggle('dark', isDark)
 
-  const set = (k: string, v: string) => root.style.setProperty(k, v)
-  set('--theme-foreground', c.foreground)
-  set('--theme-primary', c.primary)
-  set('--theme-secondary', c.secondary)
-  set('--theme-accent-soft', c.accent)
-  set('--theme-midground', midground)
-  set('--theme-warm', c.primary)
-  set('--theme-background-seed', c.background)
-  set('--theme-sidebar-seed', c.sidebarBackground ?? c.background)
-  set('--theme-card-seed', c.card)
-  set('--theme-elevated-seed', c.popover)
-  set('--theme-bubble-seed', c.userBubble ?? c.popover)
-  set('--theme-neutral-chrome', neutralChrome)
-  set('--theme-neutral-sidebar', neutralSidebar)
-  set('--theme-neutral-card', neutralCard)
-  set('--theme-mix-chrome', `${chromeMix}%`)
-  set('--theme-mix-sidebar', `${sidebarMix}%`)
-  set('--theme-mix-card', `${cardMix}%`)
-  set('--theme-mix-elevated', `${elevatedMix}%`)
-  set('--theme-mix-bubble', `${bubbleMix}%`)
-  set('--theme-fill-primary-accent-mix', '16%')
-  set('--theme-fill-secondary-accent-mix', '11%')
-  set('--theme-fill-tertiary-accent-mix', '8%')
-  set('--theme-fill-quaternary-accent-mix', '5%')
-  set('--theme-fill-quinary-accent-mix', '3%')
-  set('--theme-stroke-primary-accent-mix', '24%')
-  set('--theme-stroke-secondary-accent-mix', '16%')
-  set('--theme-stroke-tertiary-accent-mix', '10%')
-  set('--theme-stroke-quaternary-accent-mix', '6%')
-  set('--ui-base', 'var(--theme-foreground)')
-  set('--ui-accent', 'var(--theme-midground)')
-  set('--ui-accent-secondary', 'var(--theme-primary)')
-  set('--ui-warm', 'var(--theme-warm)')
-  set('--ui-bg-chrome', 'color-mix(in srgb, var(--theme-background-seed) var(--theme-mix-chrome), var(--theme-neutral-chrome))')
-  set('--ui-bg-sidebar', 'color-mix(in srgb, var(--theme-sidebar-seed) var(--theme-mix-sidebar), var(--theme-neutral-sidebar))')
-  set('--ui-bg-editor', 'color-mix(in srgb, var(--theme-card-seed) var(--theme-mix-card), var(--theme-neutral-card))')
-  set('--ui-bg-elevated', 'color-mix(in srgb, var(--theme-elevated-seed) var(--theme-mix-elevated), var(--theme-neutral-card))')
-  set('--ui-bg-input', 'var(--ui-bg-editor)')
-  set('--glass-surface-background', 'var(--ui-bg-editor)')
-  set('--glass-sidebar-surface-background', 'var(--ui-bg-sidebar)')
-  set('--glass-chat-surface-background', 'var(--ui-bg-chrome)')
-  set('--glass-editor-surface-background', 'var(--ui-bg-chrome)')
-  set('--glass-chat-bubble-background', 'color-mix(in srgb, var(--theme-bubble-seed) var(--theme-mix-bubble), var(--theme-neutral-card))')
-  set('--glass-chat-bubble-opaque-background', 'var(--ui-bg-editor)')
-  set('--dt-background', 'var(--ui-bg-chrome)')
-  set('--dt-foreground', 'var(--ui-text-primary)')
-  set('--dt-card', 'var(--ui-bg-editor)')
-  set('--dt-card-foreground', 'var(--ui-text-primary)')
-  set('--dt-muted', c.muted)
-  set('--dt-muted-foreground', 'var(--ui-text-tertiary)')
-  set('--dt-popover', 'var(--ui-bg-elevated)')
-  set('--dt-popover-foreground', 'var(--ui-text-primary)')
-  set('--dt-primary', 'var(--theme-primary)')
-  set('--dt-primary-foreground', c.primaryForeground)
-  set('--dt-secondary', 'var(--theme-secondary)')
-  set('--dt-secondary-foreground', c.secondaryForeground)
-  set('--dt-accent', 'var(--theme-accent-soft)')
-  set('--dt-accent-foreground', c.accentForeground)
-  set('--dt-border', c.border)
-  set('--dt-input', c.input)
-  set('--dt-ring', c.ring)
-  set('--dt-midground', 'var(--theme-midground)')
-  set('--dt-midground-foreground', c.midgroundForeground ?? readableOn(midground))
-  set('--dt-composer-ring', c.composerRing ?? midground)
-  set('--dt-destructive', c.destructive)
-  set('--dt-destructive-foreground', c.destructiveForeground)
-  set('--dt-sidebar-bg', 'var(--ui-bg-sidebar)')
-  set('--dt-sidebar-border', c.sidebarBorder ?? c.border)
-  set('--dt-user-bubble', 'var(--glass-chat-bubble-background)')
-  set('--dt-user-bubble-border', c.userBubbleBorder ?? c.border)
-  set('--dt-font-sans', typo.fontSans)
-  set('--dt-font-mono', typo.fontMono)
-  set('--noise-opacity-mul', rendered === 'dark' ? 'calc(0.04 / 0.21)' : 'calc(0.34 / 0.21)')
+  // Brand seeds feed every glass + shadcn token via `color-mix()` in styles.css.
+  const seeds: Record<string, string> = {
+    '--theme-foreground': c.foreground,
+    '--theme-primary': c.primary,
+    '--theme-secondary': c.secondary,
+    '--theme-accent-soft': c.accent,
+    '--theme-midground': midground,
+    '--theme-warm': c.primary,
+    '--theme-background-seed': c.background,
+    '--theme-sidebar-seed': c.sidebarBackground ?? c.background,
+    '--theme-card-seed': c.card,
+    '--theme-elevated-seed': c.popover,
+    '--theme-bubble-seed': c.userBubble ?? c.popover
+  }
+
+  // shadcn/Tailwind tokens that aren't derived from the seed chain.
+  const palette: Record<string, string> = {
+    '--dt-primary-foreground': c.primaryForeground,
+    '--dt-secondary-foreground': c.secondaryForeground,
+    '--dt-accent-foreground': c.accentForeground,
+    '--dt-border': c.border,
+    '--dt-input': c.input,
+    '--dt-ring': c.ring,
+    '--dt-muted': c.muted,
+    '--dt-midground-foreground': c.midgroundForeground ?? readableOn(midground),
+    '--dt-composer-ring': c.composerRing ?? midground,
+    '--dt-destructive': c.destructive,
+    '--dt-destructive-foreground': c.destructiveForeground,
+    '--dt-sidebar-border': c.sidebarBorder ?? c.border,
+    '--dt-user-bubble-border': c.userBubbleBorder ?? c.border,
+    '--dt-font-sans': typo.fontSans,
+    '--dt-font-mono': typo.fontMono,
+    '--noise-opacity-mul': isDark ? 'calc(0.04 / 0.21)' : 'calc(0.34 / 0.21)'
+  }
+
+  for (const [k, v] of Object.entries({ ...seeds, ...mixesFor(isDark), ...palette })) {
+    root.style.setProperty(k, v)
+  }
+
   window.hermesDesktop?.setTitleBarTheme?.({
     background: c.background,
     foreground: c.foreground

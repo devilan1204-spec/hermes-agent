@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Codicon } from '@/components/ui/codicon'
 import { CopyButton } from '@/components/ui/copy-button'
 import { triggerHaptic } from '@/lib/haptics'
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, type IconComponent } from '@/lib/icons'
+import { AlertCircle, AlertTriangle, CheckCircle2, type IconComponent, Info } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import {
   $notifications,

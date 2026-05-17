@@ -27,7 +27,12 @@ export function TerminalTab({ cwd, onAddSelectionToChat }: TerminalTabProps) {
       <div className="relative min-h-0 flex-1 px-2 pb-2">
         {status === 'starting' && (
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-            <Loader className="size-8 text-(--ui-text-tertiary)" pathSteps={180} strokeScale={0.68} type="spiral-search" />
+            <Loader
+              className="size-8 text-(--ui-text-tertiary)"
+              pathSteps={180}
+              strokeScale={0.68}
+              type="spiral-search"
+            />
           </div>
         )}
         {selection.trim() && (

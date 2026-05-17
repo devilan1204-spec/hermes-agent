@@ -60,8 +60,7 @@ const ToolEmbedContext = createContext(false)
 const TOOL_HEADER_TITLE_CLASS =
   'text-[length:var(--conversation-tool-font-size)] font-medium leading-(--conversation-line-height) text-(--ui-text-secondary)'
 
-const TOOL_HEADER_DURATION_CLASS =
-  'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-tertiary)'
+const TOOL_HEADER_DURATION_CLASS = 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-tertiary)'
 
 const TOOL_HEADER_SUBTITLE_CLASS =
   'text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)'
@@ -71,8 +70,7 @@ const TOOL_HEADER_GLYPH_WRAP_CLASS = 'grid size-3.5 shrink-0 place-items-center 
 // Glass-style section label that sits above any pre/JSON/output block.
 // Lowercase tracking + tiny size so it reads as a quiet field label rather
 // than a chrome heading. Used for "COMMAND OUTPUT", "INPUT", "OUTPUT", etc.
-const TOOL_SECTION_LABEL_CLASS =
-  'mb-1 text-[0.65rem] font-medium uppercase tracking-[0.08em] text-(--ui-text-tertiary)'
+const TOOL_SECTION_LABEL_CLASS = 'mb-1 text-[0.65rem] font-medium uppercase tracking-[0.08em] text-(--ui-text-tertiary)'
 
 // Inset scroll surface for any detail body. The expanded tool row owns the
 // border; the payload itself is just clipped raw text.
@@ -138,7 +136,9 @@ function ToolGlyph({ icon, status }: { icon?: string; status?: ToolStatus }) {
 // Which status (if any) should pre-empt the tool's icon in the leading
 // slot. Success is silent — the row reads as "done" without a checkmark.
 function leadingStatus(isPending: boolean, status: ToolStatus): ToolStatus | undefined {
-  if (isPending) return 'running'
+  if (isPending) {
+    return 'running'
+  }
 
   return status === 'success' ? undefined : status
 }
@@ -162,9 +162,7 @@ function SearchResultsList({ hits }: { hits: SearchResultRow[] }) {
             ) : (
               <span className={TOOL_HEADER_TITLE_CLASS}>{trimmedTitle}</span>
             )}
-            {hit.snippet && (
-              <p className={cn(TOOL_HEADER_SUBTITLE_CLASS, 'm-0 line-clamp-3')}>{hit.snippet}</p>
-            )}
+            {hit.snippet && <p className={cn(TOOL_HEADER_SUBTITLE_CLASS, 'm-0 line-clamp-3')}>{hit.snippet}</p>}
           </li>
         )
       })}
@@ -303,9 +301,7 @@ function ToolEntry({ part }: ToolEntryProps) {
             >
               {view.title}
             </FadeText>
-            {!isPending && view.countLabel && (
-              <span className={TOOL_HEADER_DURATION_CLASS}>{view.countLabel}</span>
-            )}
+            {!isPending && view.countLabel && <span className={TOOL_HEADER_DURATION_CLASS}>{view.countLabel}</span>}
             {!isPending && view.durationLabel && (
               <span className={TOOL_HEADER_DURATION_CLASS}>{view.durationLabel}</span>
             )}
@@ -324,9 +320,7 @@ function ToolEntry({ part }: ToolEntryProps) {
           )}
           {hasSearchHits && view.searchHits && (
             <div className="max-w-full text-xs leading-relaxed text-(--ui-text-secondary)">
-              {searchResultsLabel && (
-                <p className={TOOL_SECTION_LABEL_CLASS}>{searchResultsLabel}</p>
-              )}
+              {searchResultsLabel && <p className={TOOL_SECTION_LABEL_CLASS}>{searchResultsLabel}</p>}
               <SearchResultsList hits={view.searchHits} />
             </div>
           )}
@@ -354,22 +348,15 @@ function ToolEntry({ part }: ToolEntryProps) {
               <div className="max-w-full text-xs leading-relaxed text-(--ui-text-secondary)">
                 {view.detailLabel && <p className={TOOL_SECTION_LABEL_CLASS}>{view.detailLabel}</p>}
                 {renderDetailAsCode ? (
-                  <pre className={cn(TOOL_SECTION_PRE_CLASS, 'whitespace-pre-wrap wrap-anywhere')}>
-                    {view.detail}
-                  </pre>
+                  <pre className={cn(TOOL_SECTION_PRE_CLASS, 'whitespace-pre-wrap wrap-anywhere')}>{view.detail}</pre>
                 ) : (
-                  <CompactMarkdown
-                    className={cn(TOOL_SECTION_SURFACE_CLASS, 'wrap-anywhere')}
-                    text={view.detail}
-                  />
+                  <CompactMarkdown className={cn(TOOL_SECTION_SURFACE_CLASS, 'wrap-anywhere')} text={view.detail} />
                 )}
               </div>
             ))}
           {showRawSearchDrilldown && (
             <details className="max-w-full">
-              <summary className={cn(TOOL_SECTION_LABEL_CLASS, 'cursor-pointer mb-0')}>
-                Raw response
-              </summary>
+              <summary className={cn(TOOL_SECTION_LABEL_CLASS, 'cursor-pointer mb-0')}>Raw response</summary>
               <pre className={cn(TOOL_SECTION_PRE_CLASS, 'mt-1 whitespace-pre-wrap wrap-anywhere')}>
                 {view.rawResult}
               </pre>
@@ -424,6 +411,7 @@ export const ToolGroupSlot: FC<PropsWithChildren<{ endIndex: number; startIndex:
         if (!p || typeof p !== 'object') {
           return false
         }
+
         const row = p as { toolName?: unknown; type?: unknown }
 
         return row.type === 'tool-call' && typeof row.toolName === 'string' && !SPECIAL_TOOL_NAMES.has(row.toolName)
@@ -484,9 +472,7 @@ export const ToolGroupSlot: FC<PropsWithChildren<{ endIndex: number; startIndex:
               >
                 {groupTitle(visibleParts)}
               </FadeText>
-              {totalDurationLabel && (
-                <span className={TOOL_HEADER_DURATION_CLASS}>{totalDurationLabel}</span>
-              )}
+              {totalDurationLabel && <span className={TOOL_HEADER_DURATION_CLASS}>{totalDurationLabel}</span>}
             </span>
             {statusSummary && (
               <FadeText
@@ -529,4 +515,3 @@ export const ToolFallback = ({ toolCallId, toolName, args, isError, result }: To
 
   return <ToolEntry part={part} />
 }
-

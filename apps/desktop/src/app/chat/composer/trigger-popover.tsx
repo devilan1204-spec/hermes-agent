@@ -89,10 +89,7 @@ export function ComposerTriggerPopover({
 
           return (
             <button
-              className={cn(
-                COMPLETION_DRAWER_ROW_CLASS,
-                index === activeIndex && 'bg-(--ui-bg-tertiary)'
-              )}
+              className={cn(COMPLETION_DRAWER_ROW_CLASS, index === activeIndex && 'bg-(--ui-bg-tertiary)')}
               data-highlighted={index === activeIndex ? '' : undefined}
               key={item.id}
               onClick={() => onPick(item)}
@@ -102,9 +99,7 @@ export function ComposerTriggerPopover({
               <span className="grid size-3.5 shrink-0 place-items-center text-(--ui-text-tertiary)">
                 <Codicon name={completionIcon(kind, item)} size="0.875rem" />
               </span>
-              <span className="min-w-0 shrink truncate font-mono font-medium leading-5 text-foreground">
-                {display}
-              </span>
+              <span className="min-w-0 shrink truncate font-mono font-medium leading-5 text-foreground">{display}</span>
               {description && (
                 <span className="min-w-0 flex-1 truncate leading-5 text-(--ui-text-tertiary)">{description}</span>
               )}

@@ -53,7 +53,9 @@ export function NavLink({
     <Button
       className={cn(
         'flex min-h-7 w-full justify-start gap-2 rounded-md px-2 text-left text-[length:var(--conversation-text-font-size)] transition',
-        active ? 'bg-(--ui-bg-tertiary) text-foreground' : 'text-(--ui-text-secondary) hover:bg-(--chrome-action-hover) hover:text-foreground'
+        active
+          ? 'bg-(--ui-bg-tertiary) text-foreground'
+          : 'text-(--ui-text-secondary) hover:bg-(--chrome-action-hover) hover:text-foreground'
       )}
       onClick={onClick}
       size="sm"
@@ -90,7 +92,11 @@ export function ListRow({
     >
       <div className="min-w-0">
         <div className="text-[length:var(--conversation-text-font-size)] font-medium text-foreground">{title}</div>
-        {description && <div className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">{description}</div>}
+        {description && (
+          <div className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+            {description}
+          </div>
+        )}
         {hint && <div className="mt-1 block font-mono text-[0.68rem] text-muted-foreground/45">{hint}</div>}
         {below}
       </div>

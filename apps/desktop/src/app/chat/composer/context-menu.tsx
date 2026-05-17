@@ -11,7 +11,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Clipboard, FileText, FolderOpen, ImageIcon, Link, type IconComponent, MessageSquareText } from '@/lib/icons'
+import { Clipboard, FileText, FolderOpen, type IconComponent, ImageIcon, Link, MessageSquareText } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 import { GHOST_ICON_BTN } from './controls'
@@ -39,7 +39,10 @@ export function ContextMenu({
       <DropdownMenuTrigger asChild>
         <Button
           aria-label={state.tools.label}
-          className={cn(GHOST_ICON_BTN, 'data-[state=open]:bg-(--chrome-action-hover) data-[state=open]:text-foreground')}
+          className={cn(
+            GHOST_ICON_BTN,
+            'data-[state=open]:bg-(--chrome-action-hover) data-[state=open]:text-foreground'
+          )}
           disabled={!state.tools.enabled}
           size="icon"
           title={state.tools.label}

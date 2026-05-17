@@ -57,7 +57,9 @@ export function DisclosureRow({
           </span>
         )}
       </button>
-      {trailing && <span className="absolute right-1 top-0 flex h-(--conversation-line-height) items-center">{trailing}</span>}
+      {trailing && (
+        <span className="absolute right-1 top-0 flex h-(--conversation-line-height) items-center">{trailing}</span>
+      )}
     </div>
   )
 }

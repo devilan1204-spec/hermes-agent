@@ -43,7 +43,7 @@ export function OverlaySidebar({ children, className }: OverlaySidebarProps) {
   return (
     <aside
       className={cn(
-        'flex min-h-0 flex-col gap-0.5 overflow-y-auto bg-(--glass-sidebar-surface-background) px-2.5 py-3',
+        'flex min-h-0 flex-col gap-0.5 overflow-y-auto bg-(--ui-sidebar-surface-background) px-2.5 py-3',
         className
       )}
     >

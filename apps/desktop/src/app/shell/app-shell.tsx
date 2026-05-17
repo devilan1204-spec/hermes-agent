@@ -138,7 +138,7 @@ export function AppShell({
         tools={titlebarTools}
       />
 
-      <main className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-(--glass-chat-surface-background) transition-none">
+      <main className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none">
         <PaneShell className="min-h-0 flex-1">
           <div
             aria-hidden="true"

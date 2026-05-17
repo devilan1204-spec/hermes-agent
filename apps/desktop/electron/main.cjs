@@ -617,11 +617,10 @@ function findSystemPython() {
   if (pyExe) {
     for (const version of SUPPORTED_VERSIONS) {
       try {
-        const out = execFileSync(
-          pyExe,
-          [`-${version}`, '-c', 'import sys; print(sys.executable)'],
-          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-        )
+        const out = execFileSync(pyExe, [`-${version}`, '-c', 'import sys; print(sys.executable)'], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore']
+        })
         const candidate = out.trim()
         if (candidate && fileExists(candidate)) return candidate
       } catch {

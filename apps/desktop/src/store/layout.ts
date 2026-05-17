@@ -1,6 +1,13 @@
 import { atom, computed, type ReadableAtom } from 'nanostores'
 
-import { arraysEqual, insertUniqueId, persistBoolean, persistStringArray, storedBoolean, storedStringArray } from '@/lib/storage'
+import {
+  arraysEqual,
+  insertUniqueId,
+  persistBoolean,
+  persistStringArray,
+  storedBoolean,
+  storedStringArray
+} from '@/lib/storage'
 
 import { $paneStates, ensurePaneRegistered, setPaneOpen, setPaneWidthOverride, togglePane } from './panes'
 

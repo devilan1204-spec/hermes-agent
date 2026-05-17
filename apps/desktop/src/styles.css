@@ -103,11 +103,11 @@
     --theme-neutral-chrome: #f3f3f3;
     --theme-neutral-sidebar: #f3f3f3;
     --theme-neutral-card: #fcfcfc;
-    --theme-mix-chrome: 44%;
-    --theme-mix-sidebar: 36%;
+    --theme-mix-chrome: 92%;
+    --theme-mix-sidebar: 100%;
     --theme-mix-card: 22%;
     --theme-mix-elevated: 28%;
-    --theme-mix-bubble: 30%;
+    --theme-mix-bubble: 0%;
     --theme-fill-primary-accent-mix: 16%;
     --theme-fill-secondary-accent-mix: 11%;
     --theme-fill-tertiary-accent-mix: 8%;
@@ -117,6 +117,10 @@
     --theme-stroke-secondary-accent-mix: 16%;
     --theme-stroke-tertiary-accent-mix: 10%;
     --theme-stroke-quaternary-accent-mix: 6%;
+    --theme-row-hover-accent-mix: 4%;
+    --theme-row-active-accent-mix: 8%;
+    --theme-control-hover-accent-mix: 6%;
+    --theme-control-active-accent-mix: 8%;
 
     --ui-base: var(--theme-foreground);
     --ui-accent: var(--theme-midground);
@@ -164,6 +168,26 @@
       var(--ui-accent) var(--theme-fill-quinary-accent-mix),
       color-mix(in srgb, var(--ui-base) 3%, transparent)
     );
+    --ui-row-hover-background: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-row-hover-accent-mix),
+      color-mix(in srgb, var(--ui-base) 3%, transparent)
+    );
+    --ui-row-active-background: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-row-active-accent-mix),
+      color-mix(in srgb, var(--ui-base) 5%, transparent)
+    );
+    --ui-control-hover-background: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-control-hover-accent-mix),
+      color-mix(in srgb, var(--ui-base) 4%, transparent)
+    );
+    --ui-control-active-background: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-control-active-accent-mix),
+      color-mix(in srgb, var(--ui-base) 5%, transparent)
+    );
     --ui-text-primary: color-mix(in srgb, var(--ui-base) 94%, transparent);
     --ui-text-secondary: color-mix(in srgb, var(--ui-base) 74%, transparent);
     --ui-text-tertiary: color-mix(in srgb, var(--ui-base) 54%, transparent);
@@ -188,17 +212,18 @@
       var(--ui-accent) var(--theme-stroke-quaternary-accent-mix),
       color-mix(in srgb, var(--ui-base) 3%, transparent)
     );
-    --glass-sash-hover-border: color-mix(in srgb, var(--ui-accent) 18%, var(--ui-stroke-tertiary));
-    --glass-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
-    --glass-surface-background: var(--ui-bg-editor);
-    --glass-sidebar-surface-background: var(--ui-bg-sidebar);
-    --glass-chat-surface-background: var(--ui-bg-chrome);
-    --glass-editor-surface-background: var(--ui-bg-chrome);
-    --glass-chat-bubble-background: color-mix(in srgb, var(--theme-bubble-seed) var(--theme-mix-bubble), var(--theme-neutral-card));
-    --glass-chat-bubble-opaque-background: var(--ui-bg-editor);
-    --glass-inline-code-background: color-mix(in srgb, #141414 5%, transparent);
-    --glass-inline-code-border: color-mix(in srgb, #141414 8%, transparent);
-    --glass-inline-code-foreground: color-mix(in srgb, #141414 88%, transparent);
+    --ui-sash-hover-border: color-mix(in srgb, var(--ui-accent) 18%, var(--ui-stroke-tertiary));
+    --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
+    --ui-surface-background: var(--ui-bg-editor);
+    --ui-sidebar-surface-background: var(--ui-bg-sidebar);
+    --ui-chat-surface-background: var(--ui-bg-chrome);
+    --ui-editor-surface-background: var(--ui-bg-chrome);
+    --ui-chat-bubble-background: color-mix(in srgb, var(--theme-bubble-seed) var(--theme-mix-bubble), var(--theme-neutral-card));
+    --ui-chat-bubble-opaque-background: var(--ui-bg-editor);
+    --ui-inline-code-background: color-mix(in srgb, #141414 5%, transparent);
+    --ui-inline-code-border: color-mix(in srgb, #141414 8%, transparent);
+    --ui-inline-code-foreground: color-mix(in srgb, #141414 88%, transparent);
+    --ui-selection-background: color-mix(in srgb, #ffd24a 55%, transparent);
 
     --dt-background: var(--ui-bg-chrome);
     --dt-foreground: var(--ui-text-primary);
@@ -217,12 +242,13 @@
     --dt-border: var(--ui-stroke-secondary);
     --dt-input: var(--ui-stroke-primary);
     --dt-ring: var(--ui-stroke-primary);
+    --dt-midground: var(--theme-midground);
     --dt-composer-ring: var(--ui-base);
     --dt-destructive: #cf2d56;
     --dt-destructive-foreground: #ffffff;
     --dt-sidebar-bg: var(--ui-bg-sidebar);
     --dt-sidebar-border: var(--ui-stroke-secondary);
-    --dt-user-bubble: var(--ui-bg-editor);
+    --dt-user-bubble: var(--ui-chat-bubble-background);
     --dt-user-bubble-border: var(--ui-stroke-tertiary);
 
     --dt-font-sans: 'Segoe WPC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
@@ -280,12 +306,12 @@
     --sidebar-foreground: var(--dt-foreground);
     --sidebar-primary: var(--dt-primary);
     --sidebar-primary-foreground: var(--dt-primary-foreground);
-    --sidebar-accent: var(--dt-accent);
+    --sidebar-accent: var(--ui-control-active-background);
     --sidebar-accent-foreground: var(--dt-accent-foreground);
     --sidebar-border: var(--dt-sidebar-border);
     --sidebar-ring: var(--dt-ring);
     --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 7.5%, transparent);
-    --chrome-action-hover: var(--ui-bg-tertiary);
+    --chrome-action-hover: var(--ui-control-hover-background);
 
     --midground: var(--dt-midground);
     --background: var(--dt-background);
@@ -298,50 +324,28 @@
   }
 
   :root.dark {
-    --ui-base: #ffe6cb;
-    --ui-accent: #0053fd;
-    --ui-accent-secondary: #ffe6cb;
-    --ui-warm: #ffe6cb;
+    /* Per-mode mix knobs — overridden inline by `applyTheme()` per skin. */
+    --theme-mix-chrome: 74%;
+    --theme-mix-card: 38%;
+    --theme-mix-elevated: 46%;
+    --theme-mix-bubble: 46%;
+    --theme-neutral-chrome: #0d0d0e;
+    --theme-neutral-sidebar: #0a0a0b;
+    --theme-neutral-card: #161618;
+
+    /* Dark-only accent palette overrides. */
     --ui-red: #e75e78;
-    --ui-orange: #db704b;
-    --ui-yellow: #c08532;
     --ui-green: #55a583;
     --ui-cyan: #6f9ba6;
-    --ui-blue: #0053fd;
-    --ui-purple: #9e94d5;
-    --ui-bg-chrome: #0d1d3a;
-    --ui-bg-sidebar: #0a1833;
-    --ui-bg-editor: #101827;
-    --ui-bg-elevated: #121d32;
-    --ui-bg-input: #131316;
-    --dt-background: var(--ui-bg-chrome);
-    --dt-foreground: var(--ui-text-primary);
-    --dt-card: var(--ui-bg-elevated);
-    --dt-card-foreground: var(--ui-text-primary);
-    --dt-muted: var(--ui-bg-tertiary);
-    --dt-muted-foreground: var(--ui-text-tertiary);
-    --dt-popover: color-mix(in srgb, var(--ui-bg-elevated) 96%, transparent);
-    --dt-popover-foreground: var(--ui-text-primary);
-    --dt-primary: var(--ui-accent);
-    --dt-primary-foreground: #0b0b0c;
-    --dt-secondary: var(--ui-bg-secondary);
-    --dt-secondary-foreground: var(--ui-text-secondary);
-    --dt-accent: var(--ui-bg-tertiary);
-    --dt-accent-foreground: var(--ui-text-primary);
-    --dt-border: var(--ui-stroke-secondary);
-    --dt-input: var(--ui-stroke-primary);
-    --dt-ring: var(--ui-stroke-primary);
-    --dt-composer-ring: var(--ui-base);
-    --dt-sidebar-bg: var(--ui-bg-sidebar);
-    --dt-sidebar-border: var(--ui-stroke-secondary);
-    --dt-user-bubble: var(--ui-bg-elevated);
-    --dt-user-bubble-border: var(--ui-stroke-tertiary);
+
     --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 12%, transparent);
     --composer-ring-strength: 1.3;
     --backdrop-invert-mul: 0;
-    --glass-inline-code-background: color-mix(in srgb, #ffffff 7%, transparent);
-    --glass-inline-code-border: color-mix(in srgb, #ffffff 10%, transparent);
-    --glass-inline-code-foreground: color-mix(in srgb, #ffffff 88%, transparent);
+
+    --ui-inline-code-background: color-mix(in srgb, #ffffff 7%, transparent);
+    --ui-inline-code-border: color-mix(in srgb, #ffffff 10%, transparent);
+    --ui-inline-code-foreground: color-mix(in srgb, #ffffff 88%, transparent);
+    --ui-selection-background: color-mix(in srgb, #ffd24a 38%, transparent);
   }
 
   * {
@@ -361,7 +365,7 @@
 
   body {
     margin: 0;
-    background: var(--glass-chat-surface-background);
+    background: var(--ui-chat-surface-background);
     color: var(--dt-foreground);
     font-family: var(--dt-font-sans);
     font-size: 0.8125rem;
@@ -378,9 +382,22 @@
     font: inherit;
   }
 
+  :where(
+    a,
+    .underline,
+    [class~='hover:underline'],
+    [class~='focus:underline'],
+    [class~='focus-visible:underline'],
+    [class~='group-hover:underline'],
+    [class~='peer-hover:underline']
+  ) {
+    text-decoration-color: color-mix(in srgb, currentColor 20%, transparent);
+    text-underline-offset: 0.25rem;
+  }
+
   *::selection {
-    background: var(--dt-midground);
-    color: var(--dt-midground-foreground);
+    background: var(--ui-selection-background);
+    color: inherit;
   }
 }
 
@@ -742,19 +759,13 @@ canvas {
   background: linear-gradient(
     to bottom,
     transparent,
-    color-mix(in srgb, var(--glass-chat-surface-background) 88%, transparent)
+    color-mix(in srgb, var(--ui-chat-surface-background) 88%, transparent)
   ) !important;
 }
 
 [data-slot='composer-surface'] {
   border-color: var(--ui-stroke-secondary) !important;
   box-shadow: var(--shadow-composer) !important;
-}
-
-[data-slot='composer-surface'] > [aria-hidden='true'] {
-  background: var(--glass-chat-bubble-background) !important;
-  backdrop-filter: blur(0.75rem) saturate(1.08);
-  -webkit-backdrop-filter: blur(0.75rem) saturate(1.08);
 }
 
 [data-slot='composer-fade'] {
@@ -771,7 +782,7 @@ canvas {
 }
 
 [data-slot='composer-root']:focus-within [data-slot='composer-surface'] > [aria-hidden='true'] {
-  background: var(--glass-chat-bubble-background) !important;
+  background: var(--ui-chat-bubble-background) !important;
 }
 
 /* Tool/thinking blocks now live at message-text alignment (no leading
@@ -818,9 +829,9 @@ canvas {
 }
 
 [data-slot='aui_assistant-message-content'] .aui-md :not(pre) > code {
-  border: 0.0625rem solid var(--glass-inline-code-border);
-  background: var(--glass-inline-code-background);
-  color: var(--glass-inline-code-foreground);
+  border: 0.0625rem solid var(--ui-inline-code-border);
+  background: var(--ui-inline-code-background);
+  color: var(--ui-inline-code-foreground);
 }
 
 [data-slot='aui_assistant-message-content'] .aui-md :where(.aui-shiki, .aui-shiki > pre) {
@@ -843,18 +854,18 @@ canvas {
 }
 
 /* Tool / thinking blocks are scaffolding around the model's reply, so we
-   fade them slightly. The reading column (prose) stays at full strength;
-   scaffolding recedes and lifts back to full opacity on hover/focus so it
-   stays legible when the user actually wants to read it. */
-[data-slot='aui_assistant-message-content']
-  > :is([data-slot='tool-block'], [data-slot='aui_thinking-disclosure']) {
+   keep them transparent and fade them slightly. The reading column (prose)
+   stays at full strength; scaffolding lifts back to full opacity on
+   hover/focus so it stays legible when the user actually wants to read it. */
+[data-slot='tool-block'],
+[data-slot='aui_thinking-disclosure'] {
   background: transparent !important;
-  opacity: 0.67;
-  transition: opacity 120ms ease-out;
 }
 
-[data-slot='tool-block'] {
-  background: transparent !important;
+[data-slot='aui_assistant-message-content']
+  > :is([data-slot='tool-block'], [data-slot='aui_thinking-disclosure']) {
+  opacity: 0.67;
+  transition: opacity 120ms ease-out;
 }
 
 [data-slot='aui_assistant-message-content']
@@ -909,8 +920,13 @@ canvas {
   min-height: 0;
   min-width: 0;
   flex-shrink: 0;
+  cursor: pointer;
   color: var(--color-muted-foreground);
   opacity: 0.5;
+}
+
+[data-slot='aui_msg-actions'] button:disabled {
+  cursor: default;
 }
 
 [data-slot='aui_msg-actions'] button:hover {

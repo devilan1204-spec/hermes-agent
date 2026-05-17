@@ -14,7 +14,10 @@ interface DiffLineKind {
 }
 
 const DIFF_LINE_KINDS: DiffLineKind[] = [
-  { className: 'text-emerald-700 dark:text-emerald-300', match: line => line.startsWith('+') && !line.startsWith('+++') },
+  {
+    className: 'text-emerald-700 dark:text-emerald-300',
+    match: line => line.startsWith('+') && !line.startsWith('+++')
+  },
   { className: 'text-rose-700 dark:text-rose-300', match: line => line.startsWith('-') && !line.startsWith('---') },
   { className: 'text-sky-700 dark:text-sky-300', match: line => line.startsWith('@@') },
   {

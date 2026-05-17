@@ -183,10 +183,7 @@ function ProfilesMenuButton({ navigate }: { navigate: ReturnType<typeof useNavig
       <DropdownMenuTrigger asChild>
         <button
           aria-label="Profiles"
-          className={cn(
-            titlebarButtonClass,
-            'grid place-items-center bg-transparent select-none [&_svg]:size-4'
-          )}
+          className={cn(titlebarButtonClass, 'grid place-items-center bg-transparent select-none [&_svg]:size-4')}
           onPointerDown={event => event.stopPropagation()}
           title="Profiles"
           type="button"
@@ -220,7 +217,7 @@ function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof us
   const className = cn(
     titlebarButtonClass,
     'grid place-items-center bg-transparent select-none [&_svg]:size-4',
-    tool.active && 'bg-(--ui-bg-tertiary)! text-foreground!',
+    tool.active && 'bg-(--ui-control-active-background)! text-foreground!',
     tool.className
   )
 

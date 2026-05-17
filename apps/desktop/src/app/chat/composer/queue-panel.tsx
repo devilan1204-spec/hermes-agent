@@ -21,7 +21,9 @@ const entryPreview = (entry: QueuedPromptEntry) =>
 export function QueuePanel({ busy, editingId, entries, onDelete, onEdit, onSendNow }: QueuePanelProps) {
   const [collapsed, setCollapsed] = useState(false)
 
-  if (entries.length === 0) return null
+  if (entries.length === 0) {
+    return null
+  }
 
   return (
     <div className="rounded-2xl border border-border/65 bg-[color-mix(in_srgb,var(--dt-card)_70%,transparent)] py-0.5 shadow-[0_0_0_1px_color-mix(in_srgb,var(--dt-card)_30%,transparent)_inset]">

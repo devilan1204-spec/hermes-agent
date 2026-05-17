@@ -100,7 +100,7 @@ export function PreviewEmptyState({
             )}
             {secondaryAction && (
               <button
-                className="text-[0.6875rem] font-medium text-muted-foreground underline decoration-muted-foreground/25 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/55 disabled:cursor-default disabled:text-muted-foreground/55 disabled:no-underline"
+                className="text-[0.6875rem] font-medium text-muted-foreground underline decoration-current/20 underline-offset-4 transition-colors hover:text-foreground disabled:cursor-default disabled:text-muted-foreground/55 disabled:no-underline"
                 disabled={secondaryAction.disabled}
                 onClick={secondaryAction.onClick}
                 type="button"
@@ -298,7 +298,7 @@ function PreviewToggle({ asSource, onToggle }: { asSource: boolean; onToggle: ()
   return (
     <div className="sticky top-0 z-10 flex justify-end border-b border-border/40 bg-transparent px-3 py-1 backdrop-blur">
       <button
-        className="text-[0.625rem] font-bold text-muted-foreground underline decoration-muted-foreground/25 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/55"
+        className="text-[0.625rem] font-bold text-muted-foreground underline decoration-current/20 underline-offset-4 transition-colors hover:text-foreground"
         onClick={onToggle}
         type="button"
       >

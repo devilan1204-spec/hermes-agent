@@ -318,7 +318,11 @@ export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
     role,
     content: message.parts as Extract<ThreadMessage, { role: 'assistant' }>['content'],
     createdAt,
-    status: message.pending ? { type: 'running' } : { type: 'complete', reason: 'stop' },
+    status: message.error
+      ? { type: 'incomplete', reason: 'error', error: message.error }
+      : message.pending
+        ? { type: 'running' }
+        : { type: 'complete', reason: 'stop' },
     metadata: {
       unstable_state: null,
       unstable_annotations: [],

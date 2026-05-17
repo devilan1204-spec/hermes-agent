@@ -3,7 +3,6 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { SetTitlebarToolGroup, TitlebarTool } from '@/app/shell/titlebar-controls'
-import { Codicon } from '@/components/ui/codicon'
 import { Bug } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
@@ -31,7 +30,6 @@ type PreviewWebview = HTMLElement & {
 
 interface PreviewPaneProps {
   embedded?: boolean
-  onClose: () => void
   onRestartServer?: (url: string, context?: string) => Promise<string>
   reloadRequest?: number
   setTitlebarToolGroup?: SetTitlebarToolGroup
@@ -85,7 +83,7 @@ function PreviewLoadError({
       body={
         <>
           <a
-            className="pointer-events-auto block cursor-pointer font-mono text-muted-foreground/90 underline decoration-muted-foreground/30 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/70"
+            className="pointer-events-auto block cursor-pointer font-mono text-muted-foreground/90 underline decoration-current/20 underline-offset-4 transition-colors hover:text-foreground"
             href={error.url}
             onClick={event => {
               event.preventDefault()
@@ -118,7 +116,6 @@ const TITLEBAR_GROUP_ID = 'preview'
 
 export function PreviewPane({
   embedded = false,
-  onClose,
   onRestartServer,
   reloadRequest = 0,
   setTitlebarToolGroup,
@@ -300,35 +297,13 @@ export function PreviewPane({
               onSelect: toggleDevTools
             }
           ]
-        : []),
-      {
-        icon: <Codicon name="refresh" spinning={loading} />,
-        id: `${TITLEBAR_GROUP_ID}-reload`,
-        label: 'Reload preview',
-        onSelect: reloadPreview
-      },
-      {
-        icon: <Codicon name="close" />,
-        id: `${TITLEBAR_GROUP_ID}-close`,
-        label: 'Close preview',
-        onSelect: onClose
-      }
+        : [])
     ]
 
     setTitlebarToolGroup(TITLEBAR_GROUP_ID, tools)
 
     return () => setTitlebarToolGroup(TITLEBAR_GROUP_ID, [])
-  }, [
-    consoleOpen,
-    consoleState,
-    devtoolsOpen,
-    isWebPreview,
-    loading,
-    onClose,
-    reloadPreview,
-    setTitlebarToolGroup,
-    toggleDevTools
-  ])
+  }, [consoleOpen, consoleState, devtoolsOpen, isWebPreview, setTitlebarToolGroup, toggleDevTools])
 
   useEffect(() => {
     if (!consoleOpen) {
@@ -633,7 +608,7 @@ export function PreviewPane({
           <div className="pointer-events-none flex min-h-(--titlebar-height) items-center gap-1.5 border-b border-border/60 bg-background px-2 py-1">
             <div className="min-w-0 flex-1">
               <a
-                className="pointer-events-auto inline max-w-full cursor-pointer truncate text-left text-xs font-medium text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline"
+                className="pointer-events-auto inline max-w-full cursor-pointer truncate text-left text-xs font-medium text-foreground underline-offset-4 decoration-current/20 transition-colors hover:text-primary hover:underline"
                 href={currentUrl}
                 rel="noreferrer"
                 target="_blank"

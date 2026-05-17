@@ -32,7 +32,9 @@ export function OverlayView({
   // Settings still closes the picker first instead of the underlying overlay.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.key !== 'Escape' || event.defaultPrevented) {
+        return
+      }
 
       event.preventDefault()
       triggerHaptic('close')
@@ -56,7 +58,7 @@ export function OverlayView({
     >
       <div
         className={cn(
-          'relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-(--ui-stroke-secondary) bg-(--glass-chat-surface-background) shadow-md',
+          'relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) shadow-md',
           rootClassName
         )}
       >

@@ -60,7 +60,9 @@ function ModeCard({
         <span>{title}</span>
         {active ? <Check className="ml-auto size-4 text-primary" /> : null}
       </div>
-      <p className="mt-1.5 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">{description}</p>
+      <p className="mt-1.5 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+        {description}
+      </p>
     </button>
   )
 }

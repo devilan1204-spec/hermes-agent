@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router-dom'
 import { ZoomableImage } from '@/components/chat/zoomable-image'
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import { CopyButton } from '@/components/ui/copy-button'
+import { TextTab, TextTabMeta } from '@/components/ui/text-tab'
 import {
   Pagination,
   PaginationButton,
@@ -18,8 +20,7 @@ import {
 import { getSessionMessages, listSessions } from '@/hermes'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { ExternalLink, ExternalLinkIcon, hostPathLabel, urlSlugTitleLabel, useLinkTitle } from '@/lib/external-link'
-import { Codicon } from '@/components/ui/codicon'
-import { FileImage, FileText, FolderOpen, Layers3, Link2 } from '@/lib/icons'
+import { FileImage, FileText, FolderOpen, Link2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notifyError } from '@/store/notifications'
 import type { SessionInfo, SessionMessage } from '@/types/hermes'
@@ -364,10 +365,7 @@ interface ArtifactsViewProps extends React.ComponentProps<'section'> {
   setStatusbarItemGroup?: SetStatusbarItemGroup
 }
 
-export function ArtifactsView({
-  setStatusbarItemGroup: _setStatusbarItemGroup,
-  ...props
-}: ArtifactsViewProps) {
+export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, ...props }: ArtifactsViewProps) {
   const navigate = useNavigate()
   const [artifacts, setArtifacts] = useState<ArtifactRecord[] | null>(null)
   const [query, setQuery] = useState('')
@@ -506,39 +504,26 @@ export function ArtifactsView({
       {...props}
       filters={
         <>
-          <FilterButton
-            active={kindFilter === 'all'}
-            icon={Layers3}
-            label={`All (${counts.all})`}
-            onClick={() => setKindFilter('all')}
-          />
-          <FilterButton
-            active={kindFilter === 'image'}
-            icon={FileImage}
-            label={`Images (${counts.image})`}
-            onClick={() => setKindFilter('image')}
-          />
-          <FilterButton
-            active={kindFilter === 'file'}
-            icon={FileText}
-            label={`Files (${counts.file})`}
-            onClick={() => setKindFilter('file')}
-          />
-          <FilterButton
-            active={kindFilter === 'link'}
-            icon={Link2}
-            label={`Links (${counts.link})`}
-            onClick={() => setKindFilter('link')}
-          />
+          <TextTab active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>
+            All <TextTabMeta>({counts.all})</TextTabMeta>
+          </TextTab>
+          <TextTab active={kindFilter === 'image'} onClick={() => setKindFilter('image')}>
+            Images <TextTabMeta>({counts.image})</TextTabMeta>
+          </TextTab>
+          <TextTab active={kindFilter === 'file'} onClick={() => setKindFilter('file')}>
+            Files <TextTabMeta>({counts.file})</TextTabMeta>
+          </TextTab>
+          <TextTab active={kindFilter === 'link'} onClick={() => setKindFilter('link')}>
+            Links <TextTabMeta>({counts.link})</TextTabMeta>
+          </TextTab>
         </>
       }
       onSearchChange={setQuery}
       searchPlaceholder="Search artifacts..."
-      searchValue={query}
       searchTrailingAction={
         <Button
           aria-label={refreshing ? 'Refreshing artifacts' : 'Refresh artifacts'}
-          className="text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground"
+          className="text-(--ui-text-tertiary) hover:bg-transparent hover:text-foreground"
           disabled={refreshing}
           onClick={() => void refreshArtifacts()}
           size="icon-xs"
@@ -549,6 +534,7 @@ export function ArtifactsView({
           <Codicon name="refresh" size="0.875rem" spinning={refreshing} />
         </Button>
       }
+      searchValue={query}
     >
       {!artifacts ? (
         <PageLoader label="Indexing recent session artifacts" />
@@ -602,7 +588,7 @@ export function ArtifactsView({
                     total={visibleFileArtifacts.length}
                   />
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-(--ui-stroke-tertiary) bg-(--glass-chat-bubble-background) shadow-sm">
+                <div className="overflow-x-auto rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background) shadow-sm">
                   <ArtifactTable artifacts={pagedFileArtifacts} ctx={cellCtx} filter={kindFilter} />
                 </div>
               </section>
@@ -665,34 +651,6 @@ function ArtifactsPagination({ className, itemLabel, onPageChange, page, pageSiz
   )
 }
 
-function FilterButton({
-  active,
-  icon: Icon,
-  label,
-  onClick
-}: {
-  active: boolean
-  icon: typeof Layers3
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <Button
-      className={cn(
-        'h-7 gap-1.5 rounded-md px-2 text-[length:var(--conversation-caption-font-size)]',
-        active ? 'bg-(--ui-bg-tertiary) text-foreground' : 'text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'
-      )}
-      onClick={onClick}
-      size="sm"
-      type="button"
-      variant="ghost"
-    >
-      <Icon className="size-3.5" />
-      {label}
-    </Button>
-  )
-}
-
 interface ArtifactImageCardProps {
   artifact: ArtifactRecord
   failedImage: boolean
@@ -704,7 +662,7 @@ function ArtifactImageCard({ artifact, failedImage, onImageError, onOpenChat }: 
   return (
     <article
       className={cn(
-        'group/artifact overflow-hidden rounded-lg border border-(--ui-stroke-tertiary) bg-(--glass-chat-bubble-background) shadow-sm'
+        'group/artifact overflow-hidden rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background) shadow-sm'
       )}
     >
       <div
@@ -733,7 +691,9 @@ function ArtifactImageCard({ artifact, failedImage, onImageError, onOpenChat }: 
             <FileImage className="size-3" />
             {artifact.kind}
           </div>
-          <div className="truncate text-[length:var(--conversation-caption-font-size)] font-medium">{artifact.label}</div>
+          <div className="truncate text-[length:var(--conversation-caption-font-size)] font-medium">
+            {artifact.label}
+          </div>
           <div className="mt-0.5 truncate text-[0.625rem] text-(--ui-text-tertiary)">{artifact.value}</div>
         </div>
 
@@ -769,7 +729,7 @@ function ArtifactCellAction({
   if (href) {
     return (
       <ExternalLink
-        className="flex h-full w-full min-w-0 items-center gap-2 px-2.5 py-1.5 text-left text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) font-normal text-(--ui-text-secondary) no-underline transition-colors hover:text-foreground hover:underline"
+        className="flex h-full w-full min-w-0 items-center gap-2 px-2.5 py-1.5 text-left text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) font-normal text-(--ui-text-secondary) no-underline underline-offset-4 decoration-current/20 transition-colors hover:text-foreground hover:underline"
         href={href}
         showExternalIcon={false}
         title={title}
@@ -782,7 +742,7 @@ function ArtifactCellAction({
   return (
     <button
       className={cn(
-        'flex h-full w-full min-w-0 items-center gap-2 px-2.5 py-1.5 text-left text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) font-normal text-(--ui-text-secondary) no-underline transition-colors hover:text-foreground hover:underline',
+        'flex h-full w-full min-w-0 items-center gap-2 px-2.5 py-1.5 text-left text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) font-normal text-(--ui-text-secondary) no-underline underline-offset-4 decoration-current/20 transition-colors hover:text-foreground hover:underline',
         'cursor-pointer'
       )}
       onClick={onClick}
@@ -825,7 +785,10 @@ function LocationCell({ artifact }: { artifact: ArtifactRecord; ctx: CellCtx }) 
   return (
     <div className="group/location flex min-w-0 items-center gap-1.5">
       <div
-        className={cn('min-w-0 flex-1 truncate text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)', isLink ? 'font-normal' : 'font-mono')}
+        className={cn(
+          'min-w-0 flex-1 truncate text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)',
+          isLink ? 'font-normal' : 'font-mono'
+        )}
         title={artifact.value}
       >
         {value}
@@ -902,7 +865,7 @@ function ArtifactTable({
       </thead>
       <tbody className="divide-y divide-(--ui-stroke-quaternary)">
         {artifacts.map(artifact => (
-          <tr className="group/artifact transition-colors hover:bg-(--chrome-action-hover)" key={artifact.id}>
+          <tr className="group/artifact" key={artifact.id}>
             {ARTIFACT_COLUMNS.map(col => {
               const Cell = col.Cell
 

@@ -89,7 +89,11 @@ export function useStatusbarItems({
     const failed = actions.filter(t => !t.status.running && (t.status.exit_code ?? 0) !== 0).length
     const previewRunning = previewServerRestartStatus === 'running' ? 1 : 0
     const previewFailed = previewServerRestartStatus === 'error' ? 1 : 0
-    const subagentsRunning = Object.values(subagentsBySession).reduce((sum, items) => sum + activeSubagentCount(items), 0)
+
+    const subagentsRunning = Object.values(subagentsBySession).reduce(
+      (sum, items) => sum + activeSubagentCount(items),
+      0
+    )
 
     return {
       bgFailed: failed + previewFailed,
@@ -275,16 +279,7 @@ export function useStatusbarItems({
       },
       versionItem
     ],
-    [
-      busy,
-      contextBar,
-      contextUsage,
-      currentModel,
-      currentProvider,
-      sessionStartedAt,
-      turnStartedAt,
-      versionItem
-    ]
+    [busy, contextBar, contextUsage, currentModel, currentProvider, sessionStartedAt, turnStartedAt, versionItem]
   )
 
   const leftStatusbarItems = useMemo(
