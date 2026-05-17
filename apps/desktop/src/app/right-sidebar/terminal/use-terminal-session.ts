@@ -12,6 +12,82 @@ import { isAddSelectionShortcut, terminalSelectionAnchor, terminalSelectionLabel
 
 type TerminalStatus = 'closed' | 'open' | 'starting'
 
+function readEscapeSequence(data: string, index: number) {
+  if (data.charCodeAt(index) !== 0x1b || index + 1 >= data.length) {
+    return null
+  }
+
+  const kind = data[index + 1]
+
+  if (kind === '[') {
+    for (let i = index + 2; i < data.length; i += 1) {
+      const code = data.charCodeAt(i)
+
+      if (code >= 0x40 && code <= 0x7e) {
+        return data.slice(index, i + 1)
+      }
+    }
+  }
+
+  if (kind === ']') {
+    for (let i = index + 2; i < data.length; i += 1) {
+      if (data.charCodeAt(i) === 0x07) {
+        return data.slice(index, i + 1)
+      }
+
+      if (data.charCodeAt(i) === 0x1b && data[i + 1] === '\\') {
+        return data.slice(index, i + 2)
+      }
+    }
+  }
+
+  return data.slice(index, Math.min(index + 2, data.length))
+}
+
+function stripEscapeSequences(data: string) {
+  let index = 0
+  let text = ''
+
+  while (index < data.length) {
+    const sequence = readEscapeSequence(data, index)
+
+    if (sequence) {
+      index += sequence.length
+    } else {
+      text += data[index]
+      index += 1
+    }
+  }
+
+  return text
+}
+
+function isStartupSpacer(data: string) {
+  const text = stripEscapeSequences(data).replace(/[\s\r\n]/g, '')
+
+  return text === '' || text === '%'
+}
+
+function stripInitialPromptGap(data: string) {
+  let index = 0
+  let prefix = ''
+
+  while (index < data.length) {
+    const sequence = readEscapeSequence(data, index)
+
+    if (sequence) {
+      prefix += sequence
+      index += sequence.length
+    } else if (data[index] === '\r' || data[index] === '\n') {
+      index += 1
+    } else {
+      return prefix + data.slice(index)
+    }
+  }
+
+  return prefix
+}
+
 interface UseTerminalSessionOptions {
   cwd: string
   onAddSelectionToChat: (text: string, label?: string) => void
@@ -98,6 +174,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
 
     let disposed = false
     const cleanup: Array<() => void> = []
+    let lastSentSize: { cols: number; rows: number } | null = null
 
     const term = new Terminal({
       allowProposedApi: true,
@@ -134,7 +211,8 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
 
       const id = sessionIdRef.current
 
-      if (id) {
+      if (id && (lastSentSize?.cols !== term.cols || lastSentSize.rows !== term.rows)) {
+        lastSentSize = { cols: term.cols, rows: term.rows }
         void terminalApi.resize(id, { cols: term.cols, rows: term.rows })
       }
     }
@@ -190,6 +268,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
         }
 
         sessionIdRef.current = session.id
+        lastSentSize = { cols: term.cols, rows: term.rows }
         shellNameRef.current = session.shell || 'shell'
         setShellName(session.shell || 'shell')
 
@@ -203,8 +282,27 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
         }
 
         setStatus('open')
+        let wrotePromptContent = false
+
         cleanup.push(
-          terminalApi.onData(session.id, data => term.write(data)),
+          terminalApi.onData(session.id, data => {
+            if (wrotePromptContent) {
+              term.write(data)
+
+              return
+            }
+
+            if (isStartupSpacer(data)) {
+              return
+            }
+
+            const next = stripInitialPromptGap(data)
+
+            if (next) {
+              wrotePromptContent = true
+              term.write(next)
+            }
+          }),
           terminalApi.onExit(session.id, sessionExit => {
             const { code, signal } = sessionExit
             setStatus('closed')

@@ -7,7 +7,6 @@ import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { CopyButton } from '@/components/ui/copy-button'
-import { TextTab, TextTabMeta } from '@/components/ui/text-tab'
 import {
   Pagination,
   PaginationButton,
@@ -17,6 +16,7 @@ import {
   PaginationNext,
   PaginationPrevious
 } from '@/components/ui/pagination'
+import { TextTab, TextTabMeta } from '@/components/ui/text-tab'
 import { getSessionMessages, listSessions } from '@/hermes'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { ExternalLink, ExternalLinkIcon, hostPathLabel, urlSlugTitleLabel, useLinkTitle } from '@/lib/external-link'
