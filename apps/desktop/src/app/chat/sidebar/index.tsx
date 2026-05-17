@@ -105,13 +105,20 @@ function orderByIds<T>(items: T[], getId: (item: T) => string, orderIds: string[
   return out
 }
 
+const baseName = (path: string) =>
+  path
+    .replace(/[/\\]+$/, '')
+    .split(/[/\\]/)
+    .filter(Boolean)
+    .pop()
+
 function workspaceGroupsFor(sessions: SessionInfo[]): SidebarSessionGroup[] {
   const groups = new Map<string, SidebarSessionGroup>()
 
   for (const session of sessions) {
     const path = session.cwd?.trim() || ''
     const id = path || '__no_workspace__'
-    const label = path.replace(/[/\\]+$/, '').split(/[/\\]/).filter(Boolean).pop() || path || 'No workspace'
+    const label = baseName(path) || path || 'No workspace'
 
     const group = groups.get(id) ?? { id, label, path: path || null, sessions: [] }
     group.sessions.push(session)
@@ -168,17 +175,16 @@ export function ChatSidebar({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
-  const sortedSessions = useMemo(
-    () => [...sessions].sort((a, b) => sessionTime(b) - sessionTime(a)),
-    [sessions]
-  )
+  const sortedSessions = useMemo(() => [...sessions].sort((a, b) => sessionTime(b) - sessionTime(a)), [sessions])
 
   const sessionsById = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
   const workingSessionIdSet = useMemo(() => new Set(workingSessionIds), [workingSessionIds])
+
   const visiblePinnedIds = useMemo(
     () => pinnedSessionIds.filter(id => sessionsById.has(id)),
     [pinnedSessionIds, sessionsById]
   )
+
   const visiblePinnedIdSet = useMemo(() => new Set(visiblePinnedIds), [visiblePinnedIds])
 
   const pinnedSessions = useMemo(
@@ -263,7 +269,7 @@ export function ChatSidebar({
       className={cn(
         'relative h-full min-w-0 overflow-hidden border-r border-t-0 border-b-0 border-l-0 text-foreground transition-none',
         sidebarOpen
-          ? 'border-(--sidebar-edge-border) bg-(--glass-sidebar-surface-background) opacity-100'
+          ? 'border-(--sidebar-edge-border) bg-(--ui-sidebar-surface-background) opacity-100'
           : 'pointer-events-none border-transparent bg-transparent opacity-0'
       )}
       collapsible="none"
@@ -274,6 +280,7 @@ export function ChatSidebar({
             <SidebarMenu className="gap-px">
               {SIDEBAR_NAV.map(item => {
                 const isInteractive = Boolean(item.action) || Boolean(item.route)
+
                 const active =
                   (item.id === 'skills' && currentView === 'skills') ||
                   (item.id === 'messaging' && currentView === 'messaging') ||
@@ -284,9 +291,9 @@ export function ChatSidebar({
                     <SidebarMenuButton
                       aria-disabled={!isInteractive}
                       className={cn(
-                        'flex h-7 w-full cursor-pointer justify-start gap-2 rounded-md border border-transparent px-2 text-left text-[0.8125rem] font-medium text-(--ui-text-secondary) transition-colors duration-100 ease-out hover:bg-(--chrome-action-hover) hover:text-foreground hover:transition-none',
+                        'flex h-7 w-full cursor-pointer justify-start gap-2 rounded-md border border-transparent px-2 text-left text-[0.8125rem] font-medium text-(--ui-text-secondary) transition-colors duration-100 ease-out hover:bg-(--ui-control-hover-background) hover:text-foreground hover:transition-none',
                         active &&
-                          'border-(--ui-stroke-tertiary) bg-(--ui-bg-tertiary) text-foreground shadow-none hover:border-(--ui-stroke-tertiary)!',
+                          'border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-foreground shadow-none hover:border-(--ui-stroke-tertiary)!',
                         !isInteractive &&
                           'cursor-default hover:border-transparent hover:bg-transparent hover:text-inherit'
                       )}
@@ -353,8 +360,8 @@ export function ChatSidebar({
               <Button
                 aria-label={agentsGrouped ? 'Show agents as a single list' : 'Group agents by workspace'}
                 className={cn(
-                  'cursor-pointer text-(--ui-text-tertiary) opacity-0 hover:bg-(--chrome-action-hover) hover:text-foreground hover:opacity-100 focus-visible:opacity-100 group-hover/section:opacity-100',
-                  agentsGrouped && 'bg-(--ui-bg-tertiary) text-foreground opacity-100'
+                  'cursor-pointer text-(--ui-text-tertiary) opacity-0 hover:bg-(--ui-control-hover-background) hover:text-foreground hover:opacity-100 focus-visible:opacity-100 group-hover/section:opacity-100',
+                  agentsGrouped && 'bg-(--ui-control-active-background) text-foreground opacity-100'
                 )}
                 onClick={event => {
                   event.stopPropagation()
@@ -641,7 +648,7 @@ function SidebarWorkspaceGroup({
           {hiddenCount > 0 && (
             <button
               aria-label={`Show ${nextCount} more in ${group.label}`}
-              className="ml-auto grid size-5 cursor-pointer place-items-center rounded-sm bg-transparent text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground"
+              className="ml-auto grid size-5 cursor-pointer place-items-center rounded-sm bg-transparent text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
               onClick={() => setVisibleCount(count => count + WORKSPACE_PAGE)}
               title={`Show ${nextCount} more in ${group.label}`}
               type="button"
