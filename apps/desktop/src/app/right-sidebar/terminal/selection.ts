@@ -1,20 +1,52 @@
 import type { ITheme, Terminal } from '@xterm/xterm'
 import type { CSSProperties } from 'react'
 
-// xterm's defaults (white fg/cursor + vivid ANSI 16) already match a dark
-// terminal — we just punch the background transparent so the glass shows.
-// Light mode has no built-in, so hand-tune fg/cursor for a bright surface.
-const TRANSPARENT_BG: ITheme = { background: '#00000000' }
+// Solarized (Ethan Schoonover) for both modes. The accent palette is shared
+// — Schoonover's design is that ANSI 0–15 are identical between Light and
+// Dark; only fg/bg/cursor swap (`base00/01` vs `base0/1`). We skip both
+// Solarized backgrounds (`base3` cream / `base03` slate) and keep the glass
+// translucent in either mode.
+//
+// Heads-up: ANSI 7 (`white` = `base2` #eee8d5) is the lightest cream by
+// design — near-invisible against light glass. Bump to `base1` (#93a1a1)
+// if anything that emits `\x1b[37m` (e.g. tmux status bars) breaks.
+//
+// Palette source: altercation/solarized (iTerm2 scheme).
+const SOLARIZED_ANSI: ITheme = {
+  black: '#073642',
+  red: '#dc322f',
+  green: '#859900',
+  yellow: '#b58900',
+  blue: '#268bd2',
+  magenta: '#d33682',
+  cyan: '#2aa198',
+  white: '#eee8d5',
+  brightBlack: '#002b36',
+  brightRed: '#cb4b16',
+  brightGreen: '#586e75',
+  brightYellow: '#657b83',
+  brightBlue: '#839496',
+  brightMagenta: '#6c71c4',
+  brightCyan: '#93a1a1',
+  brightWhite: '#fdf6e3'
+}
 
-const LIGHT_OVERRIDES: ITheme = {
-  cursor: '#6f6f6f',
-  cursorAccent: '#f7f7f7',
-  foreground: '#4d4d4d',
+const TRANSPARENT_GLASS: ITheme = {
+  background: '#00000000',
   selectionBackground: '#8c8c8c33'
 }
 
-export const terminalTheme = (mode: 'light' | 'dark'): ITheme =>
-  mode === 'dark' ? TRANSPARENT_BG : { ...TRANSPARENT_BG, ...LIGHT_OVERRIDES }
+// The only thing Schoonover swaps between modes: the fg + cursor pair.
+const MODE_TONES = {
+  light: { foreground: '#657b83', cursor: '#586e75', cursorAccent: '#fdf6e3' }, // base00 / base01 / base3
+  dark: { foreground: '#839496', cursor: '#93a1a1', cursorAccent: '#002b36' } //   base0  / base1  / base03
+}
+
+export const terminalTheme = (mode: 'light' | 'dark'): ITheme => ({
+  ...SOLARIZED_ANSI,
+  ...TRANSPARENT_GLASS,
+  ...MODE_TONES[mode]
+})
 
 export const isMacPlatform = () => navigator.platform.toLowerCase().includes('mac')
 
