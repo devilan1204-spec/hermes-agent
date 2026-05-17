@@ -5,9 +5,9 @@ import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { TextTab, TextTabMeta } from '@/components/ui/text-tab'
 import { getSkills, getToolsets, toggleSkill } from '@/hermes'
-import { Brain, RefreshCw, Search, Wrench, X } from '@/lib/icons'
-import type { LucideIcon } from '@/lib/icons'
+import { RefreshCw, Search, X } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import type { SkillInfo, ToolsetInfo } from '@/types/hermes'
@@ -185,14 +185,13 @@ export function SkillsView({
 
       <div className="min-h-0 flex-1 overflow-hidden rounded-b-[1.0625rem] border border-border/50 bg-background/85">
         <div className="border-b border-border/50 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <ModeButton active={mode === 'skills'} icon={Brain} onClick={() => setMode('skills')} text="Skills" />
-            <ModeButton
-              active={mode === 'toolsets'}
-              icon={Wrench}
-              onClick={() => setMode('toolsets')}
-              text="Toolsets"
-            />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <TextTab active={mode === 'skills'} onClick={() => setMode('skills')}>
+              Skills
+            </TextTab>
+            <TextTab active={mode === 'toolsets'} onClick={() => setMode('toolsets')}>
+              Toolsets
+            </TextTab>
             <div className="ml-auto w-full max-w-sm min-w-64">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -219,21 +218,18 @@ export function SkillsView({
           </div>
 
           {mode === 'skills' && categories.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <CategoryButton
-                active={activeCategory === null}
-                count={totalSkills}
-                label="All"
-                onClick={() => setActiveCategory(null)}
-              />
+            <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1">
+              <TextTab active={activeCategory === null} onClick={() => setActiveCategory(null)}>
+                All <TextTabMeta>{totalSkills}</TextTabMeta>
+              </TextTab>
               {categories.map(category => (
-                <CategoryButton
+                <TextTab
                   active={activeCategory === category.key}
-                  count={category.count}
                   key={category.key}
-                  label={prettyName(category.key)}
                   onClick={() => setActiveCategory(activeCategory === category.key ? null : category.key)}
-                />
+                >
+                  {prettyName(category.key)} <TextTabMeta>{category.count}</TextTabMeta>
+                </TextTab>
               ))}
             </div>
           )}
@@ -327,64 +323,6 @@ export function SkillsView({
         )}
       </div>
     </section>
-  )
-}
-
-function ModeButton({
-  active,
-  icon: Icon,
-  onClick,
-  text
-}: {
-  active: boolean
-  icon: LucideIcon
-  onClick: () => void
-  text: string
-}) {
-  return (
-    <Button
-      className={cn(
-        'h-8 gap-1.5 rounded-md px-2.5 text-xs',
-        active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'
-      )}
-      onClick={onClick}
-      size="sm"
-      type="button"
-      variant="ghost"
-    >
-      <Icon className="size-3.5" />
-      {text}
-    </Button>
-  )
-}
-
-function CategoryButton({
-  active,
-  count,
-  label,
-  onClick
-}: {
-  active: boolean
-  count: number
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      className={cn(
-        'inline-flex h-7 items-center gap-1 bg-transparent px-1.5 text-[0.68rem] transition-colors',
-        active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      <span
-        className={cn('underline-offset-4 decoration-current', active ? 'font-medium underline' : 'hover:underline')}
-      >
-        {label}
-      </span>
-      <span className="text-[0.62rem] text-muted-foreground/80 no-underline">{count}</span>
-    </button>
   )
 }
 
