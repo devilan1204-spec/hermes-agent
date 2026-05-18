@@ -97,7 +97,7 @@ npm run dist:mac:zip  # zip only
 npm run dist:win      # NSIS + MSI
 ```
 
-Before packaging, `stage:hermes` copies the Python Hermes payload into `build/hermes-agent`. Electron Builder then ships it as `Contents/Resources/hermes-agent`.
+Before packaging, the desktop app no longer bundles a copy of the Hermes Agent Python source. Instead, the packaged Electron app will fetch and install Hermes Agent at first launch via `scripts/install.ps1`'s stage protocol (Windows) — see the bootstrap flow documented in `electron/main.cjs`. macOS and Linux packaged builds are temporarily non-functional until `install.sh` gains the same stage protocol; dev workflows on all three platforms continue to work since they resolve a sibling source checkout.
 
 ## Automated Releases
 
@@ -187,12 +187,14 @@ Hermes Desktop shares its install layout with the CLI installers (`scripts/insta
 ```text
 HERMES_HOME/                       # %LOCALAPPDATA%\hermes (Windows)
                                    # ~/.hermes (macOS / Linux)
-├── hermes-agent/                  # ACTIVE_HERMES_ROOT — the canonical install
+├── hermes-agent/                  # ACTIVE_HERMES_ROOT — git checkout
+│   ├── .git/                      # canonical install is always a git checkout
 │   ├── hermes_cli/, agent/, ...   # Python source
 │   ├── pyproject.toml             # source of truth for deps
 │   ├── venv/                      # virtualenv (Scripts\python.exe on Windows,
 │   │                              #             bin/python elsewhere)
-│   └── .hermes-desktop-runtime.json   # marker: schema version + pyproject hash
+│   └── .hermes-bootstrap-complete # marker: first-launch install.ps1 succeeded
+├── git/                           # PortableGit (Windows; installed by install.ps1)
 ├── config.yaml                    # user config
 ├── .env                           # API keys
 └── logs/
@@ -202,33 +204,33 @@ HERMES_HOME/                       # %LOCALAPPDATA%\hermes (Windows)
     └── gateway.log
 ```
 
-The factory image (`Contents/Resources/hermes-agent` on macOS, `resources\hermes-agent` on Windows) ships inside the `.app` / `.exe` and seeds `HERMES_HOME/hermes-agent` on first launch.
+The packaged installer ships only the Electron app — Hermes Agent itself is fetched and installed at first launch by running `scripts/install.ps1` (Windows) against the git ref baked into the .exe at build time (see `apps/desktop/scripts/write-build-stamp.cjs`).
 
 ### Resolution order
 
 The desktop resolves a Hermes backend in this order:
 
 1. `HERMES_DESKTOP_HERMES_ROOT` — explicit dev override.
-2. Existing `hermes` CLI on PATH (skipped when `HERMES_DESKTOP_IGNORE_EXISTING=1`).
-3. Repo source root — only when running `npm run dev` from a checkout. Takes precedence over `HERMES_HOME/hermes-agent` so devs always run their local edits.
-4. `HERMES_HOME/hermes-agent` if it already exists (CLI installer or prior desktop launch).
-5. Packaged + factory image present → sync factory → `HERMES_HOME/hermes-agent`, then use it.
-6. Pip-installed `hermes_cli` module via system Python.
+2. Repo source root — only when running `npm run dev` from a checkout. Takes precedence over `HERMES_HOME/hermes-agent` so devs always run their local edits.
+3. `HERMES_HOME/hermes-agent` if the `.hermes-bootstrap-complete` marker is present. The marker attests that install.ps1 succeeded and the user finished initial configuration; we trust the install and skip the bootstrap flow on every launch after the first.
+4. Existing `hermes` CLI on PATH (skipped when `HERMES_DESKTOP_IGNORE_EXISTING=1`).
+5. Pip-installed `hermes_cli` module via system Python.
+6. None of the above → bootstrap-needed sentinel. The desktop's first-launch wizard runs `scripts/install.ps1` stages, then writes the marker on success.
 
 ### First-launch flow on a packaged install
 
-1. Sync factory image → `HERMES_HOME/hermes-agent`. Skipped if a `.git` directory exists at the destination (developer install) — never overwrites a user's local repo.
-2. Create venv at `HERMES_HOME/hermes-agent/venv` using system Python (errors out with a Python-install hint if no Python 3.11+ is found).
-3. `pip install -e HERMES_HOME/hermes-agent` — `pyproject.toml` is the single source of truth for dependencies.
-4. Stamp `.hermes-desktop-runtime.json` with the schema version + pyproject hash + factory version.
+1. `resolveHermesBackend()` returns `kind: 'bootstrap-needed'`.
+2. The renderer shows the install overlay; main fetches `scripts/install.ps1` from GitHub at the pinned commit (from `install-stamp.json`).
+3. Main drives `install.ps1 -Manifest` to get the stage list, then iterates `install.ps1 -Stage <name> -NonInteractive -Json` with live progress events to the renderer.
+4. On all stages succeeding, main writes `.hermes-bootstrap-complete` with `{ schemaVersion, pinnedCommit, pinnedBranch, completedAt, desktopVersion }`.
+5. Renderer hands off to the existing onboarding overlay (API key / model / persona).
+6. Subsequent launches see the marker and skip everything in steps 1-5.
 
-Subsequent launches compare the marker against the active `pyproject.toml` and skip steps 2-4 when nothing has changed.
+### Updates
 
-### Upgrades
+Once bootstrapped, the install is a real git checkout. Updates flow through the in-app update path (`applyUpdates()` → `git fetch && git pull --ff-only` against the configured branch) or `hermes update` from the CLI. Both check `pyproject.toml` drift and re-run `pip install -e .` only when needed.
 
-A new installer drops a new factory image. On next launch the marker mismatches → factory contents are copied over `HERMES_HOME/hermes-agent` (excluding `venv/`, `.git`, `__pycache__`, etc.), `pip install -e` re-runs to pick up new deps, the marker is re-stamped. The venv is preserved across upgrades to keep the upgrade fast when deps haven't moved.
-
-A user who installed via `scripts/install.ps1` / `scripts/install.sh` (so `HERMES_HOME/hermes-agent/.git` exists) is detected as a developer install and the desktop never overwrites their checkout — they keep using `hermes update` / `git pull` to update.
+A user who installed via `scripts/install.ps1` directly (so `HERMES_HOME/hermes-agent/.git` exists but no `.hermes-bootstrap-complete` marker) is detected via resolver step 4 (their `hermes` CLI on PATH) and the desktop reuses their install without re-running the bootstrap.
 
 ## Debugging
 
@@ -241,14 +243,14 @@ HERMES_HOME/logs/desktop.log     # %LOCALAPPDATA%\hermes\logs\desktop.log on Win
 
 If the UI reports `Desktop boot failed`, check that log first. It includes the backend command output and recent Python traceback context.
 
-To reset desktop runtime state (forces re-sync from the factory image and re-`pip install -e .` on next launch):
+To force a fresh first-launch bootstrap (rare — useful for development / dogfooding the install flow):
 
 ```bash
 # macOS / Linux
-rm "$HOME/.hermes/hermes-agent/.hermes-desktop-runtime.json"
+rm "$HOME/.hermes/hermes-agent/.hermes-bootstrap-complete"
 
 # Windows (PowerShell)
-Remove-Item "$env:LOCALAPPDATA\hermes\hermes-agent\.hermes-desktop-runtime.json"
+Remove-Item "$env:LOCALAPPDATA\hermes\hermes-agent\.hermes-bootstrap-complete"
 ```
 
 For a full reset of just the Python venv (rare — usually only needed if the venv is broken):

@@ -21,7 +21,8 @@ const net = require('node:net')
 const path = require('node:path')
 const { fileURLToPath, pathToFileURL } = require('node:url')
 const { execFileSync, spawn } = require('node:child_process')
-const { bundledRuntimeImportCheck, isWindowsBinaryPathInWsl, isWslEnvironment } = require('./bootstrap-platform.cjs')
+const { isWindowsBinaryPathInWsl, isWslEnvironment } = require('./bootstrap-platform.cjs')
+const { runBootstrap } = require('./bootstrap-runner.cjs')
 const {
   DATA_URL_READ_MAX_BYTES,
   DEFAULT_FETCH_TIMEOUT_MS,
@@ -36,7 +37,24 @@ let nodePty = null
 try {
   nodePty = require('@homebridge/node-pty-prebuilt-multiarch')
 } catch {
-  nodePty = null
+  // Packaged builds set `files:` in package.json, which excludes node_modules
+  // from the asar.  Workspace dedup also hoists this native dep to the repo
+  // root's node_modules, out of reach of electron-builder's collector.  We
+  // ship a minimal copy under resources/native-deps/ via extraResources +
+  // scripts/stage-native-deps.cjs; resolve from there when the normal
+  // require() fails.  Dev mode never reaches this branch -- the hoisted
+  // resolve succeeds via Node's normal module lookup.
+  try {
+    const path = require('node:path')
+    const resourcesPath = process.resourcesPath
+    if (resourcesPath) {
+      nodePty = require(
+        path.join(resourcesPath, 'native-deps', '@homebridge', 'node-pty-prebuilt-multiarch')
+      )
+    }
+  } catch {
+    nodePty = null
+  }
 }
 
 const USER_DATA_OVERRIDE = process.env.HERMES_DESKTOP_USER_DATA_DIR
@@ -55,6 +73,63 @@ const IS_WINDOWS = process.platform === 'win32'
 const IS_WSL = isWslEnvironment()
 const APP_ROOT = app.getAppPath()
 const SOURCE_REPO_ROOT = path.resolve(APP_ROOT, '../..')
+
+// Build-time install stamp -- the git ref this .exe was built against.
+//
+// Written by apps/desktop/scripts/write-build-stamp.cjs during `npm run build`
+// and bundled into packaged apps via electron-builder's extraResources entry,
+// so the runtime stamp ends up at process.resourcesPath/install-stamp.json
+// after install. The bootstrap runner (Phase 1D) reads it to know which
+// commit to clone when running install.ps1 stages at first launch.
+//
+// Returns null when the file is missing (dev runs from a checkout where
+// build hasn't been invoked, or schema mismatch). Callers must handle null.
+//
+// Schema:
+//   { schemaVersion: 1, commit, branch, builtAt, dirty, source }
+const INSTALL_STAMP_SCHEMA_VERSION = 1
+function loadInstallStamp() {
+  // Try packaged location first (resources/install-stamp.json), then the
+  // dev/local build output (apps/desktop/build/install-stamp.json) so
+  // someone running `npm run start` after a local `npm run build` also
+  // sees a stamp without needing a packaged build.
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'install-stamp.json') : null,
+    path.join(APP_ROOT, 'build', 'install-stamp.json')
+  ].filter(Boolean)
+  for (const p of candidates) {
+    try {
+      const raw = fs.readFileSync(p, 'utf8')
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && typeof parsed.commit === 'string' && parsed.commit.length >= 7) {
+        if (parsed.schemaVersion !== INSTALL_STAMP_SCHEMA_VERSION) {
+          console.warn(`[hermes] install-stamp.json schemaVersion ${parsed.schemaVersion} != expected ${INSTALL_STAMP_SCHEMA_VERSION}; ignoring`)
+          continue
+        }
+        return Object.freeze({
+          schemaVersion: parsed.schemaVersion,
+          commit: parsed.commit,
+          branch: parsed.branch || null,
+          builtAt: parsed.builtAt || null,
+          dirty: Boolean(parsed.dirty),
+          source: parsed.source || null,
+          path: p
+        })
+      }
+    } catch {
+      // Either ENOENT or malformed JSON; try the next candidate
+    }
+  }
+  return null
+}
+const INSTALL_STAMP = loadInstallStamp()
+if (INSTALL_STAMP) {
+  console.log(`[hermes] install stamp: ${INSTALL_STAMP.commit.slice(0, 12)}${INSTALL_STAMP.branch ? ` (${INSTALL_STAMP.branch})` : ''}${INSTALL_STAMP.dirty ? ' [DIRTY]' : ''} from ${INSTALL_STAMP.source || 'unknown'}`)
+} else if (IS_PACKAGED) {
+  // Dev builds without a stamp are normal; packaged builds without one
+  // mean the bootstrap won't know what to clone. Surface clearly.
+  console.error('[hermes] WARNING: no install-stamp.json found in packaged build. First-launch bootstrap will not have a pinned ref to install.')
+}
 
 // HERMES_HOME — the user-facing root for everything Hermes-related. Mirrors
 // scripts/install.ps1's $HermesHome and scripts/install.sh's $HERMES_HOME.
@@ -92,12 +167,19 @@ const HERMES_HOME = resolveHermesHome()
 const ACTIVE_HERMES_ROOT = path.join(HERMES_HOME, 'hermes-agent')
 // VENV_ROOT — venv lives inside the repo, exactly like install.ps1 does it.
 const VENV_ROOT = path.join(ACTIVE_HERMES_ROOT, 'venv')
-const RUNTIME_MARKER = path.join(ACTIVE_HERMES_ROOT, '.hermes-desktop-runtime.json')
-// FACTORY_HERMES_ROOT — read-only payload that ships inside the .app/.exe.
-// On first run (or after an installer-driven upgrade) we sync it into
-// ACTIVE_HERMES_ROOT, unless ACTIVE is a git checkout (developer install via
-// install.ps1) in which case we leave it alone.
-const FACTORY_HERMES_ROOT = path.join(process.resourcesPath, 'hermes-agent')
+// BOOTSTRAP_COMPLETE_MARKER — written by the first-launch bootstrap runner
+// (Phase 1D) after install.ps1 has completed all stages and the user has
+// finished initial configuration. Presence of this marker means the install
+// is in a known-good state and we can skip the bootstrap flow on subsequent
+// boots, going straight to `resolveHermesBackend()`. Missing or stale marker
+// means we re-run the bootstrap; install.ps1's stages are idempotent so a
+// re-run on an already-good install just discovers everything in place.
+//
+// We deliberately put the marker INSIDE ACTIVE_HERMES_ROOT (not alongside)
+// so that deleting the checkout to start fresh also deletes the marker --
+// avoids the confusing "marker exists but checkout is gone" state.
+const BOOTSTRAP_COMPLETE_MARKER = path.join(ACTIVE_HERMES_ROOT, '.hermes-bootstrap-complete')
+const BOOTSTRAP_MARKER_SCHEMA_VERSION = 1
 
 const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'connection.json')
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
@@ -117,8 +199,6 @@ const BOOT_FAKE_STEP_MS = (() => {
   if (!Number.isFinite(raw) || raw <= 0) return 650
   return Math.max(120, raw)
 })()
-const RUNTIME_SCHEMA_VERSION = 4
-const RUNTIME_IMPORT_CHECK = bundledRuntimeImportCheck()
 const APP_NAME = 'Hermes'
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
@@ -282,6 +362,12 @@ app.setAboutPanelOptions({
 let mainWindow = null
 let hermesProcess = null
 let connectionPromise = null
+// Latched bootstrap failure: when the first-launch install fails, we hold
+// onto the error so subsequent startHermes() calls (e.g. the renderer's
+// ensureGatewayOpen retrying after the WS won't open) return the same error
+// instead of re-running install.ps1 in a hot loop. Cleared explicitly by
+// the renderer's "Reload and retry" path or by quitting the app.
+let bootstrapFailure = null
 let connectionConfigCache = null
 const hermesLog = []
 const previewWatchers = new Map()
@@ -414,6 +500,86 @@ function broadcastBootProgress() {
   const { webContents } = mainWindow
   if (!webContents || webContents.isDestroyed()) return
   webContents.send('hermes:boot-progress', bootProgressState)
+}
+
+// Bootstrap-event broadcast channel + state. The bootstrap runner emits a
+// stream of events (manifest, stage, log, complete, failed) that the renderer
+// install overlay subscribes to. We also keep a running snapshot:
+//   - manifest: the stage list (rendered as a checklist in the overlay)
+//   - stages:   per-stage state ('pending' | 'running' | 'succeeded' |
+//               'skipped' | 'failed') keyed by stage name
+//   - active:   true while a bootstrap is in flight; false otherwise
+//   - error:    last 'failed' event's error message
+//   - log:      bounded ring buffer of the last 200 log lines for the
+//               "Show details" affordance in the overlay
+//
+// The snapshot is queryable via the hermes:bootstrap:get IPC handler so a
+// reloaded renderer (e.g. devtools reload during dev) recovers state.
+// Bootstrap log ring: bounded buffer so a long install (npm + playwright
+// downloads can emit thousands of lines) doesn't grow unbounded in memory
+// AND so the renderer's getBootstrapState() reply stays a reasonable size.
+// We keep enough to cover an entire failed stage's transcript so the
+// 'Copy output' button gives the user actually-actionable context, not
+// just the last few lines.
+const BOOTSTRAP_LOG_RING_MAX = 500
+let bootstrapState = {
+  active: false,
+  manifest: null,
+  stages: {},
+  error: null,
+  log: [],
+  startedAt: null,
+  completedAt: null,
+  unsupportedPlatform: null
+}
+
+function broadcastBootstrapEvent(ev) {
+  if (ev.type === 'manifest') {
+    bootstrapState.manifest = ev
+    bootstrapState.active = true
+    bootstrapState.startedAt = bootstrapState.startedAt || Date.now()
+    bootstrapState.stages = {}
+    for (const stage of ev.stages || []) {
+      bootstrapState.stages[stage.name] = { state: 'pending', json: null, durationMs: null, error: null }
+    }
+  } else if (ev.type === 'stage') {
+    bootstrapState.stages[ev.name] = {
+      state: ev.state,
+      durationMs: ev.durationMs ?? null,
+      json: ev.json ?? null,
+      error: ev.error ?? null
+    }
+  } else if (ev.type === 'log') {
+    bootstrapState.log.push({ ts: Date.now(), stage: ev.stage || null, line: ev.line })
+    if (bootstrapState.log.length > BOOTSTRAP_LOG_RING_MAX) {
+      bootstrapState.log.splice(0, bootstrapState.log.length - BOOTSTRAP_LOG_RING_MAX)
+    }
+  } else if (ev.type === 'complete') {
+    bootstrapState.active = false
+    bootstrapState.completedAt = Date.now()
+    bootstrapState.error = null
+    bootstrapState.unsupportedPlatform = null
+  } else if (ev.type === 'failed') {
+    bootstrapState.active = false
+    bootstrapState.error = ev.error || 'unknown error'
+  } else if (ev.type === 'unsupported-platform') {
+    bootstrapState.active = false
+    bootstrapState.unsupportedPlatform = {
+      platform: ev.platform,
+      activeRoot: ev.activeRoot,
+      installCommand: ev.installCommand,
+      docsUrl: ev.docsUrl
+    }
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const { webContents } = mainWindow
+  if (!webContents || webContents.isDestroyed()) return
+  webContents.send('hermes:bootstrap:event', ev)
+}
+
+function getBootstrapState() {
+  return bootstrapState
 }
 
 function updateBootProgress(update, options = {}) {
@@ -960,6 +1126,61 @@ function readJson(filePath) {
   }
 }
 
+// Used by applyUpdates() to detect pyproject.toml drift after `git pull` so
+// we know whether to re-run `pip install -e .` against the venv. Returns
+// null on read failure.
+function sha256OfFile(filePath) {
+  try {
+    const buf = fs.readFileSync(filePath)
+    return crypto.createHash('sha256').update(buf).digest('hex')
+  } catch {
+    return null
+  }
+}
+
+// Bootstrap-complete marker helpers. The marker is written ONCE by the
+// first-launch bootstrap runner (Phase 1D) after install.ps1 stages succeed
+// AND the user has finished initial configuration. On every subsequent boot
+// we check `isBootstrapComplete()` and skip the bootstrap flow entirely if
+// the marker is present and current-schema.
+//
+// Marker schema (version 1):
+//   {
+//     schemaVersion: 1,
+//     pinnedCommit: "<40-char SHA>",       // what install.ps1 was driven against
+//     pinnedBranch: "<branch name>" | null,
+//     completedAt:  "<ISO 8601>",
+//     desktopVersion: "<app.getVersion()>"  // for forensics
+//   }
+function readBootstrapMarker() {
+  return readJson(BOOTSTRAP_COMPLETE_MARKER)
+}
+
+function isBootstrapComplete() {
+  const marker = readBootstrapMarker()
+  if (!marker || typeof marker !== 'object') return false
+  if (marker.schemaVersion !== BOOTSTRAP_MARKER_SCHEMA_VERSION) return false
+  if (typeof marker.pinnedCommit !== 'string' || marker.pinnedCommit.length < 7) return false
+  // We DELIBERATELY do NOT verify that the checkout is currently at the
+  // pinned commit -- users update via the in-app update path or `hermes
+  // update`, which moves HEAD legitimately. The marker just attests "we
+  // ran the bootstrap successfully at least once."
+  return isHermesSourceRoot(ACTIVE_HERMES_ROOT)
+}
+
+function writeBootstrapMarker(payload) {
+  fs.mkdirSync(path.dirname(BOOTSTRAP_COMPLETE_MARKER), { recursive: true })
+  const merged = {
+    schemaVersion: BOOTSTRAP_MARKER_SCHEMA_VERSION,
+    pinnedCommit: payload.pinnedCommit || null,
+    pinnedBranch: payload.pinnedBranch || null,
+    completedAt: new Date().toISOString(),
+    desktopVersion: app.getVersion()
+  }
+  fs.writeFileSync(BOOTSTRAP_COMPLETE_MARKER, JSON.stringify(merged, null, 2) + '\n', 'utf8')
+  return merged
+}
+
 function resolveWebDist() {
   const override = process.env.HERMES_DESKTOP_WEB_DIST
   if (override && directoryExists(path.resolve(override))) return path.resolve(override)
@@ -1033,7 +1254,7 @@ function createActiveBackend(dashboardArgs) {
 }
 
 function resolveHermesBackend(dashboardArgs) {
-  // 1. Explicit override — HERMES_DESKTOP_HERMES_ROOT points at a developer
+  // 1. Explicit override -- HERMES_DESKTOP_HERMES_ROOT points at a developer
   //    checkout. Honour it as-is (no bootstrap; the user is driving).
   const overrideRoot = process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT)
   if (overrideRoot && isHermesSourceRoot(overrideRoot)) {
@@ -1041,7 +1262,7 @@ function resolveHermesBackend(dashboardArgs) {
     if (backend) return backend
   }
 
-  // 2. Development source — when running `npm run dev` from a checkout, the
+  // 2. Development source -- when running `npm run dev` from a checkout, the
   //    cloned repo at SOURCE_REPO_ROOT takes precedence over ACTIVE and any
   //    installed `hermes` on PATH so local Python edits are actually exercised.
   //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isHermesSourceRoot.)
@@ -1050,9 +1271,21 @@ function resolveHermesBackend(dashboardArgs) {
     if (backend) return backend
   }
 
-  // 3. Existing `hermes` on PATH — installed via install.ps1 / install.sh, or
-  //    pip-installed system-wide. Skip when HERMES_DESKTOP_IGNORE_EXISTING=1
-  //    (used by test:desktop:fresh to force the factory-image bootstrap path).
+  // 3. Bootstrap-complete ACTIVE_HERMES_ROOT -- the canonical install at
+  //    %LOCALAPPDATA%\hermes\hermes-agent (Windows) or ~/.hermes/hermes-agent.
+  //    The bootstrap marker means install.ps1 stages finished and the user
+  //    completed initial configuration; we trust the install and go straight
+  //    to spawning hermes. Updates flow through the in-app update path
+  //    (applyUpdates -> git pull) or `hermes update` from the CLI.
+  if (isBootstrapComplete()) {
+    return createActiveBackend(dashboardArgs)
+  }
+
+  // 4. Existing `hermes` on PATH -- installed via install.ps1 / install.sh from
+  //    a previous tool-only setup, or pip-installed system-wide. Use it but
+  //    do NOT write a bootstrap marker; the user did this themselves and we
+  //    don't want to take ownership of an install we didn't perform.
+  //    HERMES_DESKTOP_IGNORE_EXISTING=1 forces the bootstrap path for testing.
   if (process.env.HERMES_DESKTOP_IGNORE_EXISTING !== '1') {
     let hermesCommand = null
     const hermesOverride = process.env.HERMES_DESKTOP_HERMES
@@ -1083,22 +1316,9 @@ function resolveHermesBackend(dashboardArgs) {
     }
   }
 
-  // 4. ACTIVE_HERMES_ROOT — the canonical mutable install at
-  //    %LOCALAPPDATA%\hermes\hermes-agent (Windows) or ~/.hermes/hermes-agent.
-  //    On packaged installs this is populated from FACTORY_HERMES_ROOT during
-  //    ensureRuntime(). On install.ps1 / install.sh setups it's already there.
-  if (isHermesSourceRoot(ACTIVE_HERMES_ROOT)) {
-    return createActiveBackend(dashboardArgs)
-  }
-
-  // 5. Packaged: FACTORY_HERMES_ROOT exists but ACTIVE doesn't yet. Return a
-  //    bootstrap-flagged backend; ensureRuntime() will sync factory → active
-  //    and provision the venv before launch.
-  if (IS_PACKAGED && isHermesSourceRoot(FACTORY_HERMES_ROOT)) {
-    return createActiveBackend(dashboardArgs)
-  }
-
-  // 6. Last-ditch: pip-installed hermes_cli module via system Python.
+  // 5. Last-ditch: pip-installed hermes_cli module via system Python.
+  //    Same rationale as #4 -- the user installed this; we use it but don't
+  //    take ownership.
   const python = findSystemPython()
   if (python) {
     return {
@@ -1112,21 +1332,30 @@ function resolveHermesBackend(dashboardArgs) {
     }
   }
 
-  // Nothing worked. Distinguish the "no payload" and "no Python" cases so the
-  // user gets actionable guidance instead of "install the Hermes CLI".
-  const factoryPresent = isHermesSourceRoot(FACTORY_HERMES_ROOT)
-  const activePresent = isHermesSourceRoot(ACTIVE_HERMES_ROOT)
-  if (factoryPresent || activePresent) {
-    throw new Error(
-      'Hermes payload is present but no Python 3.11+ interpreter could be found. ' +
-        'Install Python 3.11+ from https://www.python.org/downloads/ or the Microsoft Store, ' +
-        'then relaunch Hermes.'
-    )
+  // 6. Nothing usable yet -- signal the bootstrap runner that we need to
+  //    clone+install. Phase 1D's bootstrap-runner consumes this sentinel
+  //    and drives install.ps1 stages with a progress UI. Until 1D lands,
+  //    callers see the sentinel and surface it as a user-facing error
+  //    explaining what's missing.
+  //
+  //    We deliberately do NOT throw here -- throwing inside
+  //    resolveHermesBackend was the old "no payload" path and forced the
+  //    user into a dead end. With the bootstrap protocol, "no install yet"
+  //    is a recoverable state the GUI can drive through.
+  return {
+    kind: 'bootstrap-needed',
+    label: 'Hermes Agent not installed yet; bootstrap required',
+    command: null,
+    args: dashboardArgs,
+    bootstrap: true,
+    env: {},
+    shell: false,
+    // Hints for the bootstrap runner / UI layer:
+    activeRoot: ACTIVE_HERMES_ROOT,
+    installStamp: INSTALL_STAMP, // may be null in dev
+    isPackaged: IS_PACKAGED,
+    platform: process.platform
   }
-  throw new Error(
-    'Could not find Hermes. Install the Hermes CLI ' +
-      '(https://github.com/NousResearch/hermes-agent#install) or set HERMES_DESKTOP_HERMES_ROOT.'
-  )
 }
 
 async function ensureRuntime(backend) {
@@ -1135,39 +1364,108 @@ async function ensureRuntime(backend) {
     return backend
   }
 
-  // Step 1: Ensure ACTIVE_HERMES_ROOT is populated. On packaged installs we
-  // sync from FACTORY_HERMES_ROOT (the read-only payload bundled into the
-  // .app/.exe). We DON'T overwrite a developer install: presence of a .git
-  // dir or a Hermes-managed venv at the same place means the user set this
-  // up via install.ps1 / install.sh / git clone, and that install owns the
-  // updates (via `hermes update`).
-  const isGitCheckout = directoryExists(path.join(ACTIVE_HERMES_ROOT, '.git'))
-  const factoryAvailable = IS_PACKAGED && isHermesSourceRoot(FACTORY_HERMES_ROOT)
-
-  if (factoryAvailable && !isGitCheckout) {
-    const factoryVersion =
-      readPyprojectVersion(FACTORY_HERMES_ROOT) ??
-      readJson(path.join(FACTORY_HERMES_ROOT, 'package.json'))?.version ??
-      app.getVersion()
-    const marker = readJson(RUNTIME_MARKER)
-    const pyprojectHash = sha256OfFile(path.join(FACTORY_HERMES_ROOT, 'pyproject.toml'))
-
-    const activeFresh =
-      isHermesSourceRoot(ACTIVE_HERMES_ROOT) &&
-      marker?.runtimeSchemaVersion === RUNTIME_SCHEMA_VERSION &&
-      marker?.factoryVersion === factoryVersion &&
-      marker?.pyprojectHash === pyprojectHash
-
-    if (!activeFresh) {
-      await advanceBootProgress('runtime.sync', 'Installing Hermes', 30)
-      rememberLog(`Syncing Hermes payload ${FACTORY_HERMES_ROOT} → ${ACTIVE_HERMES_ROOT}`)
-      fs.mkdirSync(ACTIVE_HERMES_ROOT, { recursive: true })
-      // Copy in factory contents. We do NOT delete venv/ — preserving it
-      // across upgrades skips re-install when deps haven't moved.
-      await syncTreeExcludingVenv(FACTORY_HERMES_ROOT, ACTIVE_HERMES_ROOT)
+  // backend.kind === 'bootstrap-needed' means resolveHermesBackend couldn't
+  // find anything to spawn. Hand off to the bootstrap runner which drives
+  // install.ps1's stage protocol, writes the bootstrap-complete marker on
+  // success, then we re-resolve to get the now-installed backend.
+  //
+  // Phase 1D status: bootstrap runs but events go to desktop.log only
+  // (renderer window isn't created until later in startBackend). Phase 1E
+  // will rewire startup to spawn the window first and route bootstrap events
+  // to a renderer-side install overlay.
+  if (backend.kind === 'bootstrap-needed') {
+    if (process.platform !== 'win32') {
+      // macOS/Linux: install.sh doesn't yet support the stage protocol that
+      // install.ps1 does, so we can't drive a first-launch bootstrap. Emit
+      // a platform-unsupported event so the renderer's install overlay can
+      // render a 'run install.sh manually' guide instead of a generic
+      // 'desktop boot failed' toast. Mark the bootstrap state as inactive
+      // with an explanatory error so the overlay's failure branch picks
+      // it up immediately. THEN throw -- so the existing 'desktop boot
+      // failed' path still trips and prevents the rest of startHermes
+      // from running against a missing install.
+      const guidanceUrl = 'https://github.com/NousResearch/hermes-agent#install'
+      const installShUrl = 'https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh'
+      try {
+        broadcastBootstrapEvent({
+          type: 'unsupported-platform',
+          platform: process.platform,
+          activeRoot: backend.activeRoot,
+          installCommand: `bash <(curl -fsSL ${installShUrl})`,
+          docsUrl: guidanceUrl
+        })
+      } catch {}
+      throw new Error(
+        `Hermes Agent is not installed at ${backend.activeRoot}. On macOS/Linux ` +
+          'first-launch install is not yet automated -- run scripts/install.sh ' +
+          'from the Hermes repo manually, then relaunch this app.'
+      )
     }
+
+    rememberLog('[bootstrap] no Hermes install found; starting first-launch bootstrap')
+
+    // Eagerly flip the bootstrap UI state to 'active' so the renderer
+    // shows the install overlay BEFORE the runner finishes fetching the
+    // manifest (which on slow networks can take tens of seconds and would
+    // otherwise leave the user staring at the generic 'Preparing' splash).
+    // We emit a synthetic manifest with an empty stages list -- the real
+    // manifest event will overwrite it once install.ps1 -Manifest returns.
+    try {
+      broadcastBootstrapEvent({
+        type: 'manifest',
+        stages: [],
+        protocolVersion: null
+      })
+    } catch {}
+
+    const bootstrapResult = await runBootstrap({
+      installStamp: backend.installStamp,
+      activeRoot: backend.activeRoot,
+      sourceRepoRoot: SOURCE_REPO_ROOT,
+      hermesHome: HERMES_HOME,
+      logRoot: path.join(HERMES_HOME, 'logs'),
+      onEvent: ev => {
+        // Tee every bootstrap event to (a) the desktop log for forensics
+        // and (b) the renderer for live progress UI. Either may be absent;
+        // tolerate both gracefully so a renderer crash doesn't stall the
+        // bootstrap and a log-write failure doesn't suppress the UI signal.
+        try {
+          rememberLog(`[bootstrap] ${JSON.stringify(ev)}`)
+        } catch {}
+        try {
+          broadcastBootstrapEvent(ev)
+        } catch {}
+      },
+      writeMarker: writeBootstrapMarker
+    })
+
+    if (!bootstrapResult.ok) {
+      const bootstrapError = new Error(
+        `Hermes bootstrap failed${bootstrapResult.failedStage ? ` at stage '${bootstrapResult.failedStage}'` : ''}: ` +
+          `${bootstrapResult.error || 'unknown error'}. ` +
+          `Check ${path.join(HERMES_HOME, 'logs', 'desktop.log')} for the full transcript.`
+      )
+      bootstrapError.isBootstrapFailure = true
+      bootstrapError.failedStage = bootstrapResult.failedStage || null
+      // Latch the failure so subsequent startHermes() calls return this
+      // same error without re-running install.ps1.  Cleared by the
+      // hermes:bootstrap:reset IPC (renderer's "Reload and retry").
+      bootstrapFailure = bootstrapError
+      throw bootstrapError
+    }
+
+    rememberLog('[bootstrap] bootstrap complete; marker written. Re-resolving backend.')
+    // Re-resolve now that the install exists. The new resolution lands in
+    // step 3 (bootstrap-complete marker) and we recurse to wire venvPython.
+    return ensureRuntime(resolveHermesBackend(backend.args))
   }
 
+  // bootstrap=true with a real backend (createActiveBackend path) means we
+  // have a checkout and need to ensure the venv-derived Python command is
+  // wired into the backend before launch. Same code path the old factory
+  // sync flow exited through, minus all the factory/pip/marker machinery
+  // (install.ps1 owns those concerns now and the bootstrap-complete marker
+  // attests they ran successfully).
   if (!isHermesSourceRoot(ACTIVE_HERMES_ROOT)) {
     throw new Error(
       `Hermes install at ${ACTIVE_HERMES_ROOT} is missing or incomplete. ` +
@@ -1175,29 +1473,12 @@ async function ensureRuntime(backend) {
     )
   }
 
-  // Step 2: Ensure venv exists at <ACTIVE_HERMES_ROOT>/venv — same place
-  // install.ps1 / install.sh put it. A user who installed via the CLI script
-  // already has this; we reuse it as-is.
-  const venvPython = getVenvPython(VENV_ROOT)
-  if (!fileExists(venvPython)) {
-    const systemPython = findSystemPython()
-    if (!systemPython) {
-      throw new Error(
-        'Python 3.11+ is required to bootstrap Hermes. Install Python from ' +
-          'https://www.python.org/downloads/ (or the Microsoft Store on Windows), then relaunch Hermes.'
-      )
-    }
-    await advanceBootProgress('runtime.venv', 'Creating Hermes virtual environment', 50)
-    await runProcess(systemPython, ['-m', 'venv', VENV_ROOT])
-  }
-
-  // Step 2b: On Windows, preflight Git Bash. Hermes' terminal tool calls
-  // bash.exe directly (tools/environments/local.py); without it the agent
-  // can't run a terminal command. We surface this here as a clear, actionable
-  // error rather than letting the user discover it on their first chat
-  // ("hey, run `ls`" → opaque tool failure). The NSIS prereq page handles
-  // this for installer users; this check catches everyone else (.msi users,
-  // npm run dev with a fresh checkout, manual installs, etc.).
+  // On Windows, preflight Git Bash. Hermes' terminal tool calls bash.exe
+  // directly (tools/environments/local.py); without it the agent can't run
+  // terminal commands. install.ps1's Stage-Git puts PortableGit at
+  // %LOCALAPPDATA%\hermes\git\, which findGitBash() picks up, so for any
+  // user who completed the bootstrap this is a no-op. For users who got
+  // here via an external `hermes` on PATH, this check still helps.
   if (IS_WINDOWS && !findGitBash()) {
     throw new Error(
       'Git for Windows is required for Hermes on Windows (provides Git Bash, ' +
@@ -1207,42 +1488,19 @@ async function ensureRuntime(backend) {
     )
   }
 
-  // Step 3: Ensure deps are installed. We compare a marker against the
-  // active pyproject.toml's hash and only run pip when something changed —
-  // keeps `npm run dev` boots fast on a stable repo.
-  const expectedMarker = {
-    runtimeSchemaVersion: RUNTIME_SCHEMA_VERSION,
-    pyprojectHash: sha256OfFile(path.join(ACTIVE_HERMES_ROOT, 'pyproject.toml')),
-    factoryVersion: factoryAvailable ? (readPyprojectVersion(FACTORY_HERMES_ROOT) ?? app.getVersion()) : null
-  }
-  const currentMarker = readJson(RUNTIME_MARKER)
-  const depsFresh =
-    currentMarker?.runtimeSchemaVersion === expectedMarker.runtimeSchemaVersion &&
-    currentMarker?.pyprojectHash === expectedMarker.pyprojectHash &&
-    (await hasRuntimeImports(venvPython))
-
-  if (!depsFresh) {
-    await advanceBootProgress('runtime.dependencies', 'Installing Hermes dependencies', 66)
-    await runProcess(venvPython, [
-      '-m',
-      'pip',
-      'install',
-      '--disable-pip-version-check',
-      '--no-warn-script-location',
-      '--upgrade',
-      '-e',
-      ACTIVE_HERMES_ROOT
-    ])
-
-    await advanceBootProgress('runtime.verify', 'Validating Hermes dependencies', 78)
-    await runProcess(venvPython, ['-c', RUNTIME_IMPORT_CHECK])
-
-    fs.writeFileSync(
-      RUNTIME_MARKER,
-      JSON.stringify({ ...expectedMarker, installedAt: new Date().toISOString() }, null, 2)
+  const venvPython = getVenvPython(VENV_ROOT)
+  if (!fileExists(venvPython)) {
+    // No venv at the expected location AND no bootstrap-needed sentinel
+    // means we have a half-installed checkout: .git exists, source files
+    // exist, but venv is missing or broken. This shouldn't happen in
+    // normal flow because isBootstrapComplete() requires
+    // isHermesSourceRoot() and the bootstrap writes the marker only after
+    // install.ps1 succeeds. If we hit this, the user (or a deleted venv)
+    // broke the invariant; tell them to re-run the install.
+    throw new Error(
+      `Hermes venv missing at ${VENV_ROOT}. Re-run the desktop installer or ` +
+        '`scripts/install.ps1` to rebuild it.'
     )
-  } else {
-    await advanceBootProgress('runtime.ready', 'Reusing existing Hermes runtime', 78)
   }
 
   backend.command = venvPython
@@ -1255,79 +1513,6 @@ async function ensureRuntime(backend) {
     error: null
   })
   return backend
-}
-
-async function hasRuntimeImports(python) {
-  try {
-    await runProcess(python, ['-c', RUNTIME_IMPORT_CHECK])
-    return true
-  } catch {
-    rememberLog('Hermes runtime is missing required imports; reinstalling.')
-    return false
-  }
-}
-
-// Read pyproject.toml's [project].version with a regex — avoids pulling in a
-// TOML parser for one field. Returns null if the file is missing or the
-// version line can't be matched.
-function readPyprojectVersion(root) {
-  try {
-    const text = fs.readFileSync(path.join(root, 'pyproject.toml'), 'utf8')
-    const match = text.match(/^version\s*=\s*"([^"]+)"/m)
-    return match ? match[1] : null
-  } catch {
-    return null
-  }
-}
-
-function sha256OfFile(filePath) {
-  try {
-    const buf = fs.readFileSync(filePath)
-    return crypto.createHash('sha256').update(buf).digest('hex')
-  } catch {
-    return null
-  }
-}
-
-// Copy from src → dst, preserving any existing venv/ at dst.
-//
-// In practice src (FACTORY_HERMES_ROOT) never contains a venv —
-// stage-hermes-payload.mjs explicitly excludes venvs from the bundled
-// payload. The venv-preservation filter below is defensive: if a future
-// payload ever does include a venv directory, we still won't clobber the
-// user's existing one at ACTIVE_HERMES_ROOT/venv.
-//
-// Excludes .git, __pycache__, .pyc/.pyo, etc. — same set
-// stage-hermes-payload.mjs uses on the build side.
-async function syncTreeExcludingVenv(src, dst) {
-  const EXCLUDED = new Set([
-    '.git',
-    '.mypy_cache',
-    '.pytest_cache',
-    '.ruff_cache',
-    '__pycache__',
-    'node_modules',
-    '.DS_Store'
-  ])
-  const srcVenv = path.join(src, 'venv')
-  const venvPreserved = directoryExists(path.join(dst, 'venv'))
-
-  await fs.promises.cp(src, dst, {
-    recursive: true,
-    force: true,
-    filter: source => {
-      const name = path.basename(source)
-      if (EXCLUDED.has(name)) return false
-      if (name.endsWith('.pyc') || name.endsWith('.pyo')) return false
-      // Defensive: skip any venv/ inside src so we never clobber dst's venv.
-      // (The source path the filter receives is rooted at src; that's why we
-      // check srcVenv here, not dstVenv.)
-      if (venvPreserved && (source === srcVenv || source.startsWith(srcVenv + path.sep))) {
-        return false
-      }
-      return true
-    }
-  })
 }
 
 function isPortAvailable(port) {
@@ -2064,7 +2249,10 @@ function buildApplicationMenu() {
 }
 
 function toggleDevTools(window) {
-  if (!DEV_SERVER) return
+  // DevTools is enabled in packaged builds so users can diagnose renderer
+  // issues without needing a dev build. Trade-off: tiny attack surface
+  // increase versus a much better support story when WS connection or
+  // CSP issues surface in the field.
   const { webContents } = window
   if (webContents.isDevToolsOpened()) {
     webContents.closeDevTools()
@@ -2074,7 +2262,7 @@ function toggleDevTools(window) {
 }
 
 function installDevToolsShortcut(window) {
-  if (!DEV_SERVER) return
+  // F12 / Cmd+Opt+I works in both dev and packaged builds.
   window.webContents.on('before-input-event', (event, input) => {
     const key = input.key.toLowerCase()
     const isInspectShortcut =
@@ -2419,6 +2607,15 @@ function resetHermesConnection() {
 }
 
 async function startHermes() {
+  // Latched-failure short-circuit: once bootstrap has failed in this
+  // process, every subsequent startHermes() call re-throws the same error
+  // without re-running install.ps1. This prevents the renderer's
+  // ensureGatewayOpen retries (and any other getConnection callers) from
+  // restarting a 5-10 minute install loop while the user is still reading
+  // the failure overlay.
+  if (bootstrapFailure) {
+    throw bootstrapFailure
+  }
   if (connectionPromise) return connectionPromise
 
   connectionPromise = (async () => {
@@ -2591,7 +2788,7 @@ function createWindow() {
       webviewTag: true,
       sandbox: true,
       nodeIntegration: false,
-      devTools: Boolean(DEV_SERVER)
+      devTools: true
     }
   })
 
@@ -2644,7 +2841,27 @@ function createWindow() {
 }
 
 ipcMain.handle('hermes:connection', async () => startHermes())
+ipcMain.handle('hermes:bootstrap:reset', async () => {
+  // Renderer's "Reload and retry" path. Clear the latched failure and
+  // reset connection state so the next startHermes() call restarts the
+  // full backend flow (including a fresh runBootstrap pass).
+  rememberLog('[bootstrap] reset requested by renderer; clearing latched failure')
+  bootstrapFailure = null
+  connectionPromise = null
+  bootstrapState = {
+    active: false,
+    manifest: null,
+    stages: {},
+    error: null,
+    log: [],
+    startedAt: null,
+    completedAt: null,
+    unsupportedPlatform: null
+  }
+  return { ok: true }
+})
 ipcMain.handle('hermes:boot-progress:get', async () => bootProgressState)
+ipcMain.handle('hermes:bootstrap:get', async () => getBootstrapState())
 ipcMain.handle('hermes:connection-config:get', async () => sanitizeDesktopConnectionConfig())
 ipcMain.handle('hermes:connection-config:test', async (_event, payload) => testDesktopConnectionConfig(payload))
 ipcMain.handle('hermes:connection-config:save', async (_event, payload) => {

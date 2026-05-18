@@ -157,9 +157,6 @@ jobs:
       - name: Build desktop renderer
         run: npm --prefix apps/desktop run build
 
-      - name: Stage Hermes payload
-        run: npm --prefix apps/desktop run stage:hermes
-
       - name: Map macOS signing credentials
         if: matrix.platform == 'mac'
         shell: bash
