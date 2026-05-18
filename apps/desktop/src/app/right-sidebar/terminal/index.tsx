@@ -1,9 +1,13 @@
 import '@xterm/xterm/css/xterm.css'
 
+import { useStore } from '@nanostores/react'
+
 import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import { Loader } from '@/components/ui/loader'
 
 import { SidebarPanelLabel } from '../../shell/sidebar-label'
+import { $terminalTakeover, setRightSidebarTab, setTerminalTakeover } from '../store'
 
 import { addSelectionShortcutLabel } from './selection'
 import { useTerminalSession } from './use-terminal-session'
@@ -18,13 +22,32 @@ export function TerminalTab({ cwd, onAddSelectionToChat }: TerminalTabProps) {
     cwd,
     onAddSelectionToChat
   })
+  const takeover = useStore($terminalTakeover)
+  const label = takeover ? 'Return to split view' : 'Focus terminal view'
+
+  const toggleTakeover = () => {
+    // Pre-select the Terminal tab so the slot is ready to host us on return.
+    if (takeover) setRightSidebarTab('terminal')
+    setTerminalTakeover(!takeover)
+  }
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="flex h-7 shrink-0 items-center px-3">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex h-7 shrink-0 items-center gap-2 px-3">
         <SidebarPanelLabel>{shellName}</SidebarPanelLabel>
+        <Button
+          aria-label={label}
+          className="ml-auto size-6 rounded-md"
+          onClick={toggleTakeover}
+          size="icon"
+          title={label}
+          type="button"
+          variant="ghost"
+        >
+          <Codicon name={takeover ? 'screen-normal' : 'screen-full'} size="0.875rem" />
+        </Button>
       </div>
-      <div className="relative min-h-0 flex-1 px-2 pb-2">
+      <div className="relative min-h-0 flex-1 bg-[#002b36] p-2">
         {status === 'starting' && (
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
             <Loader
@@ -53,8 +76,12 @@ export function TerminalTab({ cwd, onAddSelectionToChat }: TerminalTabProps) {
             </Button>
           </div>
         )}
+        {/* Outer div paints the dark inset; inner div is the xterm host so the
+            canvas sizes to the *content* area and p-2 shows as terminal padding.
+            Forcing screen/viewport bg avoids xterm's default black peeking
+            through the unused pixels below the last full row. */}
         <div
-          className="h-full min-h-0 overflow-hidden px-1 py-1 text-(--ui-text-secondary) [&_.xterm]:h-full [&_.xterm-screen]:bg-transparent! [&_.xterm-viewport]:bg-transparent!"
+          className="h-full min-h-0 overflow-hidden text-(--ui-text-secondary) [&_.xterm]:h-full [&_.xterm-screen]:bg-[#002b36]! [&_.xterm-viewport]:bg-[#002b36]!"
           ref={hostRef}
         />
       </div>

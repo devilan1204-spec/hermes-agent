@@ -1,16 +1,18 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
 import { triggerHaptic } from '@/lib/haptics'
-import { useTheme } from '@/themes/context'
 
 import { isAddSelectionShortcut, terminalSelectionAnchor, terminalSelectionLabel, terminalTheme } from './selection'
 
 type TerminalStatus = 'closed' | 'open' | 'starting'
+
+const HERMES_PATHS_MIME = 'application/x-hermes-paths'
 
 function readEscapeSequence(data: string, index: number) {
   if (data.charCodeAt(index) !== 0x1b || index + 1 >= data.length) {
@@ -93,6 +95,58 @@ interface UseTerminalSessionOptions {
   onAddSelectionToChat: (text: string, label?: string) => void
 }
 
+function transferHasDropCandidates(t: DataTransfer): boolean {
+  if (t.types?.includes(HERMES_PATHS_MIME)) return true
+  if ((t.files?.length ?? 0) > 0) return true
+
+  for (let i = 0; i < (t.items?.length ?? 0); i += 1) {
+    if (t.items[i]?.kind === 'file') return true
+  }
+
+  return false
+}
+
+function collectDroppedPaths(t: DataTransfer): string[] {
+  const seen = new Set<string>()
+  const push = (value: unknown) => {
+    if (typeof value !== 'string') return
+    const path = value.trim()
+    if (path) seen.add(path)
+  }
+
+  try {
+    const raw = t.getData(HERMES_PATHS_MIME)
+    if (raw) for (const entry of JSON.parse(raw) as { path?: unknown }[]) push(entry?.path)
+  } catch {
+    // Malformed in-app drag payload — fall through to OS files.
+  }
+
+  const getPath = window.hermesDesktop?.getPathForFile
+  const addFile = (file: File | null) => {
+    if (!file || !getPath) return
+    try {
+      push(getPath(file))
+    } catch {
+      // File handle unavailable.
+    }
+  }
+
+  for (let i = 0; i < (t.files?.length ?? 0); i += 1) addFile(t.files.item(i))
+  for (let i = 0; i < (t.items?.length ?? 0); i += 1) {
+    const item = t.items[i]
+    if (item?.kind === 'file') addFile(item.getAsFile())
+  }
+
+  return [...seen]
+}
+
+function quotePathForShell(path: string, shellName: string): string {
+  const shell = shellName.toLowerCase()
+  if (shell.includes('powershell') || shell.includes('pwsh')) return `'${path.replace(/'/g, "''")}'`
+  if (shell.includes('cmd')) return `"${path.replace(/"/g, '""')}"`
+  return `'${path.replace(/'/g, "'\\''")}'`
+}
+
 export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSessionOptions) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<Terminal | null>(null)
@@ -101,8 +155,6 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
   const selectionLabelRef = useRef('')
   const selectionRef = useRef('')
   const onAddSelectionToChatRef = useRef(onAddSelectionToChat)
-  const { resolvedMode } = useTheme()
-  const resolvedModeRef = useRef(resolvedMode)
   const [status, setStatus] = useState<TerminalStatus>('starting')
   const [selection, setSelection] = useState('')
   const [selectionStyle, setSelectionStyle] = useState<CSSProperties | null>(null)
@@ -111,14 +163,6 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
   useEffect(() => {
     onAddSelectionToChatRef.current = onAddSelectionToChat
   }, [onAddSelectionToChat])
-
-  useEffect(() => {
-    resolvedModeRef.current = resolvedMode
-
-    if (termRef.current) {
-      termRef.current.options.theme = terminalTheme(resolvedMode)
-    }
-  }, [resolvedMode])
 
   const addSelectionToChat = useCallback(() => {
     const selectedText = selectionRef.current || termRef.current?.getSelection() || ''
@@ -186,7 +230,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
       lineHeight: 1.12,
       macOptionIsMeta: true,
       scrollback: 1000,
-      theme: terminalTheme(resolvedModeRef.current)
+      theme: terminalTheme()
     })
 
     const fit = new FitAddon()
@@ -197,6 +241,46 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
     term.loadAddon(new WebLinksAddon())
     term.unicode.activeVersion = '11'
     term.open(host)
+    term.focus()
+
+    // WebGL renderer matches the dashboard ChatPage path; xterm's default DOM
+    // renderer paints SGR via CSS classes that visibly mute against our skins.
+    try {
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => webgl.dispose())
+      term.loadAddon(webgl)
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[hermes-terminal] WebGL unavailable; falling back to DOM', err)
+    }
+
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) return
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'copy'
+    }
+
+    const onDrop = (e: DragEvent) => {
+      const id = sessionIdRef.current
+      if (!id || !e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) return
+      e.preventDefault()
+      e.stopPropagation()
+      const paths = collectDroppedPaths(e.dataTransfer)
+      if (!paths.length) return
+      void terminalApi.write(id, `${paths.map(p => quotePathForShell(p, shellNameRef.current)).join(' ')} `)
+      term.focus()
+      triggerHaptic('selection')
+    }
+
+    host.addEventListener('dragenter', onDragOver)
+    host.addEventListener('dragover', onDragOver)
+    host.addEventListener('drop', onDrop)
+    cleanup.push(() => {
+      host.removeEventListener('dragenter', onDragOver)
+      host.removeEventListener('dragover', onDragOver)
+      host.removeEventListener('drop', onDrop)
+    })
 
     const fitAndResize = () => {
       if (disposed || !host.isConnected || host.clientWidth <= 0 || host.clientHeight <= 0) {
@@ -211,15 +295,30 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
 
       const id = sessionIdRef.current
 
-      if (id && (lastSentSize?.cols !== term.cols || lastSentSize.rows !== term.rows)) {
+      if (id && (lastSentSize?.cols !== term.cols || lastSentSize?.rows !== term.rows)) {
         lastSentSize = { cols: term.cols, rows: term.rows }
         void terminalApi.resize(id, { cols: term.cols, rows: term.rows })
       }
     }
 
-    const resizeObserver = new ResizeObserver(fitAndResize)
+    // Coalesce ResizeObserver bursts through rAF — running fit.fit()
+    // synchronously while sibling panes are mid-transition (e.g. file browser
+    // collapsing to 0px) crashes the WebGL renderer mid texture-atlas rebuild.
+    let pendingFrame = 0
+    const scheduleResize = () => {
+      if (pendingFrame) return
+      pendingFrame = window.requestAnimationFrame(() => {
+        pendingFrame = 0
+        if (!disposed) fitAndResize()
+      })
+    }
+
+    const resizeObserver = new ResizeObserver(scheduleResize)
     resizeObserver.observe(host)
-    cleanup.push(() => resizeObserver.disconnect())
+    cleanup.push(() => {
+      resizeObserver.disconnect()
+      if (pendingFrame) window.cancelAnimationFrame(pendingFrame)
+    })
 
     const dataDisposable = term.onData(data => {
       const id = sessionIdRef.current
@@ -309,7 +408,10 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
             term.write(`\r\n[terminal exited${signal ? `: ${signal}` : code !== null ? `: ${code}` : ''}]\r\n`)
           })
         )
-        window.requestAnimationFrame(fitAndResize)
+        window.requestAnimationFrame(() => {
+          fitAndResize()
+          term.focus()
+        })
       })
       .catch(error => {
         setStatus('closed')

@@ -14,13 +14,12 @@ import { SidebarPanelLabel } from '../shell/sidebar-label'
 
 import { ProjectTree } from './files/tree'
 import { useProjectTree } from './files/use-project-tree'
-import { $rightSidebarTab, type RightSidebarTabId, setRightSidebarTab } from './store'
-import { TerminalTab } from './terminal'
+import { $rightSidebarTab, $terminalTakeover, type RightSidebarTabId, setRightSidebarTab } from './store'
+import { TerminalSlot } from './terminal/persistent'
 
 interface RightSidebarPaneProps {
   onActivateFile: (path: string) => void
   onActivateFolder: (path: string) => void
-  onAddTerminalSelection: (text: string, label?: string) => void
   onChangeCwd: (path: string) => Promise<void> | void
 }
 
@@ -38,10 +37,10 @@ const RIGHT_SIDEBAR_TABS: readonly RightSidebarTab[] = [
 export function RightSidebarPane({
   onActivateFile,
   onActivateFolder,
-  onAddTerminalSelection,
   onChangeCwd
 }: RightSidebarPaneProps) {
   const activeTab = useStore($rightSidebarTab)
+  const terminalTakeover = useStore($terminalTakeover)
   const currentBranch = useStore($currentBranch).trim()
   const currentCwd = useStore($currentCwd).trim()
   const hasCwd = currentCwd.length > 0
@@ -54,6 +53,7 @@ export function RightSidebarPane({
     : 'No folder selected'
 
   const { data, loadChildren, openState, refreshRoot, rootError, rootLoading, setNodeOpen } = useProjectTree(currentCwd)
+  const effectiveTab: RightSidebarTabId = terminalTakeover ? 'files' : activeTab
 
   const chooseFolder = async () => {
     const selected = await window.hermesDesktop?.selectPaths({
@@ -82,15 +82,19 @@ export function RightSidebarPane({
     }
   }
 
+  const tabs = terminalTakeover
+    ? RIGHT_SIDEBAR_TABS.filter(tab => tab.id !== 'terminal')
+    : RIGHT_SIDEBAR_TABS
+
   return (
     <aside
       aria-label="Right sidebar"
       className="before:pointer-events-none relative flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-(--ui-stroke-secondary) bg-(--ui-sidebar-surface-background) pt-(--titlebar-height) text-(--ui-text-tertiary) shadow-[inset_0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)] before:absolute before:inset-x-0 before:top-(--titlebar-height) before:z-1 before:h-px before:bg-(--ui-stroke-tertiary)"
     >
-      <RightSidebarChrome activeTab={activeTab} branch={currentBranch} />
+      <RightSidebarChrome activeTab={effectiveTab} branch={currentBranch} tabs={tabs} />
 
-      {activeTab === 'terminal' ? (
-        <TerminalTab cwd={currentCwd} onAddSelectionToChat={onAddTerminalSelection} />
+      {effectiveTab === 'terminal' ? (
+        <TerminalSlot />
       ) : (
         <FilesystemTab
           cwd={currentCwd}
@@ -113,12 +117,20 @@ export function RightSidebarPane({
   )
 }
 
-function RightSidebarChrome({ activeTab, branch }: { activeTab: RightSidebarTabId; branch: string }) {
+function RightSidebarChrome({
+  activeTab,
+  branch,
+  tabs
+}: {
+  activeTab: RightSidebarTabId
+  branch: string
+  tabs: readonly RightSidebarTab[]
+}) {
   return (
     <header className="shrink-0 bg-transparent text-[0.75rem]">
       <div className="flex items-center gap-2 border-b border-(--ui-stroke-tertiary) px-2.5 py-1">
         <nav aria-label="Right sidebar panels" className="flex min-w-0 items-center gap-1">
-          {RIGHT_SIDEBAR_TABS.map(tab => (
+          {tabs.map(tab => (
             <button
               aria-label={tab.label}
               aria-pressed={tab.id === activeTab}

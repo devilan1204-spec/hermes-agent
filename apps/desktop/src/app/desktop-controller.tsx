@@ -54,6 +54,8 @@ import { useGatewayBoot } from './gateway/hooks/use-gateway-boot'
 import { useGatewayRequest } from './gateway/hooks/use-gateway-request'
 import { ModelPickerOverlay } from './model-picker-overlay'
 import { RightSidebarPane } from './right-sidebar'
+import { $terminalTakeover } from './right-sidebar/store'
+import { PersistentTerminal, TerminalSlot } from './right-sidebar/terminal/persistent'
 import { NEW_CHAT_ROUTE, routeSessionId, sessionRoute } from './routes'
 import { useContextSuggestions } from './session/hooks/use-context-suggestions'
 import { useCwdActions } from './session/hooks/use-cwd-actions'
@@ -99,6 +101,7 @@ export function DesktopController() {
   const filePreviewTarget = useStore($filePreviewTarget)
   const previewTarget = useStore($previewTarget)
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
+  const terminalTakeover = useStore($terminalTakeover)
 
   const routedSessionId = routeSessionId(location.pathname)
   const routeToken = `${location.pathname}:${location.search}:${location.hash}`
@@ -118,6 +121,7 @@ export function DesktopController() {
     settingsOpen,
     toggleCommandCenter
   } = useOverlayRouting()
+  const terminalTakeoverActive = chatOpen && terminalTakeover
 
   const titlebarToolGroups = useGroupRegistry<TitlebarTool>()
   const statusbarItemGroups = useGroupRegistry<StatusbarItem>()
@@ -466,6 +470,9 @@ export function DesktopController() {
   const overlays = (
     <>
       <DesktopInstallOverlay />
+      {/* One PTY-backed terminal mounted forever; <TerminalSlot /> placeholders
+          decide where it shows. Toggling fullscreen never rebuilds the shell. */}
+      <PersistentTerminal cwd={currentCwd} onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
       <DesktopOnboardingOverlay
         enabled={gatewayState === 'open'}
         onCompleted={() => {
@@ -548,6 +555,12 @@ export function DesktopController() {
     />
   )
 
+  const takeoverTerminalView = (
+    <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background) pt-(--titlebar-height)">
+      <TerminalSlot />
+    </div>
+  )
+
   return (
     <AppShell
       commandCenterOpen={commandCenterOpen}
@@ -563,6 +576,7 @@ export function DesktopController() {
         id="chat-sidebar"
         maxWidth={SIDEBAR_MAX_WIDTH}
         minWidth={SIDEBAR_DEFAULT_WIDTH}
+        disabled={terminalTakeoverActive}
         resizable
         side="left"
         width={`${SIDEBAR_DEFAULT_WIDTH}px`}
@@ -571,8 +585,8 @@ export function DesktopController() {
       </Pane>
       <PaneMain>
         <Routes>
-          <Route element={chatView} index />
-          <Route element={chatView} path=":sessionId" />
+          <Route element={terminalTakeoverActive ? takeoverTerminalView : chatView} index />
+          <Route element={terminalTakeoverActive ? takeoverTerminalView : chatView} path=":sessionId" />
           <Route
             element={
               <Suspense fallback={null}>
@@ -650,7 +664,6 @@ export function DesktopController() {
         <RightSidebarPane
           onActivateFile={composer.attachContextFilePath}
           onActivateFolder={composer.attachContextFolderPath}
-          onAddTerminalSelection={composer.addTerminalSelectionAttachment}
           onChangeCwd={changeSessionCwd}
         />
       </Pane>
