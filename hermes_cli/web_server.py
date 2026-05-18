@@ -105,10 +105,22 @@ _REVEAL_WINDOW_SECONDS = 30
 # CORS: restrict to localhost origins only.  The web UI is intended to run
 # locally; binding to 0.0.0.0 with allow_origins=["*"] would let any website
 # read/modify config and secrets.
+#
+# Electron renderers load index.html via file:// URLs.  Chromium sets the
+# Origin header to "null" for such windows on the WebSocket upgrade request,
+# which Starlette's CORSMiddleware rejects with HTTP 403 before the
+# /api/ws route handler ever runs.  We allow "null" explicitly so the
+# packaged desktop app can connect; security is preserved because:
+#   1. The gateway binds to 127.0.0.1 by default, so a malicious file://
+#      page on another machine can't reach it.
+#   2. Every authenticated /api/ endpoint past the CORS layer is gated by
+#      the per-process session token, so even a local file:// page with
+#      Origin: null cannot make authenticated requests without already
+#      knowing the secret.
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|null)$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
