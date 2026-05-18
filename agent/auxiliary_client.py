@@ -707,6 +707,17 @@ class _CodexCompletionsAdapter:
         # Tools support for auxiliary callers (e.g. skills_hub) that pass function schemas
         tools = kwargs.get("tools")
         if tools:
+            # xAI's Responses endpoint rejects ``pattern`` and ``format`` JSON Schema
+            # keywords (HTTP 400). Strip them here to match the parity guarantee that
+            # chat_completion_helpers.py provides for the main-agent xAI path.
+            try:
+                from tools.schema_sanitizer import strip_pattern_and_format
+                tools, _ = strip_pattern_and_format(list(tools))
+            except Exception as exc:
+                logger.warning(
+                    "Auxiliary client: failed to sanitize tool schemas for "
+                    "Codex/xAI Responses path: %s", exc,
+                )
             converted = []
             for t in tools:
                 fn = t.get("function", {}) if isinstance(t, dict) else {}
