@@ -913,22 +913,57 @@ function Install-SystemPackages {
     # Try winget first (most common on modern Windows)
     if ($hasWinget) {
         Write-Info "Installing $description via winget..."
+        # Per-package log paths -- key the lookup by package id so we can
+        # decide AFTER the post-install Get-Command check whether to keep
+        # the log (still missing -> keep as breadcrumb) or delete it (now
+        # present -> happy path, no clutter).
+        $pkgLogs = @{}
         foreach ($pkg in $wingetPkgs) {
+            $log = "$env:TEMP\hermes-winget-$($pkg -replace '[^A-Za-z0-9]','_')-$(Get-Random).log"
+            $pkgLogs[$pkg] = $log
+            # --source winget pins us to the github-backed source.  Without this,
+            # a broken msstore source (cert validation failures like 0x8a15005e
+            # are common on Windows-on-ARM and some corporate networks) makes
+            # winget bail with "please specify --source" *before* attempting any
+            # install -- and it exits 0, so the surrounding try/catch never fires.
+            # We don't ship anything from msstore, so pinning is safe.
             try {
-                winget install $pkg --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-            } catch { }
+                $output = winget install --exact --id $pkg --source winget --silent `
+                    --accept-package-agreements --accept-source-agreements 2>&1
+                $output | Out-File -FilePath $log -Encoding utf8
+                "winget exit: $LASTEXITCODE" | Out-File -FilePath $log -Encoding utf8 -Append
+            } catch {
+                $_ | Out-File -FilePath $log -Encoding utf8 -Append
+                "winget exit: <exception>" | Out-File -FilePath $log -Encoding utf8 -Append
+            }
         }
-        # Refresh PATH and recheck
-        $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
+        # Refresh PATH from both env-var hives AND winget's alias shim directory.
+        # winget exposes packages via "command line aliases" in %LOCALAPPDATA%\
+        # Microsoft\WinGet\Links, which is added to PATH by the AppExecutionAlias
+        # machinery only in *newly-spawned* shells -- not the current process.
+        # Without this addition, Get-Command rg below would falsely return null
+        # immediately after a successful install.
+        $wingetLinks = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
+        $envPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
+        if (Test-Path $wingetLinks) {
+            $envPath = "$envPath;$wingetLinks"
+        }
+        $env:Path = $envPath
         if ($needRipgrep -and (Get-Command rg -ErrorAction SilentlyContinue)) {
             Write-Success "ripgrep installed"
             $script:HasRipgrep = $true
             $needRipgrep = $false
+            Remove-Item -Path $pkgLogs["BurntSushi.ripgrep.MSVC"] -ErrorAction SilentlyContinue
+        } elseif ($pkgLogs.ContainsKey("BurntSushi.ripgrep.MSVC")) {
+            Write-Warn "winget could not install ripgrep; details: $($pkgLogs['BurntSushi.ripgrep.MSVC'])"
         }
         if ($needFfmpeg -and (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
             Write-Success "ffmpeg installed"
             $script:HasFfmpeg = $true
             $needFfmpeg = $false
+            Remove-Item -Path $pkgLogs["Gyan.FFmpeg"] -ErrorAction SilentlyContinue
+        } elseif ($pkgLogs.ContainsKey("Gyan.FFmpeg")) {
+            Write-Warn "winget could not install ffmpeg; details: $($pkgLogs['Gyan.FFmpeg'])"
         }
         if (-not $needRipgrep -and -not $needFfmpeg) { return }
     }
