@@ -448,8 +448,7 @@ export default function App() {
         </Button>
 
         <Typography
-          mondwest
-          className="text-display font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
+          className="font-mondwest text-display font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
           style={{ mixBlendMode: "plus-lighter" }}
         >
           {t.app.brand}
@@ -499,8 +498,7 @@ export default function App() {
                 <PluginSlot name="header-left" />
 
                 <Typography
-                  mondwest
-                  className="text-display font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
+                  className="font-mondwest text-display font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
                   style={{ mixBlendMode: "plus-lighter" }}
                 >
                   Hermes
