@@ -448,7 +448,7 @@ export default function App() {
         </Button>
 
         <Typography
-          className="font-mondwest text-display font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
+          className="font-mondwest text-display uppercase font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
           style={{ mixBlendMode: "plus-lighter" }}
         >
           {t.app.brand}
@@ -498,7 +498,7 @@ export default function App() {
                 <PluginSlot name="header-left" />
 
                 <Typography
-                  className="font-mondwest text-display font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
+                  className="font-mondwest text-display uppercase font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
                   style={{ mixBlendMode: "plus-lighter" }}
                 >
                   Hermes
@@ -671,7 +671,7 @@ function SidebarNavLink({ closeMobile, item, t }: SidebarNavLinkProps) {
           cn(
             "group relative flex items-center gap-3",
             "px-5 py-2.5",
-            "font-mondwest text-display text-sm tracking-[0.12em]",
+            "font-mondwest text-display uppercase text-sm tracking-[0.12em]",
             "whitespace-nowrap transition-colors cursor-pointer",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground",
             isActive ? "text-midground" : "text-text-secondary hover:text-midground",
