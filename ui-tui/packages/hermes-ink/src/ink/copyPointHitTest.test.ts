@@ -186,6 +186,91 @@ describe('copyPointAt gap adjacency', () => {
     }
   })
 
+  it('triple-click sets focus at col=width-1 OUTSIDE content rect → falls back to same-row in-range', () => {
+    // Reproduces the user-reported triple-click bug. selectLineAt sets
+    // anchor=(0, row) focus=(width-1, row) using the SCREEN width, not
+    // the content rect. When the message body is narrower than the
+    // screen (typical: gutter on left, padding on right), focus lands
+    // OUTSIDE the CopySource Box rect.
+    //
+    // hitDeepest returns null for col=119 if the box only spans col
+    // 4..80. Without the same-row fallback, copyPointAt would return
+    // a gap with no adjacency (the only range is on the same row, and
+    // findAdjacentRanges only finds STRICTLY above/below ranges).
+    // resolvePoint would then return null and toCopyText would emit
+    // empty text.
+    //
+    // Fix: same-row fallback returns in-range with col clamped to the
+    // box's right edge (or left edge if click was to the box's left).
+    const root = createNode('ink-root')
+    nodeCache.set(root, { x: 0, y: 0, width: 120, height: 5 })
+
+    // Message body box: not full width. Starts at col 4 (gutter), ends
+    // at col 80. So col=119 (the triple-click focus) is OUTSIDE.
+    const body = createNode('ink-box')
+    body.style = { copyRangeId: 42 } as DOMElement['style']
+    nodeCache.set(body, { x: 4, y: 1, width: 76, height: 1 })
+    appendChildNode(root, body)
+
+    const text = createNode('ink-text')
+    nodeCache.set(text, { x: 4, y: 1, width: 76, height: 1 })
+    appendChildNode(body, text)
+
+    // Anchor click at col=0 row=1 — LEFT of the body box (in the gutter).
+    // Without fix: gap with no adjacency. With fix: in-range, col=0
+    // (clamped to body box's left edge, since col=0 - rect.x=4 < 0).
+    const anchor = copyPointAt(root, 0, 1)
+    expect(anchor.kind).toBe('in-range')
+
+    if (anchor.kind === 'in-range') {
+      expect(anchor.rangeId).toBe(42)
+      expect(anchor.visualLine).toBe(0)
+      expect(anchor.col).toBe(0)
+    }
+
+    // Focus click at col=119 row=1 — right edge of the screen, way past
+    // body box's x+width=80. Without fix: empty gap. With fix:
+    // in-range, col=75 (clamped to box.width - 1).
+    const focus = copyPointAt(root, 119, 1)
+    expect(focus.kind).toBe('in-range')
+
+    if (focus.kind === 'in-range') {
+      expect(focus.rangeId).toBe(42)
+      expect(focus.visualLine).toBe(0)
+      // col clamped to box.width - 1 = 76 - 1 = 75.
+      expect(focus.col).toBe(75)
+    }
+  })
+
+  it('same-row fallback picks the SMALLEST tagged box when ranges are nested', () => {
+    // When multiple tagged boxes straddle the click row (e.g. a msg
+    // box containing a fence block), the fallback should pick the
+    // INNERMOST (smallest-area) one — that's what the user clicked.
+    const root = createNode('ink-root')
+    nodeCache.set(root, { x: 0, y: 0, width: 120, height: 10 })
+
+    // Outer msg box (large area).
+    const msgBox = createNode('ink-box')
+    msgBox.style = { copyRangeId: 100 } as DOMElement['style']
+    nodeCache.set(msgBox, { x: 4, y: 1, width: 76, height: 5 })
+    appendChildNode(root, msgBox)
+
+    // Inner fence block (smaller area, nested inside msg).
+    const fenceBox = createNode('ink-box')
+    fenceBox.style = { copyRangeId: 101 } as DOMElement['style']
+    nodeCache.set(fenceBox, { x: 6, y: 2, width: 70, height: 3 })
+    appendChildNode(msgBox, fenceBox)
+
+    // Click in the gutter on a row inside the fence.
+    const result = copyPointAt(root, 0, 3)
+    expect(result.kind).toBe('in-range')
+
+    if (result.kind === 'in-range') {
+      // Should pick the smaller fence box, not the outer msg box.
+      expect(result.rangeId).toBe(101)
+    }
+  })
+
   it('wrap-continuation row with NO fragments: degrades to in-range with bad visualLine (documents the regression)', () => {
     // What happens when the renderer didn't emit fragments for the
     // wrap (e.g. paragraph rendered without the MdInline wrap()
@@ -214,6 +299,7 @@ describe('copyPointAt gap adjacency', () => {
 
     const result = copyPointAt(root, 0, 1)
     expect(result.kind).toBe('in-range')
+
     if (result.kind === 'in-range') {
       expect(result.rangeId).toBe(11)
       expect(result.visualLine).toBe(1)

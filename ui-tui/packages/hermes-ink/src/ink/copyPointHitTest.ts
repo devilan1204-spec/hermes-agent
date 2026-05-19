@@ -114,13 +114,94 @@ export function copyPointAt(root: DOMElement, col: number, row: number): RawSele
     }
   }
 
-  // No tagged ancestor at (col, row). Scan the WHOLE DOM for tagged
-  // boxes, partition them into "above row" and "below row" by their
-  // cached y bounds, and pick the nearest each direction. This gives
-  // toCopyText enough info to slot the gap between two known ranges.
+  // No tagged ancestor at (col, row). Before falling through to gap
+  // resolution, check for a tagged box on the SAME row whose
+  // horizontal extent we missed (click was in the gutter on the left
+  // or past the content on the right). triple-click selectLineAt sets
+  // focus=(width-1, row) using the SCREEN width, not the content rect;
+  // when the message body is narrower than the screen the focus lands
+  // outside the box and otherwise resolves to an empty gap, which
+  // toCopyText turns into empty output.
+  //
+  // For each tagged box whose y-range covers `row`, return an
+  // in-range point at the nearest edge of the box (left edge if click
+  // was to its left, right edge if click was to its right). Snap to
+  // the SMALLEST such box (deepest tagged) when multiple straddle the
+  // row — that's the user's intent (the specific block they clicked
+  // on, not its enclosing container).
+  const sameRow = findSameRowRange(root, col, row)
+
+  if (sameRow) {
+    return {
+      kind: 'in-range',
+      rangeId: sameRow.rangeId,
+      visualLine: row - sameRow.rect.y,
+      col: sameRow.col
+    }
+  }
+
+  // No tagged ancestor at (col, row) and nothing on the same row.
+  // Scan the WHOLE DOM for tagged boxes, partition them into "above
+  // row" and "below row" by their cached y bounds, and pick the
+  // nearest each direction. This gives toCopyText enough info to
+  // slot the gap between two known ranges.
   const { afterRangeId, beforeRangeId } = findAdjacentRanges(root, row)
 
   return { kind: 'gap', afterRangeId, beforeRangeId }
+}
+
+/**
+ * Find the SMALLEST tagged box whose y-extent contains `row`, even
+ * when `col` is outside its x-extent. Returns the rangeId and the
+ * snapped column (clamped to the box's x-extent). Returns null when
+ * no tagged box straddles `row`.
+ *
+ * Used as a recovery path for clicks in the row gutter / past the
+ * content — the user's intent is "select this row's content," and a
+ * gap point with same-row-only adjacency would otherwise resolve to
+ * nothing.
+ */
+function findSameRowRange(
+  root: DOMElement,
+  col: number,
+  row: number
+): { rangeId: number; rect: { x: number; y: number; width: number; height: number }; col: number } | null {
+  let best: { rangeId: number; rect: { x: number; y: number; width: number; height: number }; col: number; area: number } | null =
+    null
+
+  const visit = (node: DOMElement): void => {
+    const rangeId = (node.style as { copyRangeId?: number }).copyRangeId
+
+    if (typeof rangeId === 'number') {
+      const rect = nodeCache.get(node)
+
+      if (rect && row >= rect.y && row < rect.y + rect.height) {
+        // y matches; snap col into the box's x-extent.
+        const snappedCol = Math.max(0, Math.min(col - rect.x, rect.width - 1))
+        const area = rect.width * rect.height
+
+        if (!best || area < best.area) {
+          best = { rangeId, rect, col: snappedCol, area }
+        }
+      }
+    }
+
+    for (const child of node.childNodes) {
+      if (child.nodeName === '#text') {
+        continue
+      }
+
+      visit(child as DOMElement)
+    }
+  }
+
+  visit(root)
+
+  if (!best) {
+    return null
+  }
+
+  return { rangeId: (best as { rangeId: number }).rangeId, rect: (best as { rect: { x: number; y: number; width: number; height: number } }).rect, col: (best as { col: number }).col }
 }
 
 /**
