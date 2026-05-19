@@ -40,7 +40,7 @@ const LINE_COLORS: Record<string, string> = {
   error: "text-destructive",
   warning: "text-warning",
   info: "text-foreground",
-  debug: "text-muted-foreground/60",
+  debug: "text-text-tertiary",
 };
 
 const toOptions = <T extends string>(values: readonly T[]) =>
@@ -87,7 +87,7 @@ export default function LogsPage() {
     setAfterTitle(
       <span className="flex items-center gap-2">
         {loading && <Spinner className="shrink-0 text-base text-primary" />}
-        <Badge tone="secondary" className="text-[10px]">
+        <Badge tone="secondary" className="text-xs">
           {file} · {level} · {component}
         </Badge>
       </span>,
@@ -104,7 +104,7 @@ export default function LogsPage() {
             {t.logs.autoRefresh}
           </Label>
           {autoRefresh && (
-            <Badge tone="success" className="text-[10px]">
+            <Badge tone="success" className="text-xs">
               <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
               {t.common.live}
             </Badge>

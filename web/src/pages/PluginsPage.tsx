@@ -160,7 +160,7 @@ export default function PluginsPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t.pluginsPage.providersHeading}</CardTitle>
-              <p className="text-[0.7rem] tracking-[0.08em] text-midground/55 normal-case">
+              <p className="text-xs tracking-[0.08em] text-text-tertiary">
                 {t.pluginsPage.providersHint}
               </p>
             </CardHeader>
@@ -227,7 +227,7 @@ export default function PluginsPage() {
         <Card>
           <CardHeader>
             <CardTitle>{t.pluginsPage.installHeading}</CardTitle>
-            <p className="text-[0.7rem] tracking-[0.08em] text-midground/55 normal-case">
+            <p className="text-xs tracking-[0.08em] text-text-tertiary">
               {t.pluginsPage.installHint}
             </p>
           </CardHeader>
@@ -240,7 +240,7 @@ export default function PluginsPage() {
               <Label htmlFor="install-url">{t.pluginsPage.identifierLabel}</Label>
 
               <Input
-                className="normal-case font-sans lowercase"
+                className="font-sans lowercase"
                 id="install-url"
                 placeholder="owner/repo or https://..."
                 spellCheck={false}
@@ -256,7 +256,7 @@ export default function PluginsPage() {
 
                 <Switch checked={installForce} onCheckedChange={setInstallForce} />
 
-                <span className="text-[0.7rem] tracking-[0.06em] text-midforeground/85 normal-case">
+                <span className="text-xs tracking-[0.06em] text-text-secondary">
                   {t.pluginsPage.forceReinstall}
                 </span>
               </div>
@@ -265,7 +265,7 @@ export default function PluginsPage() {
 
                 <Switch checked={installEnable} onCheckedChange={setInstallEnable} />
 
-                <span className="text-[0.7rem] tracking-[0.06em] text-midforeground/85 normal-case">
+                <span className="text-xs tracking-[0.06em] text-text-secondary">
                   {t.pluginsPage.enableAfterInstall}
                 </span>
               </div>
@@ -281,11 +281,11 @@ export default function PluginsPage() {
               {t.pluginsPage.installBtn}
             </Button>
 
-            <p className="text-[0.65rem] tracking-[0.06em] text-midforeground/55 normal-case">
+            <p className="text-xs tracking-[0.06em] text-text-tertiary">
               {t.pluginsPage.rescanHint}
             </p>
 
-            <p className="text-[0.65rem] tracking-[0.06em] text-midforeground/55 normal-case">
+            <p className="text-xs tracking-[0.06em] text-text-tertiary">
               {t.pluginsPage.removeHint}
             </p>
           </CardContent>
@@ -293,20 +293,20 @@ export default function PluginsPage() {
 
         <div className="flex flex-col gap-3">
 
-          <h3 className="font-mondwest text-[0.75rem] tracking-[0.12em] text-midground/85">
+          <h3 className="font-mondwest text-display text-xs tracking-[0.12em] text-text-secondary">
             {t.pluginsPage.pluginListHeading}
           </h3>
 
           {loading ? (
 
-            <div className="flex items-center gap-2 py-8 text-[0.8rem] text-midforeground/65">
+            <div className="flex items-center gap-2 py-8 text-xs text-text-tertiary">
 
               <Spinner />
               <span>{t.common.loading}</span>
             </div>
           ) : rows.length === 0 ? (
 
-            <p className="text-[0.75rem] text-midforeground/55 normal-case">{t.common.noResults}</p>
+            <p className="text-xs text-text-tertiary">{t.common.noResults}</p>
           ) : (
 
             <ul className="flex flex-col gap-3">
@@ -331,7 +331,7 @@ export default function PluginsPage() {
 
           <div className="flex flex-col gap-3 opacity-95">
 
-            <h3 className="font-mondwest text-[0.75rem] tracking-[0.12em] text-midforeground/85">
+            <h3 className="font-mondwest text-display text-xs tracking-[0.12em] text-text-secondary">
               {t.pluginsPage.orphanHeading}
             </h3>
 
@@ -339,7 +339,7 @@ export default function PluginsPage() {
 
               {hub!.orphan_dashboard_plugins.map((m) => (
 
-                <li className="text-[0.7rem] normal-case opacity-85" key={m.name}>
+                <li className="text-xs text-text-secondary" key={m.name}>
 
 
                   {m.label ?? m.name} — {m.description || m.tab?.path}
@@ -470,7 +470,7 @@ function PluginRowCard(props: PluginRowCardProps) {
                 className={cn(
                   "inline-flex items-center rounded-none px-3 py-1.5",
                   "border border-current/25 hover:bg-current/10",
-                  "font-mondwest text-[0.65rem] tracking-[0.1em] uppercase",
+                  "font-mondwest text-display text-xs tracking-[0.1em]",
                 )}
                 to={tabPath}
               >
@@ -535,14 +535,14 @@ function PluginRowCard(props: PluginRowCardProps) {
         </div>
 
         {row.description ? (
-          <p className="min-w-0 w-full text-[0.7rem] tracking-[0.06em] text-midforeground/75 normal-case break-words">
+          <p className="min-w-0 w-full text-xs tracking-[0.06em] text-text-secondary break-words">
             {row.description}
           </p>
         ) : null}
 
         {dm?.slots?.length ? (
 
-          <p className="text-[0.65rem] tracking-[0.05em] text-midforeground/55 normal-case">
+          <p className="text-xs tracking-[0.05em] text-text-tertiary">
             {t.pluginsPage.dashboardSlots}: {dm.slots.join(", ")}
           </p>
         ) : null}
@@ -557,7 +557,7 @@ function PluginRowCard(props: PluginRowCardProps) {
         {!row.has_dashboard_manifest && !dm ? (
 
 
-          <p className="text-[0.65rem] italic text-midforeground/45 normal-case">
+          <p className="text-xs italic text-text-disabled">
             {t.pluginsPage.noDashboardTab}
           </p>
         ) : null}

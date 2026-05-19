@@ -133,12 +133,12 @@ function EnvVarRow({
   // Compact inline row for unset, non-editing keys (used inside provider groups)
   if (compact && !info.is_set && !isEditing) {
     return (
-      <div className="flex items-center justify-between gap-3 py-1.5 min-w-0 overflow-hidden opacity-50 hover:opacity-100 transition-opacity">
+      <div className="flex items-center justify-between gap-3 py-1.5 min-w-0 overflow-hidden text-text-secondary hover:text-foreground transition-colors">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono-ui text-[0.7rem] text-muted-foreground">
+          <span className="font-mono-ui text-xs">
             {varKey}
           </span>
-          <span className="text-[0.65rem] text-muted-foreground/60 truncate hidden sm:block">
+          <span className="text-xs text-text-tertiary truncate hidden sm:block">
             {info.description}
           </span>
         </div>
@@ -148,7 +148,7 @@ function EnvVarRow({
               href={info.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[0.65rem] text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
               {t.env.getKey} <ExternalLink className="h-2.5 w-2.5" />
             </a>
@@ -169,12 +169,12 @@ function EnvVarRow({
   // Non-compact unset row
   if (!info.is_set && !isEditing) {
     return (
-      <div className="flex items-center justify-between gap-3 border border-border/50 px-4 py-2.5 min-w-0 overflow-hidden opacity-60 hover:opacity-100 transition-opacity">
+      <div className="flex items-center justify-between gap-3 border border-border/50 px-4 py-2.5 min-w-0 overflow-hidden text-text-secondary hover:text-foreground transition-colors">
         <div className="flex items-center gap-3 min-w-0">
-          <Label className="font-mono-ui text-[0.7rem] text-muted-foreground">
+          <Label className="font-mono-ui text-xs">
             {varKey}
           </Label>
-          <span className="text-[0.65rem] text-muted-foreground/60 truncate hidden sm:block">
+          <span className="text-xs text-text-tertiary truncate hidden sm:block">
             {info.description}
           </span>
         </div>
@@ -184,7 +184,7 @@ function EnvVarRow({
               href={info.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[0.65rem] text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
               {t.env.getKey} <ExternalLink className="h-2.5 w-2.5" />
             </a>
@@ -207,7 +207,7 @@ function EnvVarRow({
     <div className="grid gap-2 border border-border p-4 min-w-0 overflow-hidden">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <Label className="font-mono-ui text-[0.7rem]">{varKey}</Label>
+          <Label className="font-mono-ui text-xs">{varKey}</Label>
           <Badge tone={info.is_set ? "success" : "outline"}>
             {info.is_set ? t.common.set : t.env.notSet}
           </Badge>
@@ -217,7 +217,7 @@ function EnvVarRow({
             href={info.url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[0.65rem] text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
           >
             {t.env.getKey} <ExternalLink className="h-2.5 w-2.5" />
           </a>
@@ -232,7 +232,7 @@ function EnvVarRow({
             <Badge
               key={tool}
               tone="secondary"
-              className="text-[0.6rem] py-0 px-1.5"
+              className="text-xs py-0 px-1.5"
             >
               {tool}
             </Badge>
@@ -396,7 +396,7 @@ function ProviderGroupCard({
             {group.name === "Other" ? t.common.other : group.name}
           </span>
           {hasAnyConfigured && (
-            <Badge tone="success" className="text-[0.6rem]">
+            <Badge tone="success" className="text-xs">
               {configuredCount} {t.common.set.toLowerCase()}
             </Badge>
           )}
@@ -407,13 +407,13 @@ function ProviderGroupCard({
               href={keyUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[0.65rem] text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
               onClick={(e) => e.stopPropagation()}
             >
               {t.env.getKey} <ExternalLink className="h-2.5 w-2.5" />
             </a>
           )}
-          <span className="text-[0.65rem] text-muted-foreground/60">
+          <span className="text-xs text-text-tertiary">
             {t.env.keysCount
               .replace("{count}", String(group.entries.length))
               .replace("{s}", group.entries.length !== 1 ? "s" : "")}
@@ -546,7 +546,7 @@ export default function EnvPage() {
             key={s.id}
             type="button"
             onClick={() => scrollTo(s.id)}
-            className="shrink-0 cursor-pointer px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border/50 hover:border-foreground/30 transition-colors"
+            className="shrink-0 cursor-pointer px-2 py-0.5 text-display text-xs tracking-wider text-text-secondary hover:text-foreground border border-border/50 hover:border-foreground/30 transition-colors"
           >
             {s.label}
           </button>
@@ -745,7 +745,7 @@ export default function EnvPage() {
           <p className="text-sm text-muted-foreground">
             {t.env.description} <code>~/.hermes/.env</code>
           </p>
-          <p className="text-[0.7rem] text-muted-foreground/70">
+          <p className="text-xs text-text-tertiary">
             {t.env.changesNote}
           </p>
         </div>
@@ -904,7 +904,7 @@ function CollapsibleUnset({
         prefix={collapsed ? <ChevronRight /> : <ChevronDown />}
         onClick={() => setCollapsed(!collapsed)}
         aria-expanded={!collapsed}
-        className="self-start mt-1 normal-case tracking-normal text-xs text-muted-foreground hover:text-foreground"
+        className="self-start mt-1 normal-case tracking-normal text-xs text-text-secondary hover:text-foreground"
       >
         {t.env.notConfigured.replace("{count}", String(unsetEntries.length))}
       </Button>

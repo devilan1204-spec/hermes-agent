@@ -416,7 +416,7 @@ export default function App() {
   return (
     <div
       data-layout-variant={layoutVariant}
-      className="font-mondwest flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-black uppercase text-midground antialiased"
+      className="flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-black text-text-primary antialiased"
     >
       <SelectionSwitcher />
       <Backdrop />
@@ -442,13 +442,13 @@ export default function App() {
           aria-label={t.app.openNavigation}
           aria-expanded={mobileOpen}
           aria-controls="app-sidebar"
-          className="text-midground/70 hover:text-midground"
+          className="text-text-secondary hover:text-midground"
         >
           <Menu />
         </Button>
 
         <Typography
-          className="font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
+          className="text-display font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
           style={{ mixBlendMode: "plus-lighter" }}
         >
           {t.app.brand}
@@ -498,7 +498,7 @@ export default function App() {
                 <PluginSlot name="header-left" />
 
                 <Typography
-                  className="font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
+                  className="text-display font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
                   style={{ mixBlendMode: "plus-lighter" }}
                 >
                   Hermes
@@ -512,7 +512,7 @@ export default function App() {
                 size="icon"
                 onClick={closeMobile}
                 aria-label={t.app.closeNavigation}
-                className="lg:hidden text-midground/70 hover:text-midground"
+                className="lg:hidden text-text-secondary hover:text-midground"
               >
                 <X />
               </Button>
@@ -542,7 +542,7 @@ export default function App() {
                   <span
                     className={cn(
                       "px-5 pt-2.5 pb-1",
-                      "font-mondwest text-[0.6rem] tracking-[0.15em] uppercase opacity-30",
+                      "font-mondwest text-display text-xs tracking-[0.12em] text-text-tertiary",
                     )}
                     id="hermes-sidebar-plugin-nav-heading"
                   >
@@ -671,10 +671,10 @@ function SidebarNavLink({ closeMobile, item, t }: SidebarNavLinkProps) {
           cn(
             "group relative flex items-center gap-3",
             "px-5 py-2.5",
-            "font-mondwest text-[0.8rem] tracking-[0.12em]",
+            "font-mondwest text-display text-sm tracking-[0.12em]",
             "whitespace-nowrap transition-colors cursor-pointer",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground",
-            isActive ? "text-midground" : "opacity-60 hover:opacity-100",
+            isActive ? "text-midground" : "text-text-secondary hover:text-midground",
           )
         }
         style={{
@@ -746,7 +746,7 @@ function SidebarSystemActions({ onNavigate }: { onNavigate: () => void }) {
       <span
         className={cn(
           "px-5 pt-0.5 pb-0.5",
-          "font-mondwest text-[0.6rem] tracking-[0.15em] uppercase opacity-30",
+          "font-mondwest text-display text-xs tracking-[0.12em] text-text-tertiary",
         )}
       >
         {t.app.system}
@@ -772,12 +772,12 @@ function SidebarSystemActions({ onNavigate }: { onNavigate: () => void }) {
                 active={busy}
                 className={cn(
                   "gap-3 px-5 py-1.5 whitespace-nowrap",
-                  "font-mondwest text-[0.75rem] tracking-[0.1em]",
-                  "transition-opacity",
+                  "font-mondwest text-display text-xs tracking-[0.1em]",
+                  "transition-colors",
                   busy
-                    ? "text-midground opacity-100"
-                    : "opacity-60 hover:opacity-100",
-                  "disabled:opacity-30",
+                    ? "text-midground"
+                    : "text-text-secondary hover:text-midground",
+                  "disabled:text-text-disabled",
                 )}
               >
                 {isPending ? (

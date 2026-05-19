@@ -534,13 +534,13 @@ export default function ConfigPage() {
             <div className="sm:sticky sm:top-4">
               <div className="flex flex-col border border-border bg-muted/20">
                 <div className="hidden sm:flex items-center gap-2 px-3 py-2 border-b border-border">
-                  <Filter className="h-3 w-3 text-muted-foreground" />
-                  <span className="font-mondwest text-[0.65rem] tracking-[0.12em] uppercase text-muted-foreground">
+                  <Filter className="h-3 w-3 text-text-tertiary" />
+                  <span className="font-mondwest text-display text-xs tracking-[0.12em] text-text-secondary">
                     {t.config.filters}
                   </span>
                 </div>
 
-                <div className="hidden sm:block px-3 pt-2 pb-1 font-mondwest text-[0.6rem] tracking-[0.12em] uppercase text-muted-foreground/70">
+                <div className="hidden sm:block px-3 pt-2 pb-1 font-mondwest text-display text-xs tracking-[0.12em] text-text-tertiary">
                   {t.config.sections}
                 </div>
 
@@ -556,7 +556,7 @@ export default function ConfigPage() {
                           setSearchQuery("");
                           setActiveCategory(cat);
                         }}
-                        className="rounded-sm whitespace-nowrap px-2 py-1 text-[11px]"
+                        className="rounded-sm whitespace-nowrap px-2 py-1 text-xs"
                       >
                         <CategoryIcon
                           category={cat}
@@ -566,10 +566,10 @@ export default function ConfigPage() {
                           {prettyCategoryName(cat)}
                         </span>
                         <span
-                          className={`text-[10px] tabular-nums ${
+                          className={`text-xs tabular-nums ${
                             isActive
-                              ? "text-foreground/60"
-                              : "text-muted-foreground/50"
+                              ? "text-text-secondary"
+                              : "text-text-tertiary"
                           }`}
                         >
                           {categoryCounts[cat] || 0}
@@ -591,7 +591,7 @@ export default function ConfigPage() {
                       <Search className="h-4 w-4" />
                       {t.config.searchResults}
                     </CardTitle>
-                    <Badge tone="secondary" className="text-[10px]">
+                    <Badge tone="secondary" className="text-xs">
                       {searchMatchedFields.length}{" "}
                       {t.config.fields.replace(
                         "{s}",
@@ -622,7 +622,7 @@ export default function ConfigPage() {
                       />
                       {prettyCategoryName(activeCategory)}
                     </CardTitle>
-                    <Badge tone="secondary" className="text-[10px]">
+                    <Badge tone="secondary" className="text-xs">
                       {activeFields.length}{" "}
                       {t.config.fields.replace(
                         "{s}",

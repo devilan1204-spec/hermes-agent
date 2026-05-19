@@ -366,7 +366,7 @@ function ProviderColumn({
                 <span className="font-medium truncate">{p.name}</span>
                 {p.is_current && <CurrentTag />}
               </div>
-              <div className="text-[0.65rem] text-muted-foreground/80 font-mono truncate">
+              <div className="text-xs text-text-secondary font-mono truncate">
                 {p.slug} · {p.total_models ?? p.models?.length ?? 0} models
               </div>
             </div>
@@ -453,7 +453,7 @@ function ModelColumn({
 
 function CurrentTag() {
   return (
-    <span className="text-[0.6rem] uppercase tracking-wider text-primary/80 shrink-0">
+    <span className="text-display text-xs tracking-wider text-primary shrink-0">
       current
     </span>
   );

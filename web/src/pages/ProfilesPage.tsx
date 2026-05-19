@@ -242,10 +242,7 @@ export default function ProfilesPage() {
   }
 
   return (
-    // Profile names, model slugs, and paths are case-sensitive; opt out of
-    // the app shell's global ``uppercase`` so they render as the user typed.
-    // Children that explicitly opt back in (Badges, etc.) keep their casing.
-    <div className="flex flex-col gap-6 normal-case">
+    <div className="flex flex-col gap-6">
       <Toast toast={toast} />
 
       <DeleteConfirmDialog

@@ -83,7 +83,7 @@ function SnippetHighlight({ snippet }: { snippet: string }) {
     parts.push(snippet.slice(last));
   }
   return (
-    <p className="mt-0.5 min-w-0 max-w-full truncate text-xs text-muted-foreground/80">
+    <p className="mt-0.5 min-w-0 max-w-full truncate text-xs text-text-secondary">
       {parts}
     </p>
   );
@@ -191,12 +191,12 @@ function MessageBubble({
       <div className="flex items-center gap-2 mb-1">
         <span className={`text-xs font-semibold ${style.text}`}>{label}</span>
         {isHit && (
-          <Badge tone="warning" className="text-[9px] py-0 px-1.5">
+          <Badge tone="warning" className="text-xs py-0 px-1.5">
             {t.common.match}
           </Badge>
         )}
         {msg.timestamp && (
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-xs text-text-tertiary">
             {timeAgo(msg.timestamp)}
           </span>
         )}
@@ -322,7 +322,7 @@ function SessionRow({
                     : t.sessions.untitledSession}
               </span>
               {session.is_active && (
-                <Badge tone="success" className="shrink-0 text-[10px]">
+                <Badge tone="success" className="shrink-0 text-xs">
                   <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
                   {t.common.live}
                 </Badge>
@@ -350,7 +350,7 @@ function SessionRow({
           </div>
           {snippet && <SnippetHighlight snippet={snippet} />}
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="outline" className="text-[10px]">
+            <Badge tone="outline" className="text-xs">
               {session.source ?? "local"}
             </Badge>
             {resumeInChatEnabled && (
@@ -692,7 +692,7 @@ export default function SessionsPage() {
                         ? "destructive"
                         : "outline"
                 }
-                className="text-[10px] shrink-0"
+                className="text-xs shrink-0"
               >
                 {actionStatus?.running
                   ? t.status.running
@@ -708,7 +708,7 @@ export default function SessionsPage() {
               ghost
               size="icon"
               onClick={dismissLog}
-              className="shrink-0 opacity-60 hover:opacity-100"
+              className="shrink-0 text-text-secondary hover:text-foreground"
               aria-label={t.common.close}
             >
               <X />
@@ -717,7 +717,7 @@ export default function SessionsPage() {
 
           <pre
             ref={logScrollRef}
-            className="max-h-72 overflow-auto px-3 py-2 font-mono-ui text-[11px] leading-relaxed whitespace-pre-wrap break-all"
+            className="max-h-72 overflow-auto px-3 py-2 font-mono-ui text-xs leading-relaxed whitespace-pre-wrap break-all"
           >
             {actionStatus?.lines && actionStatus.lines.length > 0
               ? actionStatus.lines.join("\n")
@@ -761,7 +761,7 @@ export default function SessionsPage() {
                   </span>
 
                   {s.preview && (
-                    <p className="min-w-0 max-w-full text-xs leading-snug text-muted-foreground/70 [overflow-wrap:anywhere]">
+                    <p className="min-w-0 max-w-full text-xs leading-snug text-text-tertiary [overflow-wrap:anywhere]">
                       {s.preview}
                     </p>
                   )}
@@ -769,7 +769,7 @@ export default function SessionsPage() {
 
                 <Badge
                   tone="outline"
-                  className="shrink-0 self-start text-[10px] sm:self-center"
+                  className="shrink-0 self-start text-xs sm:self-center"
                 >
                   <Database className="mr-1 h-3 w-3" />
                   {s.source ?? "local"}
@@ -787,7 +787,7 @@ export default function SessionsPage() {
             {search ? t.sessions.noMatch : t.sessions.noSessions}
           </p>
           {!search && (
-            <p className="text-xs mt-1 text-muted-foreground/60">
+            <p className="text-xs mt-1 text-text-tertiary">
               {t.sessions.startConversation}
             </p>
           )}

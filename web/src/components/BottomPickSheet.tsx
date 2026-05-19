@@ -200,7 +200,7 @@ export function BottomPickSheet({
 
           <Typography
             mondwest
-            className="text-[0.65rem] tracking-[0.15em] uppercase text-midground/70"
+            className="text-display text-xs tracking-[0.12em] text-text-tertiary"
           >
             {title}
           </Typography>

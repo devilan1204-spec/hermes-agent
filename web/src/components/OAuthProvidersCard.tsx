@@ -154,32 +154,32 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
                       <span className="font-medium text-sm">{p.name}</span>
                       <Badge
                         tone="outline"
-                        className="text-[11px] uppercase tracking-wide"
+                        className="text-xs tracking-wide"
                       >
                         {t.oauth.flowLabels[p.flow]}
                       </Badge>
                       {p.status.logged_in && (
-                        <Badge tone="success" className="text-[11px]">
+                        <Badge tone="success" className="text-xs">
                           {t.oauth.connected}
                         </Badge>
                       )}
                       {expiresLabel === "expired" && (
-                        <Badge tone="destructive" className="text-[11px]">
+                        <Badge tone="destructive" className="text-xs">
                           {t.oauth.expired}
                         </Badge>
                       )}
                       {expiresLabel && expiresLabel !== "expired" && (
-                        <Badge tone="outline" className="text-[11px]">
+                        <Badge tone="outline" className="text-xs">
                           {expiresLabel}
                         </Badge>
                       )}
                     </div>
                     {p.status.logged_in && p.status.token_preview && (
                       <code className="text-xs font-mono-ui truncate">
-                        <span className="opacity-50">token </span>
+                        <span className="text-text-tertiary">token </span>
                         {p.status.token_preview}
                         {p.status.source_label && (
-                          <span className="opacity-40">
+                          <span className="text-text-tertiary">
                             {" "}
                             · {p.status.source_label}
                           </span>
@@ -187,7 +187,7 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
                       </code>
                     )}
                     {!p.status.logged_in && (
-                      <span className="text-xs text-muted-foreground/80">
+                      <span className="text-xs text-text-secondary">
                         {t.oauth.notConnected.split("{command}")[0]}
                         <code className="text-foreground bg-secondary/40 px-1">
                           {p.cli_command}
@@ -245,7 +245,7 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
                     </Button>
                   )}
                   {p.status.logged_in && p.flow === "external" && (
-                    <span className="text-[11px] text-muted-foreground italic px-2">
+                    <span className="text-xs text-text-tertiary italic px-2">
                       <Terminal className="h-3 w-3 inline mr-0.5" />
                       {t.oauth.managedExternally}
                     </span>

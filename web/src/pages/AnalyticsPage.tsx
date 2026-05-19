@@ -119,7 +119,7 @@ function SortHeader({
             <ArrowDown className="h-3.5 w-3.5 text-foreground/80 shrink-0" />
           )
         ) : (
-          <ArrowUpDown className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+          <ArrowUpDown className="h-3 w-3 text-text-tertiary shrink-0" />
         )}
       </span>
     </th>
@@ -177,7 +177,7 @@ function TokenBarChart({ daily }: { daily: AnalyticsDailyEntry[] }) {
                 style={{ height: CHART_HEIGHT_PX }}
               >
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10 pointer-events-none">
-                  <div className="bg-card border border-border px-2.5 py-1.5 text-[10px] text-foreground shadow-lg whitespace-nowrap">
+                  <div className="bg-card border border-border px-2.5 py-1.5 text-xs text-foreground shadow-lg whitespace-nowrap">
                     <div className="font-medium">{formatDate(d.day)}</div>
                     <div>
                       {t.analytics.input}: {formatTokens(d.input_tokens)}
@@ -207,7 +207,7 @@ function TokenBarChart({ daily }: { daily: AnalyticsDailyEntry[] }) {
           })}
         </div>
 
-        <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
+        <div className="flex justify-between mt-2 text-xs text-text-tertiary">
           <span>{daily.length > 0 ? formatDate(daily[0].day) : ""}</span>
           {daily.length > 2 && (
             <span>{formatDate(daily[Math.floor(daily.length / 2)].day)}</span>
@@ -432,7 +432,7 @@ export default function AnalyticsPage() {
     setAfterTitle(
       <span className="flex items-center gap-2">
         {loading && <Spinner className="shrink-0 text-base text-primary" />}
-        <Badge tone="secondary" className="text-[10px]">
+        <Badge tone="secondary" className="text-xs">
           {periodLabel}
         </Badge>
       </span>,
@@ -586,7 +586,7 @@ export default function AnalyticsPage() {
               <div className="flex flex-col items-center text-muted-foreground">
                 <BarChart3 className="h-8 w-8 mb-3 opacity-40" />
                 <p className="text-sm font-medium">{t.analytics.noUsageData}</p>
-                <p className="text-xs mt-1 text-muted-foreground/60">
+                <p className="text-xs mt-1 text-text-tertiary">
                   {t.analytics.startSession}
                 </p>
               </div>
