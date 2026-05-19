@@ -16,7 +16,6 @@ export function SidebarFooter() {
       )}
     >
       <Typography
-        mondwest
         className="font-mono-ui text-xs tabular-nums tracking-[0.08em] text-text-tertiary lowercase"
       >
         {status?.version != null ? `v${status.version}` : "—"}
