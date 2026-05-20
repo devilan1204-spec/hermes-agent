@@ -37,8 +37,8 @@ export function makeCopyTextFn(
 
     const rootDom = ink.getRootDom()
     const transcript = getTranscript()
-    const anchor = copyPointFromColRow(rootDom, bounds.start.col, bounds.start.row)
-    const focus = copyPointFromColRow(rootDom, bounds.end.col, bounds.end.row)
+    const anchor = copyPointFromColRow(rootDom, bounds.start.col, bounds.start.row, 'start')
+    const focus = copyPointFromColRow(rootDom, bounds.end.col, bounds.end.row, 'end')
 
     return toCopyText({ anchor, focus, transcript })
   }

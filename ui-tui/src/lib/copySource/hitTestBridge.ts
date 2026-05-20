@@ -21,11 +21,17 @@ type RawPoint =
     }
   | { kind: 'gap'; afterRangeId: null | number; beforeRangeId: null | number }
 
-export function copyPointFromColRow(rootDom: unknown, col: number, row: number): SelectionPoint {
-  const raw = (inkCopyPointAt as (root: unknown, col: number, row: number) => RawPoint)(
+export function copyPointFromColRow(
+  rootDom: unknown,
+  col: number,
+  row: number,
+  endpoint: 'start' | 'end' = 'start'
+): SelectionPoint {
+  const raw = (inkCopyPointAt as (root: unknown, col: number, row: number, endpoint?: 'start' | 'end') => RawPoint)(
     rootDom,
     col,
-    row
+    row,
+    endpoint
   )
 
   if (raw.kind === 'in-range') {

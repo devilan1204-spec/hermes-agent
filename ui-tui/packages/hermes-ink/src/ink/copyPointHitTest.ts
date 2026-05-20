@@ -57,8 +57,31 @@ export type RawSelectionPoint =
  * by the last frame's render pass), which already account for
  * scrollTop translation — so a click on a visually-on-screen row that
  * came from a virtually-scrolled ScrollBox is hit correctly.
+ *
+ * `endpoint` controls how the per-cell click maps to a source-byte
+ * offset on verbatim fragments. Selection bounds are stored as
+ * CELL-INCLUSIVE coords (anchor/focus both point AT the cell containing
+ * the character), but `String.slice(from, to)` is `to`-EXCLUSIVE. So
+ * for the END of a selection we must add 1 to skip past the clicked
+ * cell; for the START we use the cell's start byte as-is.
+ *
+ *   - 'start' (default): start-of-clicked-cell.
+ *     Used for the anchor of a selection, and for mouse-click probes
+ *     where there's no anchor/focus context yet.
+ *   - 'end': one past the clicked cell, clamped to the fragment end.
+ *     Used for the focus of a finalized selection (where the cell is
+ *     the LAST included cell, and slice(from, to) needs `to` past it).
+ *
+ * Non-verbatim fragments already use the half-cell heuristic (left
+ * half → fragment start, right half → fragment end) which is
+ * endpoint-agnostic; `endpoint` is ignored for them.
  */
-export function copyPointAt(root: DOMElement, col: number, row: number): RawSelectionPoint {
+export function copyPointAt(
+  root: DOMElement,
+  col: number,
+  row: number,
+  endpoint: 'start' | 'end' = 'start'
+): RawSelectionPoint {
   const deepest = hitDeepest(root, col, row)
 
   if (deepest) {
@@ -86,7 +109,15 @@ export function copyPointAt(root: DOMElement, col: number, row: number): RawSele
             const len = f.end - f.start
 
             if (f.verbatim) {
-              fragmentResolved = f.start + Math.min(localCol - f.colStart, len)
+              // Cell-INCLUSIVE click coord → byte offset. For an end-of-
+              // selection point we want one past the clicked cell so
+              // slice(from, to) includes it; for start-of-selection we
+              // want the cell's start byte. Bumped offset is clamped to
+              // the fragment's end so we never read past it.
+              const cellsIn = localCol - f.colStart
+              const bump = endpoint === 'end' ? 1 : 0
+
+              fragmentResolved = f.start + Math.min(cellsIn + bump, len)
             } else {
               const widthInFragment = f.colEnd - f.colStart
               const colInFragment = localCol - f.colStart

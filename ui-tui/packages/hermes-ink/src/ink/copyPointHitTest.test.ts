@@ -342,4 +342,63 @@ describe('copyPointAt gap adjacency', () => {
       expect(result.sourceOffset).toBe(21)
     }
   })
+
+  it('endpoint="end" bumps verbatim sourceOffset by 1 (cell-INCLUSIVE → byte-EXCLUSIVE)', () => {
+    // Regression: cell-INCLUSIVE selection bounds × byte-EXCLUSIVE
+    // slice semantics dropped one char off the right edge of every
+    // word/drag selection ("might" → "migh"). Fix: hit-test bumps the
+    // verbatim cell→byte mapping by 1 when endpoint='end' is passed
+    // (e.g. by buildCopyTextFromDom for the focus point of a selection),
+    // clamped to the fragment's end byte.
+    const root = createNode('ink-root')
+    nodeCache.set(root, { x: 0, y: 0, width: 18, height: 1 })
+
+    const box = createNode('ink-box')
+    box.style = { copyRangeId: 11 } as DOMElement['style']
+    nodeCache.set(box, { x: 0, y: 0, width: 18, height: 1 })
+    appendChildNode(root, box)
+
+    // "things might break" — single verbatim fragment, 18 cells = 18 bytes.
+    const text = createNode('ink-text')
+    nodeCache.set(text, {
+      x: 0,
+      y: 0,
+      width: 18,
+      height: 1,
+      fragments: [
+        { row: 0, colStart: 0, colEnd: 18, start: 0, end: 18, verbatim: true }
+      ]
+    })
+    appendChildNode(box, text)
+
+    // Cell 11 = 't' of "might" (the last cell of the word).
+    const startResult = copyPointAt(root, 11, 0, 'start')
+    const endResult = copyPointAt(root, 11, 0, 'end')
+
+    expect(startResult.kind).toBe('in-range')
+    expect(endResult.kind).toBe('in-range')
+
+    if (startResult.kind === 'in-range') {
+      expect(startResult.sourceOffset).toBe(11) // cell start byte
+    }
+
+    if (endResult.kind === 'in-range') {
+      expect(endResult.sourceOffset).toBe(12)   // one PAST cell — fixes "migh"
+    }
+
+    // Sanity: default arg behaves like 'start' (backward compat).
+    const defaultResult = copyPointAt(root, 11, 0)
+
+    if (defaultResult.kind === 'in-range') {
+      expect(defaultResult.sourceOffset).toBe(11)
+    }
+
+    // Clamp check: end-of-fragment click with endpoint='end' must not
+    // over-read past the fragment's end byte.
+    const endOfFragment = copyPointAt(root, 17, 0, 'end')
+
+    if (endOfFragment.kind === 'in-range') {
+      expect(endOfFragment.sourceOffset).toBe(18) // == f.end, clamped
+    }
+  })
 })
