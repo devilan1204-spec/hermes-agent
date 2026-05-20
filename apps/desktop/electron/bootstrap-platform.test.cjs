@@ -30,7 +30,13 @@ test('bundledRuntimeImportCheck selects platform-specific import checks', () => 
 test('packaged electron entrypoints do not require unpackaged npm modules', () => {
   const electronDir = __dirname
   const entrypoints = ['main.cjs', 'preload.cjs', 'bootstrap-platform.cjs']
-  const allowedBareRequires = new Set(['electron'])
+  // - electron: provided by the electron runtime, always resolvable in packaged builds.
+  // - node-pty: hoisted by workspace dedup AND shipped via extraResources to
+  //   resources/native-deps/node-pty (see scripts/stage-native-deps.cjs). main.cjs
+  //   has a try/catch fallback at line ~38 that resolves the staged copy when the
+  //   bare require fails in the packaged asar, so the bare require itself is by
+  //   design rather than an oversight.
+  const allowedBareRequires = new Set(['electron', 'node-pty'])
   const requirePattern = /require\(['"]([^'"]+)['"]\)/g
 
   for (const entrypoint of entrypoints) {
