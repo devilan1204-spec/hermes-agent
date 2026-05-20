@@ -91,11 +91,33 @@ export function copyPointAt(
     // gives byte-exact source mapping for markdown inline content
     // (math, bold, links, code, etc.) without any width math.
     let fragmentResolved: number | undefined
+    // Track the deepest non-rangeId X-offset so we can report col
+    // relative to the INNERMOST rendered content, not the outer
+    // copyRangeId-carrying Box. This matters when CopySource wraps a
+    // Box with paddingLeft (code fences, tables, blockquotes, lists):
+    // the outer Box's rect.x = 0 but the inner content lives at
+    // rect.x = paddingLeft. Without this, a click on the rendered char
+    // at visual col 11 (= source col 9 + 2 padding) returns col=11,
+    // which getOffset interprets as source col 11 — shifted +2.
+    //
+    // We only adjust X — visualLine (Y) is reported relative to the
+    // rangeId Box's rect, because that's the coordinate system that
+    // matches the registered visualLineCount + rowStarts (which are
+    // counted from the START of the rendered block, not the start of
+    // any sub-text element).
+    let innerX: number | undefined
     let node: DOMElement | undefined = deepest
 
     while (node) {
       const rangeId = (node.style as { copyRangeId?: number }).copyRangeId
       const rect = nodeCache.get(node)
+
+      if (rect && innerX === undefined && rangeId === undefined) {
+        // First rect we see that is NOT the rangeId Box becomes the
+        // anchor for col reporting. We walk from deepest upward, so
+        // this is the innermost text container.
+        innerX = rect.x
+      }
 
       // If THIS node has cached fragments (ink-text), try to find one
       // covering (col, row). First hit wins; we don't keep looking up
@@ -132,11 +154,17 @@ export function copyPointAt(
       }
 
       if (typeof rangeId === 'number' && rect) {
+        // Report col relative to innermost rendered content (innerX)
+        // when available, falling back to the rangeId Box's rect.x.
+        // visualLine stays relative to the rangeId Box (rect.y),
+        // matching the registered rowStarts / visualLineCount.
+        const reportX = innerX ?? rect.x
+
         return {
           kind: 'in-range',
           rangeId,
           visualLine: Math.max(0, row - rect.y),
-          col: Math.max(0, col - rect.x),
+          col: Math.max(0, col - reportX),
           ...(fragmentResolved !== undefined && { sourceOffset: fragmentResolved })
         }
       }

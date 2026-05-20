@@ -18,7 +18,7 @@ import type { InkInstance } from '@hermes/ink'
 
 import { copyPointFromColRow } from './hitTestBridge.js'
 import { toCopyText } from './toCopyText.js'
-import type { MsgSnapshot } from './types.js'
+import type { MsgSnapshot, SelectionPoint } from './types.js'
 
 /**
  * Build the copy-text builder. Pass the current `transcript` getter so the
@@ -40,6 +40,23 @@ export function makeCopyTextFn(
     const anchor = copyPointFromColRow(rootDom, bounds.start.col, bounds.start.row, 'start')
     const focus = copyPointFromColRow(rootDom, bounds.end.col, bounds.end.row, 'end')
 
-    return toCopyText({ anchor, focus, transcript })
+    // Cell-INCLUSIVE selection bounds × byte-EXCLUSIVE slice semantics:
+    // when the focus point fell through to the no-fragment fallback
+    // path (no sourceOffset set — e.g. code fences, plain text blocks
+    // without inline markdown registered as fragments), the resolved
+    // col still points AT the last selected cell. Bump it by +1 so
+    // toCopyText's pointToOffset returns the byte-EXCLUSIVE end. The
+    // bump is clamped by getOffset's per-row source-end cap, so no
+    // over-read across line boundaries.
+    //
+    // For the fragment path, the hit-test already baked this bump in
+    // (see copyPointHitTest endpoint='end' arg) and sourceOffset is
+    // set — we leave that alone.
+    const focusBumped: SelectionPoint =
+      focus.kind === 'in-range' && focus.sourceOffset === undefined
+        ? { ...focus, col: focus.col + 1 }
+        : focus
+
+    return toCopyText({ anchor, focus: focusBumped, transcript })
   }
 }

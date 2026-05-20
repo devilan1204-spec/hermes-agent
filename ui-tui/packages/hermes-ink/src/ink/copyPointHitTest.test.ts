@@ -401,4 +401,55 @@ describe('copyPointAt gap adjacency', () => {
       expect(endOfFragment.sourceOffset).toBe(18) // == f.end, clamped
     }
   })
+
+  it('reports visualLine/col relative to inner padded content, not outer rangeId Box', () => {
+    // Regression for ethie's report #2: a mermaid code fence renders
+    //
+    //   <CopySource Box copyRangeId=N>          rect.x=0
+    //     <Box paddingLeft=2>                   rect.x=2
+    //       <Text>graph LR</Text>               rect.x=2
+    //       <Text>    user[ethie] -->...</Text> rect.x=2
+    //     </Box>
+    //   </CopySource Box>
+    //
+    // Click on the 'e' of "ethie" (visual col 11 = source col 9 + 2
+    // padding). The hit-test used to walk up to the rangeId Box and
+    // report col = 11 - 0 = 11, but getOffset interprets col=11 as
+    // source col 11 — shifted +2 (hits 'h'). Selecting 'ethie' →
+    // copies 'hie]'.
+    //
+    // Fix: report col relative to the INNERMOST non-rangeId rect
+    // (the padded inner box / text), so col = 11 - 2 = 9 = source 'e'.
+    const root = createNode('ink-root')
+    nodeCache.set(root, { x: 0, y: 0, width: 50, height: 5 })
+
+    const outerBox = createNode('ink-box')
+    outerBox.style = { copyRangeId: 42 } as DOMElement['style']
+    nodeCache.set(outerBox, { x: 0, y: 0, width: 50, height: 5 })
+    appendChildNode(root, outerBox)
+
+    const paddedBox = createNode('ink-box')
+    nodeCache.set(paddedBox, { x: 2, y: 0, width: 48, height: 5 }) // paddingLeft=2
+    appendChildNode(outerBox, paddedBox)
+
+    const text = createNode('ink-text')
+    nodeCache.set(text, { x: 2, y: 2, width: 48, height: 1 })
+    appendChildNode(paddedBox, text)
+
+    // Click at visual col 11, row 2 — the 'e' of 'ethie'.
+    const result = copyPointAt(root, 11, 2, 'start')
+
+    expect(result.kind).toBe('in-range')
+
+    if (result.kind === 'in-range') {
+      expect(result.rangeId).toBe(42)
+      // col is reported RELATIVE TO INNER content (innerX=2):
+      //   11 - 2 = 9, which is source col 9 = 'e' of ethie.
+      // visualLine STAYS relative to the rangeId Box (rect.y=0):
+      //   2 - 0 = 2, which is the third source row of the block —
+      // matching the registered rowStarts that count from block start.
+      expect(result.col).toBe(9)
+      expect(result.visualLine).toBe(2)
+    }
+  })
 })
