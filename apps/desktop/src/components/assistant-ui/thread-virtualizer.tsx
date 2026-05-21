@@ -1,6 +1,6 @@
 import { ThreadPrimitive, useAuiEvent, useAuiState } from '@assistant-ui/react'
 import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
-import { type ComponentProps, type FC, type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react'
+import { type ComponentProps, type FC, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 
 import { cn } from '@/lib/utils'
 import { setThreadScrolledUp } from '@/store/thread-scroll'
@@ -182,8 +182,24 @@ function useThreadScrollAnchor({ enabled, groupCount, scrollerRef, sessionKey, v
   // user-driven upward scroll; re-armed when they reach bottom again.
   const armedRef = useRef(true)
   const lastTopRef = useRef(0)
+  // Counter that tracks how many scroll events we expect to be ours rather
+  // than the user's. `pinToBottom` writes `el.scrollTop`, which fires an
+  // async `scroll` event; without this guard the on-scroll handler can race
+  // with the programmatic write (because content also grew, the *resulting*
+  // scrollTop can be lower than `lastTopRef` from the previous frame) and
+  // misread the programmatic pin as the user scrolling up — which disarms
+  // sticky-bottom and the user's just-submitted message slides above the
+  // fold. See `apps/desktop/scripts/measure-jump.mjs` for the repro
+  // (distFromBottom 0 → 49 within one frame, sticking forever).
+  const programmaticScrollPendingRef = useRef(0)
   const prevSessionKeyRef = useRef(sessionKey)
   const prevGroupCountRef = useRef(0)
+
+  // Track repins-in-a-row to break runaway loops during rapid layout churn.
+  // In healthy paths this drains to zero between frames; we only need the
+  // ceiling for pathological streaming bursts where content height keeps
+  // growing every frame.
+  const inFlightPinDepthRef = useRef(0)
 
   const pinToBottom = useCallback(() => {
     const el = scrollerRef.current
@@ -192,6 +208,8 @@ function useThreadScrollAnchor({ enabled, groupCount, scrollerRef, sessionKey, v
       return
     }
 
+    // Hold the disarm gate across the scroll event the next line will fire.
+    programmaticScrollPendingRef.current += 1
     el.scrollTop = el.scrollHeight
     lastTopRef.current = el.scrollTop
   }, [scrollerRef])
@@ -227,6 +245,45 @@ function useThreadScrollAnchor({ enabled, groupCount, scrollerRef, sessionKey, v
 
     const onScroll = () => {
       const top = el.scrollTop
+
+      // If this scroll event is the consequence of `pinToBottom` writing
+      // `el.scrollTop`, treat it as ours: never disarm, just consume the
+      // gate. If we landed short of bottom (because content also grew in
+      // the same frame and the browser clamped our scrollTop = scrollHeight
+      // write to the now-stale scrollHeight - clientHeight), schedule
+      // another pin on the next frame. Without this the post-pin scrollTop
+      // gets misread as the user scrolling up, disarming sticky-bottom
+      // permanently and leaving the just-submitted message below the fold.
+      if (programmaticScrollPendingRef.current > 0) {
+        programmaticScrollPendingRef.current -= 1
+        lastTopRef.current = top
+        // Stay armed regardless — sticky-bottom should hold through clamp
+        // races.
+        armedRef.current = true
+        const atBottom = el.scrollHeight - (top + el.clientHeight) <= AT_BOTTOM_THRESHOLD
+        setThreadScrolledUp(!atBottom)
+
+        if (atBottom) {
+          inFlightPinDepthRef.current = 0
+        } else if (inFlightPinDepthRef.current < 8) {
+          // Re-pin synchronously: the browser already laid out for this
+          // scroll event, so reading scrollHeight now gives us the up-to-date
+          // value and writing scrollTop lands us at the actual bottom in the
+          // same frame. Doing this in a rAF causes a 1-frame visual flicker
+          // (distFromBottom briefly nonzero), so we accept one extra
+          // synchronous pin cycle (which goes back through this very
+          // handler with the counter incremented and arm preserved). The
+          // depth guard prevents pathological runaway loops if content
+          // height keeps growing every frame; 8 is generous for any
+          // realistic rendering pattern.
+          inFlightPinDepthRef.current += 1
+          pinToBottom()
+        } else {
+          inFlightPinDepthRef.current = 0
+        }
+
+        return
+      }
 
       if (top + 1 < lastTopRef.current) {
         armedRef.current = false
@@ -301,6 +358,24 @@ function useThreadScrollAnchor({ enabled, groupCount, scrollerRef, sessionKey, v
       jumpToBottom()
     }
   }, [enabled, groupCount, jumpToBottom, sessionKey])
+
+  // Pre-paint pin: when groupCount increases while armed (optimistic user
+  // message insert, streaming assistant turn arriving, etc.), pin BEFORE
+  // the browser commits the layout to screen. Using useLayoutEffect rather
+  // than useEffect so this runs synchronously after React commits the DOM
+  // mutation but before the browser paints. Without this, there's a ~50ms
+  // visual window where the new message sits below the fold while we wait
+  // for the ResizeObserver / scroll event chain to fire and re-pin.
+  const prevGroupCountForLayoutRef = useRef(groupCount)
+  useLayoutEffect(() => {
+    if (!enabled) {
+      return
+    }
+    if (groupCount > prevGroupCountForLayoutRef.current && armedRef.current) {
+      pinToBottom()
+    }
+    prevGroupCountForLayoutRef.current = groupCount
+  }, [enabled, groupCount, pinToBottom])
 
   useAuiEvent('thread.runStart', jumpToBottom)
 }
