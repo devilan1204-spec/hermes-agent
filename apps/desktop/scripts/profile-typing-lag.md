@@ -58,31 +58,34 @@ makes the path slow.
 
 ### Leak counters — `leak-typing.mjs`
 
-Types N chars, clears, force-GCs, captures `Performance.getMetrics` deltas.
-Reveals leaked event listeners, heap drift, document node growth, and
-forced-layout counts.
+Types N chars per round, clears, force-GCs, captures
+`Performance.getMetrics` deltas. Reveals leaked event listeners, heap
+drift, document node growth, and forced-layout counts.
 
 ```bash
-node apps/desktop/scripts/leak-typing.mjs --rounds=6 --chars=200 --cps=50
+# After clicking into a real session (e.g. via click-session.mjs):
+node apps/desktop/scripts/leak-typing.mjs --rounds=8 --chars=200 --cps=50
 ```
 
-Before patches (real run on this branch's previous tip):
-```
-heapUsedMB    Δ/round=+0.06     /char=+0.0003
-jsListeners   Δ/round=+34.75    /char=+0.1737   ← LEAK
-layoutCount   Δ/round=+453.00   /char=+2.27
-```
+**Real-session numbers (Phaser thread, 8 rounds × 200 chars):**
 
-After patches:
-```
-heapUsedMB    Δ/round=+0.00     /char=+0.0000
-jsListeners   Δ/round=+0.00     /char=+0.0000   ← fixed
-layoutCount   Δ/round=+476.00   /char=+2.38
-```
+| | unpatched (HEAD~2) | patched (HEAD) |
+|---|---|---|
+| jsListeners growth/round | +0 | +0 |
+| DOM nodes growth/round | +0 | +0 |
+| heap growth/round | ~0 (V8 housekeeping) | ~0 |
+| **forced layouts/char** | **7.02** | **2.35** (3× fewer) |
 
-The listener leak is gone. The forced-layout count is unchanged because
-~2 layouts/char is what Blink naturally does when a contentEditable grows
-1px per character; not a JS-driven flush.
+The forced-layout count is the load-bearing number — typing into a real
+session was triggering ~7 layouts per character on the unpatched build
+(scrollHeight reads + per-px CSS var writes + FadeText scrollWidth reads
+all stacking up). After the patches it's down to ~2.35/char, which is
+Blink's natural cost for a 1px/char-growing contentEditable and can't
+be lowered further without architectural changes.
+
+The initial "+35 listeners/round leak" I called out on the first
+unpatched run turned out to be transient warm-up (popovers initializing,
+etc.); steady-state listener growth was 0 both before and after.
 
 ### CPU profile + heap snapshot — `profile-typing.mjs`
 
