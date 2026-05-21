@@ -1050,6 +1050,49 @@ class TestPixelDimensionCap:
         assert decoded.size == (10000, 100)
 
 
+class TestNativeVisionDimensionWiring:
+    """Wire-up regression: _vision_analyze_native must pass clamp_dimensions
+    matching the active provider to _resize_image_for_vision."""
+
+    def _make_oversized_png(self, tmp_path):
+        try:
+            from PIL import Image
+        except ImportError:
+            pytest.skip("Pillow not installed")
+        img = Image.new("RGB", (10000, 100), (128, 128, 128))
+        path = tmp_path / "wide.png"
+        img.save(path, "PNG")
+        return path
+
+    def test_anthropic_provider_passes_clamp_true(self, tmp_path):
+        from tools.vision_tools import _vision_analyze_native
+        path = self._make_oversized_png(tmp_path)
+
+        with patch("tools.vision_tools._is_anthropic_provider", return_value=True), \
+             patch("tools.vision_tools._resize_image_for_vision",
+                   return_value="data:image/png;base64,AAAA") as resize_spy, \
+             patch("tools.vision_tools._build_native_vision_tool_result",
+                   return_value={"ok": True}):
+            asyncio.run(_vision_analyze_native(str(path), "describe"))
+
+        resize_spy.assert_called_once()
+        assert resize_spy.call_args.kwargs.get("clamp_dimensions") is True
+
+    def test_non_anthropic_provider_passes_clamp_false(self, tmp_path):
+        from tools.vision_tools import _vision_analyze_native
+        path = self._make_oversized_png(tmp_path)
+
+        # Non-Anthropic: oversized-but-small-bytes image should skip the resize
+        # entirely (byte cap not exceeded, pixel guard gated off).
+        with patch("tools.vision_tools._is_anthropic_provider", return_value=False), \
+             patch("tools.vision_tools._resize_image_for_vision") as resize_spy, \
+             patch("tools.vision_tools._build_native_vision_tool_result",
+                   return_value={"ok": True}):
+            asyncio.run(_vision_analyze_native(str(path), "describe"))
+
+        resize_spy.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # _is_image_size_error — detect size-related API errors
 # ---------------------------------------------------------------------------
