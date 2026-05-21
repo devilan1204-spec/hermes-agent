@@ -22,22 +22,25 @@ export function TerminalTab({ cwd, onAddSelectionToChat }: TerminalTabProps) {
     cwd,
     onAddSelectionToChat
   })
+
   const takeover = useStore($terminalTakeover)
   const label = takeover ? 'Return to split view' : 'Focus terminal view'
 
   const toggleTakeover = () => {
     // Pre-select the Terminal tab so the slot is ready to host us on return.
-    if (takeover) setRightSidebarTab('terminal')
+    if (takeover) {
+      setRightSidebarTab('terminal')
+    }
     setTerminalTakeover(!takeover)
   }
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex h-7 shrink-0 items-center gap-2 px-3">
-        <SidebarPanelLabel>{shellName}</SidebarPanelLabel>
+      <div className="flex h-8 shrink-0 items-center gap-2 px-2.5">
+        <SidebarPanelLabel className="text-white!">{shellName}</SidebarPanelLabel>
         <Button
           aria-label={label}
-          className="ml-auto size-6 rounded-md"
+          className="ml-auto size-6 rounded-md text-white!"
           onClick={toggleTakeover}
           size="icon"
           title={label}
