@@ -408,13 +408,13 @@ export function ChatBar({
     }
 
     // Fast-bail: if neither `@` nor `/` appears in the current draft, there's
-    // nothing for `detectTrigger` to match. Use `textContent` (cheap browser-
-    // native walk) for the precondition check rather than `composerPlainText`
-    // (recursive child walk with chip-aware logic). Only when a trigger char
-    // is present do we pay the cost of the full walk + DOM range work.
-    const rawText = editor.textContent ?? ''
+    // nothing for `detectTrigger` to match. Skip the DOM range walk inside
+    // `textBeforeCaret` (which calls `range.toString()`, O(n) over the draft)
+    // and the regex pass that follows. Only when a relevant char is present
+    // do we pay the cost.
+    const text = composerPlainText(editor)
 
-    if (!rawText.includes('@') && !rawText.includes('/')) {
+    if (!text.includes('@') && !text.includes('/')) {
       if (trigger) {
         setTrigger(null)
         setTriggerActive(0)
@@ -424,7 +424,7 @@ export function ChatBar({
     }
 
     const before = textBeforeCaret(editor)
-    const detected = detectTrigger(before ?? composerPlainText(editor))
+    const detected = detectTrigger(before ?? text)
 
     setTrigger(detected)
     setTriggerActive(0)
