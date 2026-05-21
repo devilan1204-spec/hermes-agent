@@ -117,56 +117,39 @@ detached DOM, FiberNodes (unmounted), and listener growth.
 
 ## Findings
 
-See commit messages for the actual edits. Summary:
+See commit message for `apps/desktop/src/app/chat/composer/index.tsx`
+edits. Three changes:
 
-1. **`src/app/chat/composer/index.tsx`** — four changes, biggest win is the
-   ~35 listener/round leak being gone:
-   - drop per-keystroke `scrollHeight` read used to decide composer expansion
-   - bucket measured composer height to 8 px before writing CSS vars on
-     `documentElement` (was firing per-px / per-char)
-   - remove the dead `$composerDraft` two-way sync (no external subscribers)
-   - `refreshTrigger` fast-bails when no `@`/`/` in draft (avoids O(n)
-     `range.toString()` walk)
+1. **Per-keystroke `scrollHeight` read removed.** The expansion useEffect
+   used to read `editorRef.current.scrollHeight` on every draft change
+   (forces synchronous layout). Replaced with a `draft.length > 60`
+   heuristic; the ResizeObserver catches anything the heuristic misses.
 
-2. **`src/components/ui/fade-text.tsx`** — biggest win during streaming:
-   - drop the `useEffect([children])` that re-measured `scrollWidth` on
-     every parent re-render; `useResizeObserver` already handles the only
-     case where overflow state can legitimately change
-   - wrap the component in `memo` with a custom comparator that
-     short-circuits re-renders when scalar `children` (a string) is
-     unchanged
+2. **Bucketed CSS custom-property writes.** `syncComposerMetrics`
+   used to `setProperty('--composer-measured-height', height + 'px')`
+   on every observed resize, invalidating computed style for the whole
+   tree. Now writes only when the height crosses an 8 px bucket, so
+   typing in a fixed-height row produces no style invalidation at all.
 
-   Measured impact via `scripts/profile-under-stream.mjs` (typing 100 chars
-   into the composer while the assistant is streaming a 6-paragraph reply):
+3. **Removed dead `$composerDraft` → `aui.composer().setText` round-trip.**
+   Nothing outside the composer subscribed to `$composerDraft` (verified
+   via grep). The two useEffects that pushed draft → store and store →
+   composer were pure overhead per keystroke. `reconcileComposerTerminalSelections`
+   was also called per keystroke; can be deferred to submit time (it's a
+   stale-pruning step, not a correctness one — `terminalContextBlocksFromDraft`
+   walks the current text directly at submit and ignores stale labels).
 
-   - FadeText self time: **35.8 ms → 18.1 ms** (-50 %)
-   - Total active CPU (non-idle, non-GC): **~150 ms → ~50 ms** across the
-     same wall-clock window
-   - `tool-fallback.tsx` re-renders + `selectMessageRunning` selector both
-     dropped out of the top-5 self-time list
+4. **`refreshTrigger` fast-bails when no `@`/`/` in draft.** Previously
+   `textBeforeCaret()` did `range.toString()` (O(n)) on every keystroke
+   even when no trigger char was present.
 
-## Submit / TTFT stall
+The biggest win is the listener leak in (3) — without it, each round of
+typing leaked ~35 event listeners until a steady state.
 
-`scripts/measure-submit.mjs` measures Enter → composer-cleared →
-user-message-rendered → first-paint. On a freshly loaded session, all five
-rounds clear in ≤6 ms and paint in ≤322 ms (`clear=3ms userMsg=193ms
-paint=316ms`). There's no UI-side stall on the submit path. Anything
-felt as "stall after Enter" is gateway/agent first-token latency, not the
-renderer.
+## Submit / TTFT stall (open)
 
-## Typing during streaming (the real complaint)
-
-`scripts/latency-under-stream.mjs` types into the composer while the
-assistant is actively streaming. Before/after my patches:
-
-| | before | after |
-|---|---|---|
-| keystroke→paint p50 | 9.0 ms | 9-10 ms |
-| keystroke→paint p90 | 14.9 ms | 14-15 ms |
-| keystroke→paint p99 | 29.1 ms | 25-30 ms |
-| dropped frames | 5/80 | 2-3/60 |
-
-Synthetic latency at 15 cps is similar; the CPU profile shows the per-token
-work dropping by ~⅔, which means there's a lot more headroom for fast-burst
-typing and complex token contents (long code blocks, math, etc.) — exactly
-the case where the user-felt jank shows up.
+User reports a perceived stall *after* Enter, before the assistant starts
+streaming. `scripts/measure-submit.mjs` measures
+`enter → composer-cleared → user-message-rendered → first-paint`. The
+script triggers a real prompt submission, so use it on a throwaway
+session. Not enabled in CI.
