@@ -153,3 +153,133 @@ streaming. `scripts/measure-submit.mjs` measures
 `enter → composer-cleared → user-message-rendered → first-paint`. The
 script triggers a real prompt submission, so use it on a throwaway
 session. Not enabled in CI.
+
+## Streaming "5fps" investigation (May 21, 2026)
+
+User complaint: "the streaming must bring fps to like 5? lol" — felt
+hitches during assistant streaming on long threads.
+
+### Tooling added
+
+- **`src/app/chat/perf-probe.tsx`** — dev-only side-effect import (guarded by
+  `import.meta.env.MODE !== 'production'` in `main.tsx`). Attaches two
+  helpers to `window`:
+  - `__PERF_PROBE__` — React `<Profiler>` recorder. Currently inert because
+    Vite is serving the production React build (see "Vite dev-build issue"
+    below); kept for when that's fixed.
+  - `__PERF_DRIVE__` — synthetic stream driver. Pushes tokens through the
+    live `$messages` atom at a fixed cadence, so the assistant-ui runtime,
+    incremental repository, Streamdown markdown renderer, and React commit
+    pipeline all see the same workload they'd see from a real LLM stream —
+    but with no LLM call (and no credit cost).
+- **`scripts/measure-synthetic-stream.mjs`** — drives `__PERF_DRIVE__`,
+  records rAF frame intervals, `PerformanceObserver({entryTypes:['longtask']})`
+  entries, `MutationObserver` cadence on the live message, and optional
+  type-while-streaming keystroke latency.
+- **`scripts/profile-synth-stream.mjs`** — CPU profile during a synthetic
+  stream; writes a `.cpuprofile` (open in Chrome DevTools Performance panel)
+  and a top-30 self-time table.
+- **`scripts/measure-real-stream.mjs`** — same harness as the synthetic but
+  fires a real LLM prompt. Use when you have credits and want to confirm
+  the synthetic predictions hold.
+- **`scripts/profile-real-stream.mjs`** — CPU profile over the duration of
+  a real LLM stream.
+
+Helpers: `scripts/eval.mjs` (one-shot CDP eval), `scripts/reload.mjs`
+(hard reload renderer over CDP).
+
+### Findings
+
+Measured on the Cloud Shadows session (7 turns, ~11k px scrollHeight) and
+the 34 MB session `session_20260514_215353_fe0ac8.json` (110 FadeText
+instances, lots of historical tool calls).
+
+| metric | Cloud Shadows | 34 MB session |
+|---|---|---|
+| avgFps (60 tok/sec, 5s) | 60.0 | 58.6 |
+| frame p50 / p95 / p99 (ms) | 16.7 / 18.0 / 21.1 | 16.6 / 25.6 / 31.4 |
+| max frame (ms) | 31.1 | 97-127 (varies) |
+| longtasks per 5s window | 0 | 1-2, 75-127 ms |
+| type-while-stream p95 latency (ms) | 17 | — |
+
+A single real-LLM stream on Cloud Shadows (gpt-4o-mini, 39s window) saw
+12 longtasks totalling 1.26 s — same cadence the synthetic predicted
+(~1 hitch per 3.25 s, max 123 ms). So the **synthetic stream is a faithful
+proxy for the real one** and is fine for iterating on fixes without paying
+for tokens.
+
+### CPU profile during streaming (synthetic, markdown content)
+
+Top self-time costs (5 s window, 400 tokens at 125 tok/s, markdown chunks):
+
+| ms (self) | function | source |
+|---|---|---|
+| 260 | `bn$1` | `chunk-BO2N…js:20003` (micromark tokenize) |
+| 249 | `m$1` | `chunk-BO2N…js:19949` (micromark) |
+| 128 | `compile` | `chunk-BO2N…js:21884` (mdast → hast compile) |
+| 73 | FadeText body | `components/ui/fade-text.tsx` |
+| 62 | `parser` | `chunk-BO2N…js:22680` |
+| 49 | `fromThreadMessageLike` | `@assistant-ui/internal` |
+
+That `chunk-BO2N2NFS` is the vendored bundle containing `micromark`,
+`mdast-util-from-markdown`, `mdast-util-to-hast`, `rehype-raw`,
+`hast-util-sanitize`, etc. — i.e. **Streamdown's markdown pipeline,
+re-parsing the entire growing assistant message on every token append**.
+Cost scales linearly with message length.
+
+Compare plain-text (no markdown) — the `chunk-BO2N…` entries drop out
+of the top 30 entirely; total work per 5 s window halves.
+
+### Fix landed: `FadeText` memo
+
+`FadeText` is used in `tool-fallback.tsx` (110 instances on a tool-heavy
+thread). Before: each parent re-render during streaming triggered a
+`useEffect([children])` that forced a `scrollWidth` layout read — even
+when the title text was unchanged. The `useResizeObserver` already covers
+the genuine resize case, so the effect was strictly redundant.
+
+After: wrapped in `React.memo` with a custom comparator that compares
+`children` (scalar fast-path), `className`, `fadeWidth`, and `style`
+field-by-field. Verified via temporary render counter:
+**122 renders during a 2 s synthetic stream vs ~11 000 without memo**
+(110 instances × ~100 stream updates). Doesn't move the longtask needle
+on its own — Streamdown dwarfs it — but eliminates a class of forced
+layouts and removes a steady CPU floor.
+
+### Not fixed: Streamdown markdown re-parse
+
+This is the dominant cost and the cause of the user's perceived hitches.
+The renderer re-parses the entire message buffer on every stream update.
+At ~3-5 k chars, each parse costs ~30 ms; when several pile into one
+frame the result is a 75-125 ms longtask = the "5 fps moment".
+
+Possible approaches (none implemented here):
+
+1. **Coalesce/throttle Streamdown updates** — render at most every 32 ms
+   instead of every set-state. Reduces parses but doesn't reduce
+   per-parse cost; trades latency for smoothness.
+2. **Memoize per-prefix** — diff the new text against the prior parsed
+   version; only re-parse the changed suffix.
+3. **Render in stable segments** — close-form historical paragraphs as
+   immutable React nodes; only the live tail goes through markdown each
+   token. Probably the highest-impact change but requires forking or
+   patching `@assistant-ui/react-streamdown`.
+4. **Move parsing to a Web Worker** — main thread no longer blocks on
+   markdown. Largest surgery; requires double-buffered hast.
+
+### Vite dev-build issue (separate)
+
+`http://127.0.0.1:5174/node_modules/.vite/deps/react.js` resolves to
+`react/cjs/react.production.js`, and `react-dom_client.js` →
+`react-dom-client.production.js`. As a result:
+
+- `<React.Profiler>` `onRender` is never called (production build is a
+  no-op).
+- `import.meta.env.DEV` is `false`, `PROD` is `true` even under `vite dev`
+  (hence `MODE !== 'production'` as the workaround in `main.tsx`).
+- All the React 19 dev-only warnings/devtools backend hooks are absent.
+
+Root cause likely sits in `vite.config.ts` aliasing + dedupe + Vite 8's
+new `optimizeDeps` defaults. Worth a separate fix pass — when it's
+resolved, the `<PerfProbe>` blocks in `perf-probe.tsx` become useful
+(per-id commit timings) instead of inert.
