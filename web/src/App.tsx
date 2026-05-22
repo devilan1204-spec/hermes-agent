@@ -326,7 +326,9 @@ export default function App() {
     api
       .getConfig()
       .then((cfg) => {
-        const dash = (cfg?.dashboard ?? {}) as { show_token_analytics?: unknown };
+        const dash = (cfg?.dashboard ?? {}) as {
+          show_token_analytics?: unknown;
+        };
         setShowTokenAnalytics(dash.show_token_analytics === true);
       })
       .catch(() => setShowTokenAnalytics(false));
@@ -366,7 +368,9 @@ export default function App() {
     const base = embeddedChat
       ? [CHAT_NAV_ITEM, ...BUILTIN_NAV_REST]
       : BUILTIN_NAV_REST;
-    return showTokenAnalytics ? base : base.filter((n) => n.path !== "/analytics");
+    return showTokenAnalytics
+      ? base
+      : base.filter((n) => n.path !== "/analytics");
   }, [embeddedChat, showTokenAnalytics]);
 
   const sidebarNav = useMemo(
@@ -448,7 +452,7 @@ export default function App() {
         </Button>
 
         <Typography
-          className="normal-case font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
+          className="font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
           style={{ mixBlendMode: "plus-lighter" }}
         >
           {t.app.brand}
@@ -498,7 +502,7 @@ export default function App() {
                 <PluginSlot name="header-left" />
 
                 <Typography
-                  className="normal-case font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
+                  className="font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
                   style={{ mixBlendMode: "plus-lighter" }}
                 >
                   Hermes
@@ -674,7 +678,9 @@ function SidebarNavLink({ closeMobile, item, t }: SidebarNavLinkProps) {
             "font-mondwest text-display uppercase text-sm tracking-[0.12em]",
             "whitespace-nowrap transition-colors cursor-pointer",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground",
-            isActive ? "text-midground" : "text-text-secondary hover:text-midground",
+            isActive
+              ? "text-midground"
+              : "text-text-secondary hover:text-midground",
           )
         }
         style={{

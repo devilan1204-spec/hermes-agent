@@ -81,9 +81,20 @@ Read before adding or editing UI styles. These rules keep the dashboard legible 
 
 ### Fonts
 
-- `font-mondwest` is the brand display font. Apply it explicitly only on brand chrome (paired with `text-display`).
-- Body content inherits the active theme's `--theme-font-sans`. Do not hardcode `font-mondwest` on body text or pages — it locks out per-theme typography.
-- Code/terminal text uses `font-mono` / `font-mono-ui` (both resolve through `--theme-font-mono`).
+Typography is **opt-in per surface**, not global on layout shells — the app shell and page header keep their original theme/expanded fonts; Mondwest applies only where explicitly set.
+
+| Tier | Classes | Use for |
+|------|---------|---------|
+| Brand chrome | `font-mondwest text-display` (or `themedChrome`) | Sidebar nav, card section headers (`CardTitle`), Segmented filter buttons, filter panel headings |
+| Themed body | `font-mondwest normal-case` (or `themedBody`) | Card content (`Card`, `CardDescription`), session/platform rows, analytics tables — **scoped to the component** |
+| Page chrome | `font-expanded` | Page header h1 (`PageHeaderProvider`) — sentence case, not `text-display` |
+| Wordmark | `Typography` + size/tracking only | Sidebar/mobile “Hermes Agent” — mixed case, no Mondwest, no `text-display` |
+| Technical | `font-mono-ui` / `font-mono` / `font-courier` | Model slugs, env keys, schedules, YAML, repo URLs |
+
+- Do **not** put `themedBody` or `themedFont` on `<main>`, `App`, or other layout wrappers — it overrides component-scoped styles.
+- **`Card`** applies `themedBody`; **`CardTitle`** uses `text-display` (uppercase chrome); **`CardDescription`** uses `themedBody`.
+- **`NouiTypography`** defaults to `font-sans` unless a font prop is passed.
+- Do **not** use raw `font-sans` or `font-display` (theme sans variable) on new dashboard UI — prefer Mondwest tiers above where brand-appropriate.
 
 ### Color tokens
 

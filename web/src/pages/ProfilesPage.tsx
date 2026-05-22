@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@nous-research/ui/ui/components/checkbox";
 import { useI18n } from "@/i18n";
 import { usePageHeader } from "@/contexts/usePageHeader";
+import { cn, themedBody } from "@/lib/utils";
 
 // Mirrors hermes_cli/profiles.py::_PROFILE_ID_RE so we can reject obviously
 // invalid names (uppercase, spaces, …) before round-tripping a doomed POST.
@@ -284,7 +285,7 @@ export default function ProfilesPage() {
           aria-modal="true"
           aria-labelledby="create-profile-title"
         >
-          <div className="relative w-full max-w-md border border-border bg-card shadow-2xl flex flex-col">
+          <div className={cn(themedBody, "relative w-full max-w-md border border-border bg-card shadow-2xl flex flex-col")}>
             <Button
               ghost
               size="icon"
@@ -298,7 +299,7 @@ export default function ProfilesPage() {
             <header className="p-5 pb-3 border-b border-border">
               <h2
                 id="create-profile-title"
-                className="font-display text-base tracking-wider uppercase"
+                className="font-mondwest text-display text-base tracking-wider"
               >
                 {t.profiles.newProfile}
               </h2>
@@ -336,7 +337,7 @@ export default function ProfilesPage() {
                 />
 
                 <Label
-                  className="font-sans normal-case tracking-normal text-sm cursor-pointer"
+                  className="font-mondwest normal-case tracking-normal text-sm cursor-pointer"
                   htmlFor="clone-from-default"
                 >
                   {t.profiles.cloneFromDefault}
@@ -520,7 +521,7 @@ export default function ProfilesPage() {
                 <div className="border-t border-border px-4 pb-4 pt-3 flex flex-col gap-2">
                   <Label
                     htmlFor={`soul-editor-${p.name}`}
-                    className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground"
+                    className="flex items-center gap-2 font-mondwest text-display text-xs tracking-wider text-muted-foreground"
                   >
                     {t.profiles.soulSection}
                   </Label>

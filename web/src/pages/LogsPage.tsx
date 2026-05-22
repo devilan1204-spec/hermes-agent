@@ -43,8 +43,8 @@ const LINE_COLORS: Record<string, string> = {
   debug: "text-text-tertiary",
 };
 
-const toOptions = <T extends string>(values: readonly T[]) =>
-  values.map((v) => ({ value: v, label: v }));
+const toSegmentOptions = <T extends string>(values: readonly T[]) =>
+  values.map((v) => ({ value: v, label: v.toUpperCase() }));
 
 const filterGroupClass =
   "flex min-w-0 w-full flex-col items-start gap-1.5 sm:w-auto sm:max-w-full sm:flex-row sm:items-center";
@@ -163,7 +163,7 @@ export default function LogsPage() {
             className={segmentedClass}
             value={file}
             onChange={setFile}
-            options={toOptions(FILES)}
+            options={toSegmentOptions(FILES)}
           />
         </FilterGroup>
 
@@ -172,7 +172,7 @@ export default function LogsPage() {
             className={segmentedClass}
             value={level}
             onChange={setLevel}
-            options={toOptions(LEVELS)}
+            options={toSegmentOptions(LEVELS)}
           />
         </FilterGroup>
 
@@ -181,7 +181,7 @@ export default function LogsPage() {
             className={segmentedClass}
             value={component}
             onChange={setComponent}
-            options={toOptions(COMPONENTS)}
+            options={toSegmentOptions(COMPONENTS)}
           />
         </FilterGroup>
 

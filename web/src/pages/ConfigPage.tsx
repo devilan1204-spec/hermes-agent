@@ -385,7 +385,7 @@ export default function ConfigPage() {
                 category={cat}
                 className="h-4 w-4 text-muted-foreground"
               />
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="font-mondwest text-display text-xs font-semibold tracking-wider text-muted-foreground">
                 {prettyCategoryName(cat)}
               </span>
               <div className="flex-1 border-t border-border" />
@@ -393,7 +393,7 @@ export default function ConfigPage() {
           )}
           {showSection && (
             <div className="flex items-center gap-2 pt-4 pb-2 first:pt-0">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="font-mondwest text-display text-xs font-semibold tracking-wider text-muted-foreground">
                 {section.replace(/_/g, " ")}
               </span>
               <div className="flex-1 border-t border-border" />

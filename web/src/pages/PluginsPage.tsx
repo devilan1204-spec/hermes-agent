@@ -240,7 +240,7 @@ export default function PluginsPage() {
               <Label htmlFor="install-url">{t.pluginsPage.identifierLabel}</Label>
 
               <Input
-                className="font-sans lowercase"
+                className="font-mono-ui lowercase"
                 id="install-url"
                 placeholder="owner/repo or https://..."
                 spellCheck={false}

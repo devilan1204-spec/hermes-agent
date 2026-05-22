@@ -83,7 +83,7 @@ function SnippetHighlight({ snippet }: { snippet: string }) {
     parts.push(snippet.slice(last));
   }
   return (
-    <p className="mt-0.5 min-w-0 max-w-full truncate text-xs text-text-secondary">
+    <p className="font-mondwest normal-case mt-0.5 min-w-0 max-w-full truncate text-xs text-text-secondary">
       {parts}
     </p>
   );
@@ -313,7 +313,7 @@ function SessionRow({
           <div className="flex min-w-0 flex-col gap-0.5">
             <div className="flex min-w-0 items-center gap-2">
               <span
-                className={`min-w-0 flex-1 truncate text-sm ${hasTitle ? "font-medium" : "text-muted-foreground italic"}`}
+                className={`font-mondwest normal-case min-w-0 flex-1 truncate text-sm ${hasTitle ? "font-medium" : "text-muted-foreground italic"}`}
               >
                 {hasTitle
                   ? session.title
@@ -748,7 +748,7 @@ export default function SessionsPage() {
                 className="flex min-w-0 max-w-full flex-col gap-2 border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="min-w-0 truncate text-sm font-medium">
+                  <span className="font-mondwest normal-case min-w-0 truncate text-sm font-medium">
                     {s.title ?? t.common.untitled}
                   </span>
 
@@ -761,7 +761,7 @@ export default function SessionsPage() {
                   </span>
 
                   {s.preview && (
-                    <p className="min-w-0 max-w-full text-xs leading-snug text-text-tertiary [overflow-wrap:anywhere]">
+                    <p className="font-mondwest normal-case min-w-0 max-w-full text-xs leading-snug text-text-tertiary [overflow-wrap:anywhere]">
                       {s.preview}
                     </p>
                   )}
