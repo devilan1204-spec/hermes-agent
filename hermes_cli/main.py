@@ -244,7 +244,7 @@ try:
         mode=(
             "gui"
             if next((arg for arg in sys.argv[1:] if not arg.startswith("-")), "")
-            == "dashboard"
+            in {"dashboard", "gui"}
             else "cli"
         )
     )
@@ -6366,7 +6366,8 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
     if r2.returncode != 0:
         stderr_preview = (r2.stderr or "").strip()
         stderr_tail = "\n  ".join(stderr_preview.splitlines()[-10:]) if stderr_preview else ""
-        dist_dir = web_dir.parent / "hermes_cli" / "web_dist"
+        project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
+        dist_dir = project_root / "hermes_cli" / "web_dist"
         dist_index = dist_dir / "index.html"
 
         # If a stale dist exists, serve it as a fallback instead of failing.
@@ -6388,6 +6389,72 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
         return False
     _say("  ✓ Web UI built")
     return True
+
+
+def _desktop_dist_exists(desktop_dir: Path) -> bool:
+    """Return True when a local desktop renderer build is present."""
+    return (desktop_dir / "dist" / "index.html").exists()
+
+
+def cmd_gui(args):
+    """Build and launch the native Electron desktop GUI."""
+    desktop_dir = PROJECT_ROOT / "apps" / "desktop"
+    if not (desktop_dir / "package.json").exists():
+        print(f"Desktop GUI source not found at: {desktop_dir}")
+        sys.exit(1)
+
+    try:
+        from hermes_logging import setup_logging as _setup_logging_gui
+        _setup_logging_gui(mode="gui")
+    except Exception:
+        pass
+
+    npm = shutil.which("npm")
+    if not npm:
+        print("Desktop GUI requires Node.js/npm, but npm was not found on PATH.")
+        print("Install Node.js, then run:  hermes gui")
+        sys.exit(1)
+
+    env = os.environ.copy()
+    if getattr(args, "fake_boot", False):
+        env["HERMES_DESKTOP_BOOT_FAKE"] = "1"
+    if getattr(args, "ignore_existing", False):
+        env["HERMES_DESKTOP_IGNORE_EXISTING"] = "1"
+    if getattr(args, "hermes_root", None):
+        env["HERMES_DESKTOP_HERMES_ROOT"] = str(Path(args.hermes_root).expanduser().resolve())
+    if getattr(args, "cwd", None):
+        env["HERMES_DESKTOP_CWD"] = str(Path(args.cwd).expanduser().resolve())
+
+    if getattr(args, "skip_build", False):
+        if not _desktop_dist_exists(desktop_dir):
+            print(f"✗ --skip-build was passed but no desktop dist found at: {desktop_dir / 'dist'}")
+            print("  Pre-build first:  cd apps/desktop && npm run build")
+            print("  Or drop --skip-build to install dependencies and build automatically.")
+            sys.exit(1)
+        if not (PROJECT_ROOT / "node_modules" / "electron" / "package.json").exists():
+            print("✗ --skip-build requires existing workspace dependencies.")
+            print(f"  Install first:  cd {PROJECT_ROOT} && npm ci")
+            print("  Or drop --skip-build to install dependencies and build automatically.")
+            sys.exit(1)
+        print(f"→ Skipping desktop build (--skip-build); using dist at {desktop_dir / 'dist'}")
+    else:
+        print("→ Installing desktop workspace dependencies...")
+        install_result = _run_npm_install_deterministic(npm, PROJECT_ROOT, capture_output=False)
+        if install_result.returncode != 0:
+            print("✗ Desktop dependency install failed")
+            print(f"  Run manually:  cd {PROJECT_ROOT} && npm ci")
+            sys.exit(install_result.returncode or 1)
+
+        print("→ Building desktop GUI...")
+        build_result = subprocess.run([npm, "run", "build"], cwd=desktop_dir, env=env, check=False)
+        if build_result.returncode != 0:
+            print("✗ Desktop GUI build failed")
+            print("  Run manually:  cd apps/desktop && npm run build")
+            sys.exit(build_result.returncode or 1)
+
+    print("→ Launching Hermes Desktop...")
+    launch_result = subprocess.run([npm, "exec", "--", "electron", "."], cwd=desktop_dir, env=env, check=False)
+    sys.exit(launch_result.returncode)
 
 
 def _find_stale_dashboard_pids() -> list[int]:
@@ -9621,6 +9688,7 @@ def _coalesce_session_name_args(argv: list) -> list:
         "uninstall",
         "profile",
         "dashboard",
+        "gui",
         "honcho",
         "claw",
         "plugins",
@@ -10474,7 +10542,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "computer-use",
         "config", "cron", "curator", "dashboard", "debug", "doctor",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
-        "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
+        "gui", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "plugins", "postinstall", "profile", "proxy",
         "send", "sessions", "setup",
         "skills", "slack", "status", "tools", "uninstall", "update",
@@ -13253,6 +13321,42 @@ Examples:
         help="List running hermes dashboard processes and exit",
     )
     dashboard_parser.set_defaults(func=cmd_dashboard)
+
+    # =========================================================================
+    # gui command
+    # =========================================================================
+    gui_parser = subparsers.add_parser(
+        "gui",
+        help="Build and launch the native desktop GUI",
+        description=(
+            "Launch the Hermes Electron desktop app. By default this installs "
+            "workspace Node dependencies, builds apps/desktop inline, then starts Electron."
+        ),
+    )
+    gui_parser.add_argument(
+        "--skip-build",
+        action="store_true",
+        help="Skip npm install/build and launch the existing apps/desktop/dist build",
+    )
+    gui_parser.add_argument(
+        "--fake-boot",
+        action="store_true",
+        help="Enable deterministic desktop boot delays for validating startup UI",
+    )
+    gui_parser.add_argument(
+        "--ignore-existing",
+        action="store_true",
+        help="Force Desktop to ignore any hermes CLI already on PATH during backend resolution",
+    )
+    gui_parser.add_argument(
+        "--hermes-root",
+        help="Override the Hermes source root used by Desktop (sets HERMES_DESKTOP_HERMES_ROOT)",
+    )
+    gui_parser.add_argument(
+        "--cwd",
+        help="Initial project directory for Desktop chat sessions (sets HERMES_DESKTOP_CWD)",
+    )
+    gui_parser.set_defaults(func=cmd_gui)
 
     # =========================================================================
     # logs command
