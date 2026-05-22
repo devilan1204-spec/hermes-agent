@@ -200,6 +200,28 @@ OPTIONAL_ENV_VARS = {
 }
 ```
 
+## After Adding: Restart Required
+
+New tools are discovered at process startup. Slash commands like `/reset` and `/new` only reset the conversation thread — they do **not** reload the tool palette. For a new tool to become available:
+
+```bash
+hermes gateway stop && hermes gateway start
+```
+
+**Do NOT use `hermes gateway run --replace`** — it can leave stale Python import state that causes the new process to inherit the old tool palette. Always use `stop` + `start` when registering new tools.
+
+To verify the tool is properly registered before restarting:
+
+```bash
+cd ~/.hermes/hermes-agent
+source venv/bin/activate
+python3 -c "
+from tools.registry import registry, discover_builtin_tools
+loaded = discover_builtin_tools()
+print('Registered:', 'your_tool_name' in registry.get_all_tool_names())
+"
+```
+
 ## Checklist
 
 - [ ] Tool file created with handler, schema, check function, and registration

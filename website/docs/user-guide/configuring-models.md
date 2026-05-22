@@ -47,7 +47,17 @@ Click **Show auxiliary** to reveal the eight task slots:
 
 ![Auxiliary panel expanded](/img/docs/dashboard-models/auxiliary-expanded.png)
 
-Every auxiliary task defaults to `auto` — meaning Hermes uses your main model for that job too. Override a specific task when you want a cheaper or faster model for a side-job.
+Every auxiliary task defaults to `auto`, which uses a resolution chain starting with your main provider:
+
+- **Text tasks** (compression, session_search, web_extract, approval, MCP, skills_hub): main provider → OpenRouter → Nous Portal → custom endpoint → Anthropic → direct API-key providers.
+- **Vision tasks**: main provider (if vision-capable) → OpenRouter → Nous Portal → Anthropic → custom endpoint.
+
+To force auxiliaries to use a specific provider, set it explicitly:
+```bash
+hermes config set auxiliary.compression.provider openrouter
+```
+
+Override a specific task when you want a cheaper or faster model for a side-job.
 
 ### Common override patterns
 
@@ -150,6 +160,34 @@ Three things to check:
 ### I picked a model but Hermes switched providers on me
 
 On OpenRouter (or any aggregator), bare model names resolve *within* the aggregator first. So `claude-sonnet-4` on OpenRouter becomes `anthropic/claude-sonnet-4.6`, staying on your OpenRouter auth. But if you typed `claude-sonnet-4` on a native Anthropic auth, it would stay as `claude-sonnet-4-6`. If you see an unexpected provider switch, check that your current provider is what you expect — the picker always shows the current main at the top of the dialog.
+
+### model.context_length applies globally, not per-model
+
+Setting `model.context_length` in config.yaml caps **every** model the agent uses — main and auxiliaries. For per-model context limits, use `custom_providers` instead:
+
+```yaml
+custom_providers:
+  - name: "My Server"
+    models:
+      my-model:
+        context_length: 32768  # per-model only
+```
+
+To remove a global cap: `hermes config set model.context_length ""`.
+
+### model.max_tokens above the model's output ceiling has no effect
+
+Every model has a hard output ceiling (e.g., Claude Sonnet 4 = 8K tokens, GPT-4o = 16K). Setting `model.max_tokens` above that ceiling achieves nothing — the provider silently truncates. No production model outputs more than ~32K tokens per response. The default (`null`) works fine for most tasks.
+
+### OpenRouter response cache
+
+OpenRouter response caching is **enabled by default** (`response_cache: true`). Identical requests return cached responses for free (zero billing). To disable or adjust the TTL:
+
+```bash
+hermes config set openrouter.response_cache false
+# Default TTL is 300 seconds (5 min)
+hermes config set openrouter.response_cache_ttl 600
+```
 
 ## Alternative methods
 

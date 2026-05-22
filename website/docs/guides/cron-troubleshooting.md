@@ -159,6 +159,28 @@ Likely a delivery target issue (see Delivery Failures above) or a silently suppr
 **Job hangs or times out**
 The scheduler uses an inactivity-based timeout (default 600s, configurable via `HERMES_CRON_TIMEOUT` env var, `0` for unlimited). The agent can run as long as it's actively calling tools — the timer only fires after sustained inactivity. Long-running jobs should use scripts to handle data collection and deliver only the result.
 
+**Import errors after gateway has been running for days**
+
+Symptom: `cannot import name 'cfg_get' from 'hermes_cli.config'` across multiple cron jobs, even though the function exists in the source file.
+
+Root cause: Module-level imports like `from hermes_cli.config import cfg_get` in tool files can hit stale namespace ordering in long-running gateway processes. The function exists but isn't available yet when the import runs.
+
+Immediate fix: Restart the gateway.
+```bash
+hermes gateway restart
+```
+
+Definitive fix: Move these imports inside the functions that use them (lazy import pattern):
+```python
+# Before — fails in long-running gateway:
+from hermes_cli.config import cfg_get
+
+# After — lazy import, definitive fix:
+def my_tool():
+    from hermes_cli.config import cfg_get
+```
+Python caches imports, so there's zero runtime overhead.
+
 ### Check 3: Lock contention
 
 The scheduler uses file-based locking to prevent overlapping ticks. If two gateway instances are running (or a CLI session conflicts with a gateway), jobs may be delayed or skipped.
