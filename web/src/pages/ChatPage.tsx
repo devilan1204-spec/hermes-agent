@@ -820,6 +820,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
             aria-label="Copy last assistant response"
             className={cn(
               "absolute z-10",
+              "normal-case tracking-normal font-normal",
               "rounded border border-current/30",
               "bg-black/20 backdrop-blur-sm",
               "opacity-70 hover:opacity-100 hover:border-current/60",
