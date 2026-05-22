@@ -1,13 +1,13 @@
 'use client'
 
-import { useAuiState } from '@assistant-ui/react'
+import { TextMessagePartProvider, useAuiState, useMessagePartText } from '@assistant-ui/react'
 import {
   type StreamdownTextComponents,
   StreamdownTextPrimitive,
   type SyntaxHighlighterProps
 } from '@assistant-ui/react-streamdown'
 import { code } from '@streamdown/code'
-import { type ComponentProps, memo, useEffect, useMemo, useState } from 'react'
+import { type ComponentProps, memo, type ReactNode, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import { PreviewAttachment } from '@/components/chat/preview-attachment'
 import { SyntaxHighlighter } from '@/components/chat/shiki-highlighter'
@@ -226,6 +226,41 @@ function MarkdownImage({ className, src, alt, ...props }: ComponentProps<'img'>)
   )
 }
 
+/**
+ * Re-publish the active message-part context with React's `useDeferredValue`
+ * applied to the streaming text and status. The outer wrapper still re-renders
+ * on every token, but the work it does is trivial (one hook, one provider).
+ *
+ * The expensive subtree (Streamdown → micromark → mdast → hast → React) lives
+ * inside `<TextMessagePartProvider>` and reads the deferred text via the
+ * normal `useMessagePartText` hook. React's concurrent scheduler then has
+ * permission to:
+ *   - skip intermediate token states when the next token arrives mid-render
+ *     (it abandons the in-flight deferred render and starts over)
+ *   - deprioritize the markdown render when the main thread is busy with an
+ *     urgent task (typing, scrolling, layout work elsewhere)
+ *
+ * Net effect: per-token CPU is unchanged but the *blocking* part of that work
+ * goes away — typing-while-streaming stays a single-frame paint, scroll
+ * stutter disappears, and the longtask histogram tightens because long
+ * commits can be interrupted and discarded.
+ *
+ * Industry standard (Streamdown's own block-array setState already uses
+ * `useTransition`); this just lifts the deferral up to the consumer text
+ * boundary so it covers the whole pipeline, not just the inner setState.
+ */
+function DeferStreamingText({ children }: { children: ReactNode }) {
+  const { text, status } = useMessagePartText()
+  const deferredText = useDeferredValue(text)
+  const isRunning = status.type === 'running'
+
+  return (
+    <TextMessagePartProvider isRunning={isRunning} text={deferredText}>
+      {children}
+    </TextMessagePartProvider>
+  )
+}
+
 // Headings shrink to chat scale rather than the prose default (h1≈xl). Kept
 // table-driven so adding/tweaking levels is one row.
 const HEADING_SIZES: Record<'h1' | 'h2' | 'h3' | 'h4', string> = {
@@ -318,32 +353,34 @@ const MarkdownTextImpl = () => {
   )
 
   return (
-    <StreamdownTextPrimitive
-      caret="block"
-      components={components}
-      containerClassName={cn(
-        'aui-md prose w-full max-w-none overflow-hidden text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) text-foreground',
-        'prose-p:leading-(--dt-line-height) prose-li:leading-(--dt-line-height)',
-        'prose-headings:text-foreground prose-strong:text-foreground',
-        'prose-a:break-words prose-p:[overflow-wrap:anywhere]',
-        'prose-li:marker:text-muted-foreground/70',
-        'prose-code:rounded-[0.25rem] prose-code:px-[0.1875rem] prose-code:py-px prose-code:font-mono prose-code:text-[0.9em] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
-        '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&>*+*]:mt-1'
-      )}
-      lineNumbers={false}
-      mode="streaming"
-      // Always auto-close incomplete fences — even during streaming.
-      // Without this, an unclosed ```python ... ``` whose body contains
-      // `$` (very common: shell snippets, JS template strings, dollar
-      // amounts) leaks those dollars out to the math parser and they
-      // get rendered as broken inline math until the closing fence
-      // arrives. Shiki is independently deferred via `defer={isStreaming}`
-      // on the SyntaxHighlighter component, so we don't pay code-block
-      // tokenization on every token even with this set.
-      parseIncompleteMarkdown
-      plugins={plugins}
-      preprocess={preprocessMarkdown}
-    />
+    <DeferStreamingText>
+      <StreamdownTextPrimitive
+        caret="block"
+        components={components}
+        containerClassName={cn(
+          'aui-md prose w-full max-w-none overflow-hidden text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) text-foreground',
+          'prose-p:leading-(--dt-line-height) prose-li:leading-(--dt-line-height)',
+          'prose-headings:text-foreground prose-strong:text-foreground',
+          'prose-a:break-words prose-p:[overflow-wrap:anywhere]',
+          'prose-li:marker:text-muted-foreground/70',
+          'prose-code:rounded-[0.25rem] prose-code:px-[0.1875rem] prose-code:py-px prose-code:font-mono prose-code:text-[0.9em] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none',
+          '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&>*+*]:mt-1'
+        )}
+        lineNumbers={false}
+        mode="streaming"
+        // Always auto-close incomplete fences — even during streaming.
+        // Without this, an unclosed ```python ... ``` whose body contains
+        // `$` (very common: shell snippets, JS template strings, dollar
+        // amounts) leaks those dollars out to the math parser and they
+        // get rendered as broken inline math until the closing fence
+        // arrives. Shiki is independently deferred via `defer={isStreaming}`
+        // on the SyntaxHighlighter component, so we don't pay code-block
+        // tokenization on every token even with this set.
+        parseIncompleteMarkdown
+        plugins={plugins}
+        preprocess={preprocessMarkdown}
+      />
+    </DeferStreamingText>
   )
 }
 

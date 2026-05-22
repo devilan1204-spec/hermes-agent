@@ -280,21 +280,74 @@ A/B on the 34 MB session, 300 tokens at 50 tok/sec, markdown chunks
 Modest. `inter-mutation` p50 tightens from 22-28 ms to a clean 33 ms,
 which is what you'd expect from a deterministic floor.
 
-### Not fixed: Streamdown markdown re-parse (the elephant)
+### Also landed: `useDeferredValue` at the streamdown-text boundary
 
-This is still the dominant cost and the cause of the user's perceived
-"5 fps moment" hitches. The renderer re-parses the *changed* block on
-every commit, and as the last block grows the per-commit parse cost grows
-linearly. With the throttle and React's batching there's still typically
-1-2 longtasks per 5 s window on a big-session real-LLM stream, each
-75-125 ms — and worst-case bursts up to 380-420 ms when a long
-paragraph parses with many micromark backtracks.
+The longtask CPU was unavoidable inside the block-memo pattern — the live
+tail re-parses every commit, scales linearly with current length, and
+nothing about Streamdown's architecture changes that without forking. The
+fix is to stop having that work *block* the main thread.
+
+`<DeferStreamingText>` in `markdown-text.tsx` is a 12-line wrapper that
+reads the message-part state via `useMessagePartText`, runs it through
+`useDeferredValue`, and re-publishes via assistant-ui's
+`<TextMessagePartProvider>`. The inner `StreamdownTextPrimitive` reads the
+deferred value through the normal `useMessagePartText` hook — no fork,
+no internal-path imports, fully on the assistant-ui public API.
+
+What React's concurrent scheduler now does:
+
+- When a new token arrives mid-render, the in-flight deferred render
+  is abandoned and a fresh one starts with the latest text.
+- When the main thread has urgent work (typing, scroll, layout), the
+  Streamdown render gets deprioritized — input stays responsive even
+  while a 100 ms parse is queued.
+
+Streamdown already uses `useTransition` internally for its block-array
+setState; `useDeferredValue` here just lifts the deferral all the way up
+to the consumer text boundary, so the whole pipeline — preprocess,
+block split, repair, parse, render — runs at low priority during streaming.
+This is the industry-standard approach (see
+[Streamdown architecture analysis](https://tigerabrodi.blog/how-to-build-a-performant-ai-markdown-renderer)
+and Chrome's [LLM-response render best practices](https://developer.chrome.google.cn/docs/ai/render-llm-responses)).
+
+A/B on the 34 MB session, 300 tokens at 50 tok/sec, markdown chunks
+(four trials each, prod-throttle (33 ms) on for both):
+
+| | avgFps | p99 frame | LTs / 5 s | max LT | typing p95 |
+|---|---|---|---|---|---|
+| pre-defer | 54.3 | 41 ms | 1.7 | 110 ms | ~17 ms |
+| **post-defer** | **58.5** | **31 ms** | 2.0 | 117 ms | 14-18 ms |
+
+Longtask count and max LT are unchanged — `useDeferredValue` doesn't
+reduce CPU, only its priority. The avgFps lift and p99 frame drop are
+the proof that the existing CPU is no longer blocking 60 fps cadence:
+when React can defer the parse, frames stay clean. One particularly
+clean run logged **MUTATIONS=0** — React skipped every intermediate
+text state and only committed the final one, the textbook
+useDeferredValue behaviour.
+
+### Not fixed: Streamdown markdown re-parse cost (the elephant)
+
+Total CPU spent in micromark/mdast/hast pipeline per 5 s window is still
+the same ~700 ms. With `useDeferredValue` that work no longer blocks
+input, but if you watch a CPU profile you'll see the same hot functions
+(`Tn$1`, `bn$1`, `m$1`, `parser`, `compile`).
+
+The path to actually *reduce* that cost (not just defer it) is to
+replace the parser with a state machine like
+[Flowdown](https://github.com/Atomics-hub/flowdown) — process each
+character exactly once, emit DOM ops directly, no re-parse of the prefix
+on every token. Claimed ~2,000× over `marked`. Trades: not a
+`react-markdown`-compatible API, no rehype security pipeline, would
+require replacing Streamdown wholesale. Worth investigating only if
+even the deferred work shows up in user-perceptible ways (e.g.
+trackpad-scrolling a stream-in-progress stutters).
 
 The synthetic harness now mirrors the real upstream pipeline via the
 `flushMinMs` option in `__PERF_DRIVE__.stream({ flushMinMs: 33 })`, so
-future Streamdown experiments can A/B without LLM credit cost. The
-synthetic numbers tracked the one real-LLM run we caught within noise,
-so it's a reliable proxy.
+future Streamdown / Flowdown experiments can A/B without LLM credit cost.
+The synthetic numbers tracked the one real-LLM run we caught within
+noise, so it's a reliable proxy.
 
 Possible approaches (none implemented here):
 
