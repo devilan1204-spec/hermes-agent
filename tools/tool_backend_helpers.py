@@ -21,6 +21,11 @@ def managed_nous_tools_enabled() -> bool:
     the free tier.  We intentionally catch all exceptions and return
     False — never block the agent startup path.
     """
+    import os
+
+    if os.getenv("TOOL_GATEWAY_USER_TOKEN", "").strip():
+        return True
+
     try:
         from hermes_cli.auth import get_nous_auth_status
 

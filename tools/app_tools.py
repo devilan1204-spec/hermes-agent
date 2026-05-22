@@ -117,11 +117,13 @@ def _gateway_post(
             }
         }
 
-    url = f"{gateway.gateway_origin}{path}"
+    url = f"{gateway.resolved_origin}{path}"
     headers = {
         "Authorization": f"Bearer {gateway.nous_user_token}",
         "Content-Type": "application/json",
     }
+    if gateway.gateway_host_header:
+        headers["Host"] = gateway.gateway_host_header
 
     try:
         with httpx.Client(timeout=timeout) as client:
