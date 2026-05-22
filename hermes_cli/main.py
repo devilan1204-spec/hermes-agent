@@ -6396,6 +6396,29 @@ def _desktop_dist_exists(desktop_dir: Path) -> bool:
     return (desktop_dir / "dist" / "index.html").exists()
 
 
+def _desktop_packaged_executable(desktop_dir: Path) -> Optional[Path]:
+    """Return the current platform's unpacked Electron app executable."""
+    release_dir = desktop_dir / "release"
+    if sys.platform == "darwin":
+        candidates = list(release_dir.glob("mac*/Hermes.app/Contents/MacOS/Hermes"))
+    elif sys.platform == "win32":
+        candidates = [
+            release_dir / "win-unpacked" / "Hermes.exe",
+            release_dir / "win-ia32-unpacked" / "Hermes.exe",
+            release_dir / "win-arm64-unpacked" / "Hermes.exe",
+        ]
+    else:
+        candidates = [
+            release_dir / "linux-unpacked" / "hermes",
+            release_dir / "linux-unpacked" / "Hermes",
+        ]
+
+    existing = [p for p in candidates if p.exists()]
+    if not existing:
+        return None
+    return max(existing, key=lambda p: p.stat().st_mtime)
+
+
 def cmd_gui(args):
     """Build and launch the native Electron desktop GUI."""
     desktop_dir = PROJECT_ROOT / "apps" / "desktop"
@@ -6409,12 +6432,6 @@ def cmd_gui(args):
     except Exception:
         pass
 
-    npm = shutil.which("npm")
-    if not npm:
-        print("Desktop GUI requires Node.js/npm, but npm was not found on PATH.")
-        print("Install Node.js, then run:  hermes gui")
-        sys.exit(1)
-
     env = os.environ.copy()
     if getattr(args, "fake_boot", False):
         env["HERMES_DESKTOP_BOOT_FAKE"] = "1"
@@ -6425,18 +6442,39 @@ def cmd_gui(args):
     if getattr(args, "cwd", None):
         env["HERMES_DESKTOP_CWD"] = str(Path(args.cwd).expanduser().resolve())
 
+    source_mode = getattr(args, "source", False)
+    skip_build = getattr(args, "skip_build", False)
+    packaged_executable = _desktop_packaged_executable(desktop_dir)
+
+    if source_mode or not skip_build:
+        npm = shutil.which("npm")
+        if not npm:
+            print("Desktop GUI requires Node.js/npm, but npm was not found on PATH.")
+            print("Install Node.js, then run:  hermes gui")
+            sys.exit(1)
+    else:
+        npm = None
+
     if getattr(args, "skip_build", False):
-        if not _desktop_dist_exists(desktop_dir):
-            print(f"✗ --skip-build was passed but no desktop dist found at: {desktop_dir / 'dist'}")
-            print("  Pre-build first:  cd apps/desktop && npm run build")
-            print("  Or drop --skip-build to install dependencies and build automatically.")
+        if source_mode:
+            if not _desktop_dist_exists(desktop_dir):
+                print(f"✗ --skip-build --source was passed but no desktop dist found at: {desktop_dir / 'dist'}")
+                print("  Pre-build first:  cd apps/desktop && npm run build")
+                print("  Or drop --skip-build to install dependencies and build automatically.")
+                sys.exit(1)
+            if not (PROJECT_ROOT / "node_modules" / "electron" / "package.json").exists():
+                print("✗ --skip-build --source requires existing workspace dependencies.")
+                print(f"  Install first:  cd {PROJECT_ROOT} && npm ci")
+                print("  Or drop --skip-build to install dependencies and build automatically.")
+                sys.exit(1)
+            print(f"→ Skipping desktop source build (--skip-build --source); using dist at {desktop_dir / 'dist'}")
+        elif packaged_executable is None:
+            print(f"✗ --skip-build was passed but no packaged desktop app was found at: {desktop_dir / 'release'}")
+            print("  Pre-build first:  cd apps/desktop && npm run pack")
+            print("  Or drop --skip-build to package automatically.")
             sys.exit(1)
-        if not (PROJECT_ROOT / "node_modules" / "electron" / "package.json").exists():
-            print("✗ --skip-build requires existing workspace dependencies.")
-            print(f"  Install first:  cd {PROJECT_ROOT} && npm ci")
-            print("  Or drop --skip-build to install dependencies and build automatically.")
-            sys.exit(1)
-        print(f"→ Skipping desktop build (--skip-build); using dist at {desktop_dir / 'dist'}")
+        else:
+            print(f"→ Skipping desktop package build (--skip-build); using {packaged_executable}")
     else:
         print("→ Installing desktop workspace dependencies...")
         install_result = _run_npm_install_deterministic(npm, PROJECT_ROOT, capture_output=False)
@@ -6445,15 +6483,28 @@ def cmd_gui(args):
             print(f"  Run manually:  cd {PROJECT_ROOT} && npm ci")
             sys.exit(install_result.returncode or 1)
 
-        print("→ Building desktop GUI...")
-        build_result = subprocess.run([npm, "run", "build"], cwd=desktop_dir, env=env, check=False)
+        build_label = "source build" if source_mode else "packaged app"
+        print(f"→ Building desktop {build_label}...")
+        build_script = "build" if source_mode else "pack"
+        build_result = subprocess.run([npm, "run", build_script], cwd=desktop_dir, env=env, check=False)
         if build_result.returncode != 0:
             print("✗ Desktop GUI build failed")
-            print("  Run manually:  cd apps/desktop && npm run build")
+            print(f"  Run manually:  cd apps/desktop && npm run {build_script}")
             sys.exit(build_result.returncode or 1)
+        packaged_executable = _desktop_packaged_executable(desktop_dir)
 
-    print("→ Launching Hermes Desktop...")
-    launch_result = subprocess.run([npm, "exec", "--", "electron", "."], cwd=desktop_dir, env=env, check=False)
+    if source_mode:
+        print("→ Launching Hermes Desktop from source build...")
+        launch_result = subprocess.run([npm, "exec", "--", "electron", "."], cwd=desktop_dir, env=env, check=False)
+        sys.exit(launch_result.returncode)
+
+    if packaged_executable is None:
+        print(f"✗ Desktop package build completed but no launchable app was found at: {desktop_dir / 'release'}")
+        print("  Expected an unpacked Electron app for the current OS.")
+        sys.exit(1)
+
+    print(f"→ Launching packaged Hermes Desktop: {packaged_executable}")
+    launch_result = subprocess.run([str(packaged_executable)], cwd=desktop_dir, env=env, check=False)
     sys.exit(launch_result.returncode)
 
 
@@ -13330,13 +13381,19 @@ Examples:
         help="Build and launch the native desktop GUI",
         description=(
             "Launch the Hermes Electron desktop app. By default this installs "
-            "workspace Node dependencies, builds apps/desktop inline, then starts Electron."
+            "workspace Node dependencies, builds the current OS's unpacked "
+            "Electron app, then launches that packaged artifact."
         ),
     )
     gui_parser.add_argument(
         "--skip-build",
         action="store_true",
-        help="Skip npm install/build and launch the existing apps/desktop/dist build",
+        help="Skip npm install/package and launch the existing unpacked app from apps/desktop/release",
+    )
+    gui_parser.add_argument(
+        "--source",
+        action="store_true",
+        help="Launch via `electron .` against apps/desktop/dist instead of the packaged app",
     )
     gui_parser.add_argument(
         "--fake-boot",
