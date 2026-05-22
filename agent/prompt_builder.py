@@ -1258,6 +1258,10 @@ def build_nous_subscription_prompt(valid_tool_names: "set[str] | None" = None) -
         "terminal",
         "process",
         "execute_code",
+        "app_search_tools",
+        "app_tool_schemas",
+        "app_execute_tools",
+        "app_manage_connections",
     }
 
     if valid_names and not (valid_names & relevant_tool_names):
@@ -1279,7 +1283,7 @@ def build_nous_subscription_prompt(valid_tool_names: "set[str] | None" = None) -
 
     lines = [
         "# Nous Subscription",
-        "Nous subscription includes managed web tools (Firecrawl), image generation (FAL), OpenAI TTS, and browser automation (Browser Use) by default. Modal execution is optional.",
+        "Nous subscription includes managed web tools (Firecrawl), image generation (FAL), OpenAI TTS, browser automation (Browser Use), and app integrations (500+ apps) by default. Modal execution is optional.",
         "Current capability status:",
     ]
     lines.extend(_status_line(feature) for feature in features.items())

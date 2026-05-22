@@ -74,8 +74,12 @@ class NousSubscriptionFeatures:
     def modal(self) -> NousFeatureState:
         return self.features["modal"]
 
+    @property
+    def app_tools(self) -> NousFeatureState:
+        return self.features["app_tools"]
+
     def items(self) -> Iterable[NousFeatureState]:
-        ordered = ("web", "image_gen", "tts", "browser", "modal")
+        ordered = ("web", "image_gen", "tts", "browser", "modal", "app_tools")
         for key in ordered:
             yield self.features[key]
 
@@ -223,6 +227,20 @@ def _resolve_browser_feature_state(
     available = bool(browser_local_available)
     active = bool(browser_tool_enabled and available)
     return "local", available, active, False
+
+
+def _read_portal_app_tools_enabled(config: Optional[Dict[str, object]] = None) -> bool:
+    """Return True when the portal.app_tools config flag is on."""
+    import os
+    env_val = os.getenv("PORTAL_APP_TOOLS")
+    if env_val is not None:
+        return is_truthy_value(env_val)
+    if config is None:
+        config = load_config()
+    portal = config.get("portal")
+    if isinstance(portal, dict):
+        return bool(portal.get("app_tools", True))
+    return True
 
 
 def get_nous_subscription_features(
@@ -475,6 +493,31 @@ def get_nous_subscription_features(
             toolset_enabled=modal_tool_enabled,
             current_provider="Modal" if terminal_backend == "modal" else terminal_backend or "local",
             explicit_configured=terminal_backend == "modal",
+        ),
+        "app_tools": NousFeatureState(
+            key="app_tools",
+            label="App tools (500+ apps)",
+            included_by_default=True,
+            available=bool(
+                managed_tools_flag
+                and nous_auth_present
+                and is_managed_tool_gateway_ready("tools")
+            ),
+            active=bool(
+                managed_tools_flag
+                and nous_auth_present
+                and is_managed_tool_gateway_ready("tools")
+                and _read_portal_app_tools_enabled(config)
+            ),
+            managed_by_nous=bool(
+                managed_tools_flag
+                and nous_auth_present
+                and is_managed_tool_gateway_ready("tools")
+                and _read_portal_app_tools_enabled(config)
+            ),
+            direct_override=False,
+            toolset_enabled=_read_portal_app_tools_enabled(config),
+            current_provider="Nous Tool Gateway",
         ),
     }
 
