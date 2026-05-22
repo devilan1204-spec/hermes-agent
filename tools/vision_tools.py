@@ -384,13 +384,7 @@ def _resize_image_for_vision(image_path: Path, mime_type: Optional[str] = None,
         from PIL import Image
         import io as _io
     except ImportError:
-        if clamp_dimensions:
-            logger.warning(
-                "Pillow not installed — cannot clamp image to Anthropic's "
-                "8000 px cap. Install Pillow (`pip install Pillow`)."
-            )
-        else:
-            logger.info("Pillow not installed — cannot auto-resize oversized image")
+        logger.info("Pillow not installed — cannot auto-resize oversized image")
         if data_url is None:
             data_url = _image_to_base64_data_url(image_path, mime_type=mime_type)
         return data_url  # caller will raise the size error
