@@ -1093,6 +1093,39 @@ class TestNativeVisionDimensionWiring:
         resize_spy.assert_not_called()
 
 
+class TestIsAnthropicProvider:
+    """_is_anthropic_provider must cover native Anthropic, common aliases,
+    and aggregators that proxy Claude. Same provider set as
+    _supports_media_in_tool_results."""
+
+    @pytest.mark.parametrize("provider", [
+        "anthropic", "claude", "claude-code", "anthropic-direct",
+        "openrouter", "nous", "vertex", "bedrock",
+        "anthropic-vertex", "google-vertex",
+    ])
+    def test_matches(self, provider):
+        from tools.vision_tools import _is_anthropic_provider
+        with patch("agent.auxiliary_client._read_main_provider",
+                   return_value=provider):
+            assert _is_anthropic_provider() is True
+
+    @pytest.mark.parametrize("provider", [
+        "openai", "openai-chat", "openai-codex", "azure-openai",
+        "gemini", "google", "xai", "deepseek", "custom", "",
+    ])
+    def test_does_not_match(self, provider):
+        from tools.vision_tools import _is_anthropic_provider
+        with patch("agent.auxiliary_client._read_main_provider",
+                   return_value=provider):
+            assert _is_anthropic_provider() is False
+
+    def test_uppercase_normalized(self):
+        from tools.vision_tools import _is_anthropic_provider
+        with patch("agent.auxiliary_client._read_main_provider",
+                   return_value="  ANTHROPIC  "):
+            assert _is_anthropic_provider() is True
+
+
 # ---------------------------------------------------------------------------
 # _is_image_size_error — detect size-related API errors
 # ---------------------------------------------------------------------------

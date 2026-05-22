@@ -295,12 +295,26 @@ _MAX_IMAGE_DIMENSION = 7999
 
 
 def _is_anthropic_provider() -> bool:
-    """Return True if the active main provider is Anthropic."""
+    """Return True if the active main provider uses Anthropic's image-block
+    format (so the 8000 px rule applies).
+
+    Covers native Anthropic plus aggregators that route to Claude. Mirrors
+    the provider sets in ``_supports_media_in_tool_results``.
+    """
     try:
         from agent.auxiliary_client import _read_main_provider
-        return (_read_main_provider() or "").strip().lower() == "anthropic"
+        p = (_read_main_provider() or "").strip().lower()
     except Exception:
         return False
+    # Native Anthropic + common aliases
+    if p in {"anthropic", "claude", "claude-code", "anthropic-direct"}:
+        return True
+    # Aggregators that may route to Claude — clamp is harmless for non-Claude
+    # routes since those vendors handle their own limits.
+    if p in {"openrouter", "nous", "vertex", "bedrock",
+             "anthropic-vertex", "google-vertex"}:
+        return True
+    return False
 
 
 def _get_image_dimensions(image_path: Path) -> Optional[tuple]:
@@ -374,7 +388,13 @@ def _resize_image_for_vision(image_path: Path, mime_type: Optional[str] = None,
         from PIL import Image
         import io as _io
     except ImportError:
-        logger.info("Pillow not installed — cannot auto-resize oversized image")
+        if clamp_dimensions:
+            logger.warning(
+                "Pillow not installed — cannot clamp image to Anthropic's "
+                "8000 px cap. Install Pillow (`pip install Pillow`)."
+            )
+        else:
+            logger.info("Pillow not installed — cannot auto-resize oversized image")
         if data_url is None:
             data_url = _image_to_base64_data_url(image_path, mime_type=mime_type)
         return data_url  # caller will raise the size error
