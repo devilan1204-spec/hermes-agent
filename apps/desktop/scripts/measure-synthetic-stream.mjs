@@ -19,6 +19,10 @@ import { writeFileSync } from 'node:fs'
 const CDP_HTTP = 'http://127.0.0.1:9222'
 const TOKENS = Number(process.env.TOKENS || 300)
 const INTERVAL_MS = Number(process.env.INTERVAL_MS || 16)
+// Upstream flush throttle to apply in the synthetic driver. Mirrors what the
+// real gateway path does in `use-message-stream.scheduleDeltaFlush`. 0
+// disables (worst-case, every token = one React commit).
+const FLUSH_MIN_MS = Number(process.env.FLUSH_MIN_MS || 0)
 const CHUNK = process.env.CHUNK || 'lorem ipsum '
 const TYPE_WHILE_STREAMING = process.env.TYPE_WHILE_STREAMING === '1'
 const LABEL = process.env.LABEL || 'baseline'
@@ -144,7 +148,7 @@ async function main() {
 
   // Drive a synthetic stream.
   const streamStart = Date.now()
-  await cdp.eval(`window.__PERF_DRIVE__.stream({ chunk: ${JSON.stringify(CHUNK)}, intervalMs: ${INTERVAL_MS}, totalTokens: ${TOKENS} })`)
+  await cdp.eval(`window.__PERF_DRIVE__.stream({ chunk: ${JSON.stringify(CHUNK)}, intervalMs: ${INTERVAL_MS}, totalTokens: ${TOKENS}, flushMinMs: ${FLUSH_MIN_MS} })`)
 
   // After the first paint, arm MO on the new message.
   await new Promise((r) => setTimeout(r, 200))
@@ -269,7 +273,7 @@ async function main() {
   const result = {
     label: LABEL,
     timestamp: new Date().toISOString(),
-    config: { TOKENS, INTERVAL_MS, CHUNK, TYPE_WHILE_STREAMING },
+    config: { TOKENS, INTERVAL_MS, CHUNK, TYPE_WHILE_STREAMING, FLUSH_MIN_MS },
     streamWallMs: Date.now() - streamStart,
     frames: {
       total: streamFrames.length,

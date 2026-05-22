@@ -90,7 +90,18 @@ if (typeof window !== 'undefined' && !window.__PERF_DRIVE__) {
       baseline = null
       setBusy(false)
     },
-    stream: ({ chunk = 'word ', intervalMs = 16, totalTokens = 400 } = {}) => {
+    stream: ({
+      chunk = 'word ',
+      intervalMs = 16,
+      totalTokens = 400,
+      // Mimic `use-message-stream.scheduleDeltaFlush` — batch token deltas
+      // into at-most one $messages update every `flushMinMs` ms, exactly as
+      // the real gateway path does. With this on, the synthetic harness's
+      // numbers actually reflect what a real LLM stream of the same token
+      // rate would feel like. Set to 0 to bypass and apply every token
+      // immediately (worst-case).
+      flushMinMs = 0
+    }: { chunk?: string; intervalMs?: number; totalTokens?: number; flushMinMs?: number } = {}) => {
       activeHandle?.stop()
       const current = $messages.get()
       if (!baseline) baseline = current
@@ -109,11 +120,59 @@ if (typeof window !== 'undefined' && !window.__PERF_DRIVE__) {
       setBusy(true)
 
       let pushed = 0
+      let pendingDelta = ''
+      let lastFlushAt = 0
       let timer: ReturnType<typeof setTimeout> | null = null
+      let flushHandle: number | null = null
+
+      const applyDelta = (delta: string) => {
+        if (!delta) return
+        setMessages(prev =>
+          prev.map(m => {
+            if (m.id !== msgId) return m
+            const head = m.parts.slice(0, -1)
+            const last = m.parts.at(-1)
+            const lastText = last && last.type === 'text' ? last.text : ''
+            return {
+              ...m,
+              parts: [...head, { type: 'text', text: lastText + delta }]
+            }
+          })
+        )
+      }
+
+      const flushNow = () => {
+        flushHandle = null
+        lastFlushAt = performance.now()
+        const delta = pendingDelta
+        pendingDelta = ''
+        applyDelta(delta)
+      }
+
+      const scheduleFlush = () => {
+        if (flushHandle !== null) return
+        if (flushMinMs <= 0) { flushNow(); return }
+        const since = performance.now() - lastFlushAt
+        const wait = Math.max(0, flushMinMs - since)
+        flushHandle =
+          wait <= 0 && typeof requestAnimationFrame === 'function'
+            ? requestAnimationFrame(flushNow)
+            : (setTimeout(flushNow, wait) as unknown as number)
+      }
+
       const handle: SyntheticDriverHandle = {
         stop: () => {
           if (timer) clearTimeout(timer)
           timer = null
+          if (flushHandle !== null) {
+            clearTimeout(flushHandle)
+            cancelAnimationFrame?.(flushHandle)
+          }
+          flushHandle = null
+          if (pendingDelta) {
+            applyDelta(pendingDelta)
+            pendingDelta = ''
+          }
           activeHandle = null
           // Mark message finalized.
           setMessages(prev =>
@@ -131,22 +190,17 @@ if (typeof window !== 'undefined' && !window.__PERF_DRIVE__) {
       const tick = () => {
         if (activeHandle !== handle) return
         if (pushed >= totalTokens) {
+          if (pendingDelta) flushNow()
           handle.stop()
           return
         }
         pushed += 1
-        setMessages(prev =>
-          prev.map(m => {
-            if (m.id !== msgId) return m
-            const head = m.parts.slice(0, -1)
-            const last = m.parts.at(-1)
-            const lastText = last && last.type === 'text' ? last.text : ''
-            return {
-              ...m,
-              parts: [...head, { type: 'text', text: lastText + chunk }]
-            }
-          })
-        )
+        if (flushMinMs > 0) {
+          pendingDelta += chunk
+          scheduleFlush()
+        } else {
+          applyDelta(chunk)
+        }
         timer = setTimeout(tick, intervalMs)
       }
       timer = setTimeout(tick, intervalMs)

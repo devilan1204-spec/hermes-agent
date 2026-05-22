@@ -246,12 +246,55 @@ field-by-field. Verified via temporary render counter:
 on its own — Streamdown dwarfs it — but eliminates a class of forced
 layouts and removes a steady CPU floor.
 
-### Not fixed: Streamdown markdown re-parse
+### Also landed: `MarkdownText` plugins memo + upstream flush floor
 
-This is the dominant cost and the cause of the user's perceived hitches.
-The renderer re-parses the entire message buffer on every stream update.
-At ~3-5 k chars, each parse costs ~30 ms; when several pile into one
-frame the result is a 75-125 ms longtask = the "5 fps moment".
+Two smaller follow-ups in the same investigation:
+
+1. **`MarkdownText` `plugins` object useMemo'd.** The inline
+   `plugins={{ math: mathPlugin, ...(isStreaming ? {} : { code }) }}`
+   was constructing a new object on every render, which churns
+   `<Streamdown>`'s outer memo and forces its internal `rehypePlugins` /
+   `remarkPlugins` arrays to rebuild. CPU profile after the change shows
+   `parser` self-time dropping out of the top 10, `compile` cut roughly
+   in half, and `bn$1` / `m$1` (micromark internals) dropping off the
+   top entries.
+
+2. **`use-message-stream.scheduleDeltaFlush` got a real minimum floor.**
+   Previously the rAF-only path effectively meant "at most one flush per
+   frame," but at typical LLM token rates of 30-80 tok/sec each token
+   arrives slower than rAF cadence and gets its own React commit. With
+   `STREAM_DELTA_FLUSH_MS = 33` (two frames) and a `lastFlushAt`-tracked
+   floor, slower streams now coalesce ~2 tokens per commit, halving
+   markdown re-parses. React's auto-batching already covers part of this
+   probabilistically; the floor makes the batching deterministic so the
+   max-longtask number tightens up.
+
+A/B on the 34 MB session, 300 tokens at 50 tok/sec, markdown chunks
+(3 trials each):
+
+| | avgFps | p99 frame | LTs/5s | max LT | mutations |
+|---|---|---|---|---|---|
+| no throttle  | 54.0 | 38 ms | 2.0 | 145 ms | varies (2-112) |
+| 33 ms throttle | 54.3 | 41 ms | 1.7 | 110 ms | ~135 |
+
+Modest. `inter-mutation` p50 tightens from 22-28 ms to a clean 33 ms,
+which is what you'd expect from a deterministic floor.
+
+### Not fixed: Streamdown markdown re-parse (the elephant)
+
+This is still the dominant cost and the cause of the user's perceived
+"5 fps moment" hitches. The renderer re-parses the *changed* block on
+every commit, and as the last block grows the per-commit parse cost grows
+linearly. With the throttle and React's batching there's still typically
+1-2 longtasks per 5 s window on a big-session real-LLM stream, each
+75-125 ms — and worst-case bursts up to 380-420 ms when a long
+paragraph parses with many micromark backtracks.
+
+The synthetic harness now mirrors the real upstream pipeline via the
+`flushMinMs` option in `__PERF_DRIVE__.stream({ flushMinMs: 33 })`, so
+future Streamdown experiments can A/B without LLM credit cost. The
+synthetic numbers tracked the one real-LLM run we caught within noise,
+so it's a reliable proxy.
 
 Possible approaches (none implemented here):
 

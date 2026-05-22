@@ -59,7 +59,15 @@ interface QueuedStreamDeltas {
   reasoning: string
 }
 
-const STREAM_DELTA_FLUSH_MS = 16
+// Minimum gap between two assistant-text flushes during a stream. Was 16ms
+// (rAF only), which at typical LLM token rates of ~30-80 tok/sec meant every
+// token got its own React commit + Streamdown markdown re-parse, scaling
+// linearly with the growing last-block length. Bumping to 33ms lets ~2 tokens
+// batch into one commit at 60 tok/sec without introducing visible lag on the
+// streaming text (still 30 fps of visible text growth). Big perceived
+// smoothness win on long messages with big trailing paragraphs; see
+// `scripts/profile-typing-lag.md` for the measurement work behind this.
+const STREAM_DELTA_FLUSH_MS = 33
 
 // Gateway/provider failures sometimes arrive as message.complete text instead
 // of an explicit error event. Treat matches as inline assistant errors so they
@@ -247,6 +255,7 @@ export function useMessageStream({
 
   const queuedDeltasRef = useRef<Map<string, QueuedStreamDeltas>>(new Map())
   const flushHandleRef = useRef<number | null>(null)
+  const lastFlushAtRef = useRef<number>(0)
   const nativeSubagentSessionsRef = useRef<Set<string>>(new Set())
 
   const flushQueuedDeltas = useCallback(
@@ -294,19 +303,30 @@ export function useMessageStream({
       return
     }
 
-    if (typeof window.requestAnimationFrame === 'function') {
-      flushHandleRef.current = window.requestAnimationFrame(() => {
-        flushHandleRef.current = null
-        flushQueuedDeltas()
-      })
+    // Enforce a floor on the gap between two flushes. Without it, an LLM
+    // emitting tokens slower than the rAF cadence (~30-80 tok/sec is typical)
+    // forces one React commit + Streamdown re-parse per token, and the
+    // last-block markdown re-parse cost is roughly linear in current block
+    // length. With this floor, slower streams still coalesce ~2 tokens per
+    // commit and the synthetic harness shows longtask counts drop from ~5/5s
+    // to ~1/5s on big sessions (see scripts/profile-typing-lag.md).
+    const sinceLast = performance.now() - lastFlushAtRef.current
+    const runFlush = () => {
+      flushHandleRef.current = null
+      lastFlushAtRef.current = performance.now()
+      flushQueuedDeltas()
+    }
+
+    if (sinceLast >= STREAM_DELTA_FLUSH_MS && typeof window.requestAnimationFrame === 'function') {
+      flushHandleRef.current = window.requestAnimationFrame(runFlush)
 
       return
     }
 
-    flushHandleRef.current = window.setTimeout(() => {
-      flushHandleRef.current = null
-      flushQueuedDeltas()
-    }, STREAM_DELTA_FLUSH_MS)
+    flushHandleRef.current = window.setTimeout(
+      runFlush,
+      Math.max(0, STREAM_DELTA_FLUSH_MS - sinceLast)
+    )
   }, [flushQueuedDeltas])
 
   const queueDelta = useCallback(
