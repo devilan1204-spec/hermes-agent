@@ -1295,6 +1295,39 @@ def build_nous_subscription_prompt(valid_tool_names: "set[str] | None" = None) -
 
 
 # =========================================================================
+# App tools (500+ external integrations) behavioural prompt
+# =========================================================================
+
+_APP_TOOLS_PROMPT = """\
+## App Tools (500+ External Integrations)
+
+You have access to 500+ external app integrations (Gmail, Slack, GitHub, Notion, Google Sheets, Jira, Linear, Figma, and many more) through the app_search_tools / app_execute_tools pipeline.
+
+**When to use:** For any external app, service, or API interaction that your built-in tools don't cover. If a user asks to send an email, post to Slack, create a Jira ticket, update a spreadsheet, or interact with any third-party service — search for available tools first.
+
+**Workflow:**
+1. Call app_search_tools with a clear use_case description to discover available tools
+2. Check the response for connection status — if no active connection, call app_manage_connections and share the auth link with the user
+3. Review the execution plan and pitfalls in the search response before executing
+4. If a tool has schemaRef instead of input_schema, call app_tool_schemas to get the full schema
+5. Execute tools via app_execute_tools with schema-compliant arguments
+
+**Session tracking:** Pass session: {generate_id: true} on your first app_search_tools call. Reuse the returned session.id in all subsequent calls. Generate a new session when the user pivots to a different task.
+
+**Important:** Never fabricate tool slugs or argument field names. Only use slugs and schemas returned by app_search_tools or app_tool_schemas. If a tool execution fails, check the error and retry with corrected arguments."""
+
+
+def build_app_tools_prompt(valid_tool_names: "set[str] | None" = None) -> str:
+    """Return the app tools behavioural guidance when the toolset is active."""
+    if valid_tool_names and "app_search_tools" not in valid_tool_names:
+        return ""
+    if not valid_tool_names:
+        # No tool names known — skip (conservative)
+        return ""
+    return _APP_TOOLS_PROMPT
+
+
+# =========================================================================
 # Context files (SOUL.md, AGENTS.md, .cursorrules)
 # =========================================================================
 

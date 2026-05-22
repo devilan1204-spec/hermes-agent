@@ -130,6 +130,7 @@ from agent.prompt_builder import (
     HERMES_AGENT_HELP_GUIDANCE,
     KANBAN_GUIDANCE,
     build_nous_subscription_prompt,
+    build_app_tools_prompt,
 )
 from agent.model_metadata import (
     fetch_model_metadata,
