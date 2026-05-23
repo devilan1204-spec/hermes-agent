@@ -42,6 +42,32 @@ _EXECUTE_STRIP_KEYS = frozenset({
     "current_step_metric",
 })
 
+# ---------------------------------------------------------------------------
+# Module-level cached httpx client — avoids TCP+TLS setup per tool call.
+# Follows the same thread-safe staleness pattern as image_generation_tool.py.
+# ---------------------------------------------------------------------------
+import threading
+
+_http_client: Optional[httpx.Client] = None
+_http_client_origin: Optional[str] = None
+_http_client_lock = threading.Lock()
+
+
+def _get_http_client(origin: str, verify: bool = True) -> httpx.Client:
+    """Return a reusable httpx.Client, recreated when the origin changes."""
+    global _http_client, _http_client_origin
+    with _http_client_lock:
+        if _http_client is not None and _http_client_origin == origin:
+            return _http_client
+        if _http_client is not None:
+            try:
+                _http_client.close()
+            except Exception:
+                pass
+        _http_client = httpx.Client(verify=verify)
+        _http_client_origin = origin
+        return _http_client
+
 
 # ---------------------------------------------------------------------------
 # Config / availability helpers
@@ -49,20 +75,8 @@ _EXECUTE_STRIP_KEYS = frozenset({
 
 def _read_portal_app_tools_enabled() -> bool:
     """Return True when the portal.app_tools config flag is on."""
-    from utils import is_truthy_value
-
-    env_val = os.getenv("PORTAL_APP_TOOLS")
-    if env_val is not None:
-        return is_truthy_value(env_val)
-    try:
-        from hermes_cli.config import load_config
-        config = load_config()
-        portal = config.get("portal")
-        if isinstance(portal, dict):
-            return bool(portal.get("app_tools", True))
-    except Exception:
-        pass
-    return True  # default on
+    from tools.tool_backend_helpers import portal_app_tools_enabled
+    return portal_app_tools_enabled()
 
 
 def _app_tools_available() -> bool:
@@ -126,8 +140,8 @@ def _gateway_post(
         headers["Host"] = gateway.gateway_host_header
 
     try:
-        with httpx.Client(timeout=timeout) as client:
-            response = client.post(url, json=payload, headers=headers)
+        client = _get_http_client(url.split("/v1/")[0])
+        response = client.post(url, json=payload, headers=headers, timeout=timeout)
 
         # Return parsed body regardless of status code — the LLM handles errors
         try:

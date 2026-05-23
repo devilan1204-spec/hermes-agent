@@ -3989,18 +3989,12 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
                         f"{', '.join(added_aux)}"
                     )
 
-    # ── Version 23 → 24: add portal.app_tools flag ──────────────────
+    # ── Version 23 → 24: inject app_tools into saved platform_toolsets ──
+    # The portal.app_tools config flag is handled by deep-merge (DEFAULT_CONFIG
+    # has it, so load_config() always includes it). But platform_toolsets are
+    # user-owned lists that deep-merge can't append to — existing users who
+    # ran `hermes tools` have a saved list that won't include app_tools.
     if current_ver < 24:
-        config = read_raw_config()
-        if "portal" not in config or not isinstance(config.get("portal"), dict):
-            config["portal"] = copy.deepcopy(DEFAULT_CONFIG.get("portal", {}))
-            save_config(config)
-            results["config_added"].append("portal (app_tools feature flag)")
-            if not quiet:
-                print("  ✓ Added portal.app_tools = True")
-
-        # Inject app_tools into any saved platform_toolsets lists so existing
-        # users who ran `hermes tools` get the new toolset automatically.
         config = read_raw_config()
         pt = config.get("platform_toolsets")
         if isinstance(pt, dict):

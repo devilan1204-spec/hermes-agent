@@ -13,6 +13,21 @@ from tools.managed_tool_gateway import ManagedToolGatewayConfig
 
 
 # ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _reset_http_client_cache():
+    """Clear the module-level cached httpx client between tests."""
+    import tools.app_tools as mod
+    mod._http_client = None
+    mod._http_client_origin = None
+    yield
+    mod._http_client = None
+    mod._http_client_origin = None
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -85,7 +100,7 @@ class TestSearchPostsCorrectUrlAndAuth:
         captured = {}
         fake_resp = _mock_httpx_response(200, {"data": {"results": []}, "error": None})
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             captured["url"] = url
             captured["headers"] = headers
             captured["json"] = json
@@ -118,7 +133,7 @@ class TestModelAutoInjection:
         captured = {}
         fake_resp = _mock_httpx_response(200, {"data": {}, "error": None})
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             captured["json"] = json
             return fake_resp
 
@@ -138,7 +153,7 @@ class TestModelAutoInjection:
         captured = {}
         fake_resp = _mock_httpx_response(200, {"data": {}, "error": None})
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             captured["json"] = json
             return fake_resp
 
@@ -161,7 +176,7 @@ class TestExecuteStripsComposioParams:
         captured = {}
         fake_resp = _mock_httpx_response(200, {"data": {"results": []}, "error": None})
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             captured["json"] = json
             return fake_resp
 
@@ -197,7 +212,7 @@ class TestHttpErrorReturnedAsToolResult:
         error_body = {"error": {"code": "TEST_ERROR", "message": "fail"}}
         fake_resp = _mock_httpx_response(status_code, error_body)
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             return fake_resp
 
         monkeypatch.setattr(httpx.Client, "post", fake_post)
@@ -218,7 +233,7 @@ class TestNetworkFailureReturnedAsToolResult:
             "tools.app_tools.resolve_managed_tool_gateway", lambda v: _FAKE_GATEWAY
         )
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             raise httpx.ConnectError("Connection refused")
 
         monkeypatch.setattr(httpx.Client, "post", fake_post)
@@ -233,7 +248,7 @@ class TestNetworkFailureReturnedAsToolResult:
             "tools.app_tools.resolve_managed_tool_gateway", lambda v: _FAKE_GATEWAY
         )
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             raise httpx.ReadTimeout("timed out")
 
         monkeypatch.setattr(httpx.Client, "post", fake_post)
@@ -256,7 +271,7 @@ class TestManageConnectionsForwardsToolkits:
         captured = {}
         fake_resp = _mock_httpx_response(200, {"data": {}, "error": None})
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             captured["url"] = url
             captured["json"] = json
             return fake_resp
@@ -286,7 +301,7 @@ class TestToolSchemasForwardsSlugs:
         captured = {}
         fake_resp = _mock_httpx_response(200, {"data": {}, "error": None})
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             captured["url"] = url
             captured["json"] = json
             return fake_resp
@@ -339,7 +354,7 @@ class TestSessionVsSessionIdAsymmetry:
         captured = {}
         fake_resp = _mock_httpx_response(200, {"data": {}, "error": None})
 
-        def fake_post(self, url, *, json=None, headers=None):
+        def fake_post(self, url, *, json=None, headers=None, **kw):
             captured["json"] = json
             return fake_resp
 

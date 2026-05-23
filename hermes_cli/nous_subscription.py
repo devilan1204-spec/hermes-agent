@@ -231,16 +231,18 @@ def _resolve_browser_feature_state(
 
 def _read_portal_app_tools_enabled(config: Optional[Dict[str, object]] = None) -> bool:
     """Return True when the portal.app_tools config flag is on."""
-    import os
-    env_val = os.getenv("PORTAL_APP_TOOLS")
-    if env_val is not None:
-        return is_truthy_value(env_val)
-    if config is None:
-        config = load_config()
-    portal = config.get("portal")
-    if isinstance(portal, dict):
-        return bool(portal.get("app_tools", True))
-    return True
+    if config is not None:
+        # Fast path: use the pre-loaded config snapshot from the caller
+        import os
+        env_val = os.getenv("PORTAL_APP_TOOLS")
+        if env_val is not None:
+            return is_truthy_value(env_val)
+        portal = config.get("portal")
+        if isinstance(portal, dict):
+            return bool(portal.get("app_tools", True))
+        return True
+    from tools.tool_backend_helpers import portal_app_tools_enabled
+    return portal_app_tools_enabled()
 
 
 def get_nous_subscription_features(
@@ -331,6 +333,8 @@ def get_nous_subscription_features(
     managed_tts_available = managed_tools_flag and nous_auth_present and is_managed_tool_gateway_ready("openai-audio")
     managed_browser_available = managed_tools_flag and nous_auth_present and is_managed_tool_gateway_ready("browser-use")
     managed_modal_available = managed_tools_flag and nous_auth_present and is_managed_tool_gateway_ready("modal")
+    app_gw_ready = bool(managed_tools_flag and nous_auth_present and is_managed_tool_gateway_ready("tools"))
+    app_config_on = _read_portal_app_tools_enabled(config)
     modal_state = resolve_modal_backend_state(
         modal_mode,
         has_direct=direct_modal,
@@ -498,25 +502,11 @@ def get_nous_subscription_features(
             key="app_tools",
             label="App tools (500+ apps)",
             included_by_default=True,
-            available=bool(
-                managed_tools_flag
-                and nous_auth_present
-                and is_managed_tool_gateway_ready("tools")
-            ),
-            active=bool(
-                managed_tools_flag
-                and nous_auth_present
-                and is_managed_tool_gateway_ready("tools")
-                and _read_portal_app_tools_enabled(config)
-            ),
-            managed_by_nous=bool(
-                managed_tools_flag
-                and nous_auth_present
-                and is_managed_tool_gateway_ready("tools")
-                and _read_portal_app_tools_enabled(config)
-            ),
+            available=app_gw_ready,
+            active=app_gw_ready and app_config_on,
+            managed_by_nous=app_gw_ready and app_config_on,
             direct_override=False,
-            toolset_enabled=_read_portal_app_tools_enabled(config),
+            toolset_enabled=app_config_on,
             current_provider="Nous Tool Gateway",
         ),
     }
