@@ -34,14 +34,6 @@ _TIMEOUT_SCHEMAS = httpx.Timeout(15.0, connect=5.0)
 _TIMEOUT_EXECUTE = httpx.Timeout(120.0, connect=5.0)
 _TIMEOUT_CONNECTIONS = httpx.Timeout(30.0, connect=5.0)
 
-# Composio-specific params to strip from app_execute_tools
-_EXECUTE_STRIP_KEYS = frozenset({
-    "sync_response_to_workbench",
-    "thought",
-    "current_step",
-    "current_step_metric",
-})
-
 # ---------------------------------------------------------------------------
 # Module-level cached httpx client — avoids TCP+TLS setup per tool call.
 # Follows the same thread-safe staleness pattern as image_generation_tool.py.
@@ -184,7 +176,7 @@ def handle_app_search_tools(args: dict, **kw) -> str:
 
     # session is an OBJECT {id, generate_id} — NOT a string
     session = args.get("session")
-    if session:
+    if session is not None:
         payload["session"] = session
 
     # Auto-inject model name from config (omit if unresolvable)
@@ -210,7 +202,7 @@ def handle_app_tool_schemas(args: dict, **kw) -> str:
 
     # session_id is a STRING — not an object
     session_id = args.get("session_id")
-    if session_id:
+    if session_id is not None:
         payload["session_id"] = session_id
 
     return json.dumps(_gateway_post("/v1/schemas", payload, _TIMEOUT_SCHEMAS),
@@ -227,7 +219,7 @@ def handle_app_execute_tools(args: dict, **kw) -> str:
 
     # session_id is a STRING
     session_id = args.get("session_id")
-    if session_id:
+    if session_id is not None:
         payload["session_id"] = session_id
 
     # Strip Composio-specific params that are meaningless in Hermes
@@ -252,7 +244,7 @@ def handle_app_manage_connections(args: dict, **kw) -> str:
 
     # session_id is a STRING
     session_id = args.get("session_id")
-    if session_id:
+    if session_id is not None:
         payload["session_id"] = session_id
 
     return json.dumps(_gateway_post("/v1/connections", payload, _TIMEOUT_CONNECTIONS),
