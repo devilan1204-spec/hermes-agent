@@ -1382,13 +1382,26 @@ def _build_proxy_subprocess_env(
                 for n in needed:
                     if n in secrets:
                         env[n] = secrets[n]
-                for w in warnings:
-                    logger.warning("Bitwarden refresh: %s", w)
+                # bws warnings are non-secret status messages (e.g. "no
+                # project found", "rate limited"), but the taint analyzer
+                # can't tell that — log the count and let the operator
+                # rerun under verbose if they need detail.
+                if warnings:
+                    logger.warning(
+                        "Bitwarden refresh produced %d warning(s); "
+                        "run `hermes secrets bitwarden status` for detail.",
+                        len(warnings),
+                    )
             else:
+                # NOTE: deliberately do not interpolate access_token_name
+                # in the log message — CodeQL's taint analyzer treats
+                # bitwarden_config values as secret-tainted (it can't
+                # distinguish the env-var NAME from the env-var VALUE).
+                # The name is non-secret but logging it just trips the
+                # check for no real benefit.
                 logger.warning(
-                    "credential_source=bitwarden but access_token_env=%s or "
+                    "credential_source=bitwarden but access-token env or "
                     "project_id is empty — proxy will fall back to parent env",
-                    access_token_name,
                 )
         except (ImportError, RuntimeError) as exc:
             logger.warning(
