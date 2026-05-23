@@ -2284,6 +2284,14 @@ OPTIONAL_ENV_VARS = {
         "category": "tool",
         "advanced": True,
     },
+    "PORTAL_APP_TOOLS": {
+        "description": "Enable app integration tools (500+ apps via Nous tool gateway). Requires Nous subscription.",
+        "prompt": "Enable app tools (500+ apps)",
+        "url": None,
+        "password": False,
+        "category": "tool",
+        "advanced": True,
+    },
     "TAVILY_API_KEY": {
         "description": "Tavily API key for AI-native web search, extract, and crawl",
         "prompt": "Tavily API key",
