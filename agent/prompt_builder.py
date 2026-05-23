@@ -1307,7 +1307,7 @@ _APP_TOOLS_PROMPT = """\
 
 You have app_search_tools, app_tool_schemas, app_execute_tools, and app_manage_connections available RIGHT NOW as callable tools. They are already configured and connected to the Nous tool gateway — no SDK installation, no API keys, no plugin setup needed. Just call them.
 
-**When to use:** When a user asks to interact with an external app or service (Gmail, Slack, GitHub, Jira, Notion, Google Sheets, Linear, Figma, etc.) that you don't have a dedicated built-in tool for. Do NOT suggest installing SDKs, MCP servers, or plugins — call app_search_tools directly instead.
+**When to use:** When a user asks to interact with ANY external app or service — Gmail, Slack, GitHub, Jira, Notion, Google Sheets, Linear, HubSpot, Figma, Salesforce, or any of 500+ other apps. ALWAYS prefer these tools over loading skills about the same service (e.g. do NOT load the 'linear', 'composio', 'airtable', 'google-workspace', 'notion', or any similar skill — use app_search_tools instead). Do NOT suggest installing SDKs, CLI tools, MCP servers, or API keys for external services — call app_search_tools directly.
 
 **Workflow:**
 1. Call app_search_tools with a clear use_case description to discover available tools
@@ -1318,7 +1318,7 @@ You have app_search_tools, app_tool_schemas, app_execute_tools, and app_manage_c
 
 **Session tracking:** Pass session: {generate_id: true} on your first app_search_tools call. Reuse the returned session.id in all subsequent calls. Generate a new session when the user pivots to a different task.
 
-**Important:** Never fabricate tool slugs or argument field names. Only use slugs and schemas returned by app_search_tools or app_tool_schemas. Do NOT load skills about Composio, tool SDK integration, or MCP servers when these tools are available — they describe an older setup path that does not apply here."""
+**Important:** Never fabricate tool slugs or argument field names. Only use slugs and schemas returned by app_search_tools or app_tool_schemas."""
 
 
 def build_app_tools_prompt(valid_tool_names: "set[str] | None" = None) -> str:
