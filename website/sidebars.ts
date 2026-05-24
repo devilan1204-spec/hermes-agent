@@ -540,6 +540,18 @@ const sidebars: SidebarsConfig = {
                 },
                 {
                   type: 'category',
+                  label: 'payments',
+                  key: 'skills-optional-payments',
+                  collapsed: true,
+                  items: [
+                    'user-guide/skills/optional/payments/payments-mpp-agent',
+                    'user-guide/skills/optional/payments/payments-payments',
+                    'user-guide/skills/optional/payments/payments-stripe-link-cli',
+                    'user-guide/skills/optional/payments/payments-stripe-projects',
+                  ],
+                },
+                {
+                  type: 'category',
                   label: 'productivity',
                   key: 'skills-optional-productivity',
                   collapsed: true,
