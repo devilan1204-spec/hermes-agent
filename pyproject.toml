@@ -246,6 +246,21 @@ python-version = "3.13"
 unknown-argument = "warn"
 redundant-cast = "ignore"
 
+# Per-file rule overrides — see [tool.ty.overrides] below.
+#
+# Tests can't resolve their own third-party dev deps (pytest, etc.)
+# under the lint-diff CI job because that job installs ``ty`` as a
+# bare uv tool without the project's venv. Installing the full venv
+# just to please the type checker would balloon the lint job; the
+# diagnostics aren't actionable inside tests anyway because the
+# imports demonstrably work at runtime (the same CI runs the full
+# pytest suite in a different job). Suppress unresolved-import
+# inside tests/ so the lint-diff PR comment stays useful.
+
+[[tool.ty.overrides]]
+include = ["tests/**"]
+rules = { unresolved-import = "ignore" }
+
 [tool.ruff]
 preview = true  # required for PLW1514 (unspecified-encoding) — preview rule
 
