@@ -4557,6 +4557,14 @@ def _ws_host_origin_is_allowed(ws: "WebSocket") -> bool:
     repeated here before accepting the upgrade.  Browsers also send an Origin
     header on WebSocket handshakes; when present, require it to target the
     same bound dashboard host.
+
+    Special case: when bound to a loopback interface (127.0.0.1 / ::1 /
+    localhost), accept ``Origin: file://`` from desktop wrappers (Electron,
+    similar) that load the renderer from disk. DNS-rebinding requires a
+    DNS-resolved hostname; ``file://`` carries no host and therefore cannot
+    be the rebinding vector this guard exists to block. Non-loopback binds
+    keep rejecting ``file://`` — the operator chose to expose the dashboard
+    to the network, so the looser policy doesn't apply.
     """
     bound_host = getattr(app.state, "bound_host", None)
     if not bound_host:
@@ -4564,6 +4572,10 @@ def _ws_host_origin_is_allowed(ws: "WebSocket") -> bool:
 
     host_header = ws.headers.get("host", "")
     if not _is_accepted_host(host_header, bound_host):
+        _log.warning(
+            "ws-guard reject reason=bad_host host_header=%r bound_host=%r",
+            host_header, bound_host,
+        )
         return False
 
     origin = ws.headers.get("origin", "")
@@ -4571,10 +4583,28 @@ def _ws_host_origin_is_allowed(ws: "WebSocket") -> bool:
         return True
 
     parsed = urllib.parse.urlparse(origin)
+
+    # Loopback-bind + file:// carve-out: see docstring.
+    if (
+        parsed.scheme == "file"
+        and bound_host.lower() in _LOOPBACK_HOST_VALUES
+    ):
+        return True
+
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        _log.warning(
+            "ws-guard reject reason=bad_origin_scheme origin=%r bound_host=%r",
+            origin, bound_host,
+        )
         return False
 
-    return _is_accepted_host(parsed.netloc, bound_host)
+    if not _is_accepted_host(parsed.netloc, bound_host):
+        _log.warning(
+            "ws-guard reject reason=origin_host_mismatch origin=%r netloc=%r bound_host=%r",
+            origin, parsed.netloc, bound_host,
+        )
+        return False
+    return True
 
 
 def _ws_request_is_allowed(ws: "WebSocket") -> bool:
