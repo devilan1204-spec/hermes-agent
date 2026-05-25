@@ -659,7 +659,8 @@ DEFAULT_CONFIG = {
         # are owned by your host user instead of root, which avoids needing
         # `sudo chown` after container runs. Default off to preserve behavior
         # for images whose entrypoints expect to start as root (e.g. the
-        # bundled Hermes image, which drops to the `hermes` user via gosu).
+        # bundled Hermes image, which drops to the `hermes` user via
+        # s6-setuidgid inside each supervised service).
         # When on, SETUID/SETGID caps are omitted from the container since
         # no privilege drop is needed.
         "docker_run_as_host_user": False,
@@ -1009,6 +1010,19 @@ DEFAULT_CONFIG = {
         "compact": False,
         "personality": "",
         "resume_display": "full",
+        # Recap tuning for /resume and startup resume. The defaults match the
+        # historical hardcoded values; expose them as config so power users can
+        # widen or tighten the snapshot to taste.
+        "resume_exchanges": 10,            # max user+assistant pairs to show
+        "resume_max_user_chars": 300,      # truncate user message text
+        "resume_max_assistant_chars": 200, # truncate non-last assistant text
+        "resume_max_assistant_lines": 3,   # truncate non-last assistant lines
+        # When True (default), assistant entries that are *only* tool calls
+        # (no visible text) are skipped in the recap. This prevents the recap
+        # from being dominated by `[2 tool calls: terminal, read_file]` lines
+        # when an exchange was tool-heavy. Set False to restore the legacy
+        # behavior of showing tool-call summaries inline.
+        "resume_skip_tool_only": True,
         "busy_input_mode": "interrupt",  # interrupt | queue | steer
         # When true, `hermes --tui` auto-resumes the most recent human-
         # facing session on launch instead of forging a fresh one.
@@ -1743,6 +1757,45 @@ DEFAULT_CONFIG = {
         # Number of automatic retries on 5xx / ReadTimeout / ConnectionError.
         # Each retry backs off (1.5x attempt seconds, capped at 5s).
         "retries": 2,
+    },
+
+    # =========================================================================
+    # External secret sources
+    # =========================================================================
+    # Pull credentials from external secret managers at process startup
+    # rather than storing them in ~/.hermes/.env.
+    "secrets": {
+        "bitwarden": {
+            # Master switch.  When false, BSM is never contacted and the
+            # bws binary is never auto-installed — same as not having
+            # this section at all.
+            "enabled": False,
+            # Name of the env var that holds the Bitwarden machine-account
+            # access token.  This is the one bootstrap secret; it lives
+            # in ~/.hermes/.env (or your shell) and never in config.yaml.
+            "access_token_env": "BWS_ACCESS_TOKEN",
+            # UUID of the BSM project to sync from.
+            "project_id": "",
+            # Seconds to cache fetched secrets in-process.  0 disables.
+            "cache_ttl_seconds": 300,
+            # When True, BSM values overwrite existing env vars.  Default
+            # True because the point of using BSM is centralized rotation —
+            # if .env had the final say, rotating in Bitwarden wouldn't
+            # take effect until you also cleared the matching .env line.
+            "override_existing": True,
+            # When True, the bws binary is auto-downloaded into
+            # ~/.hermes/bin/ on first use.  When False you must install
+            # bws yourself and have it on PATH.
+            "auto_install": True,
+            # Bitwarden region / self-hosted endpoint.  Empty string
+            # means use the bws CLI default (US Cloud,
+            # https://vault.bitwarden.com).  Set to
+            # https://vault.bitwarden.eu for EU Cloud, or your own URL
+            # for self-hosted Bitwarden.  Plumbed into the bws subprocess
+            # as BWS_SERVER_URL.  Prompted for during
+            # `hermes secrets bitwarden setup`.
+            "server_url": "",
+        },
     },
 
     # Config schema version - bump this when adding new required fields
