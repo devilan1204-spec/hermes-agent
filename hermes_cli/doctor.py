@@ -1530,12 +1530,14 @@ def run_doctor(args):
             return _ConnectivityResult("Anthropic API", [], [])
         try:
             import httpx
-            from agent.anthropic_adapter import (
-                _is_oauth_token,
-                _COMMON_BETAS,
-                _OAUTH_ONLY_BETAS,
-                _CONTEXT_1M_BETA,
-            )
+            from agent.plugin_registries import registries
+            _anthropic_ns = registries.get_provider_namespace("anthropic")
+            _is_oauth_token = _anthropic_ns.get("_is_oauth_token")
+            _COMMON_BETAS = _anthropic_ns.get("_COMMON_BETAS")
+            _OAUTH_ONLY_BETAS = _anthropic_ns.get("_OAUTH_ONLY_BETAS")
+            _CONTEXT_1M_BETA = _anthropic_ns.get("_CONTEXT_1M_BETA")
+            if not all([_is_oauth_token, _COMMON_BETAS, _OAUTH_ONLY_BETAS]):
+                raise ImportError("anthropic provider services not fully registered")
             headers = {"anthropic-version": "2023-06-01"}
             is_oauth = _is_oauth_token(key)
             if is_oauth:
@@ -1679,11 +1681,13 @@ def run_doctor(args):
 
     def _probe_bedrock() -> _ConnectivityResult:
         try:
-            from agent.bedrock_adapter import (
-                has_aws_credentials,
-                resolve_aws_auth_env_var,
-                resolve_bedrock_region,
-            )
+            from agent.plugin_registries import registries
+            _bedrock_ns = registries.get_provider_namespace("bedrock")
+            has_aws_credentials = _bedrock_ns.get("has_aws_credentials")
+            resolve_aws_auth_env_var = _bedrock_ns.get("resolve_aws_auth_env_var")
+            resolve_bedrock_region = _bedrock_ns.get("resolve_bedrock_region")
+            if not all([has_aws_credentials, resolve_aws_auth_env_var, resolve_bedrock_region]):
+                raise ImportError("bedrock provider services not fully registered")
         except ImportError:
             return _ConnectivityResult("AWS Bedrock", [], [])
         if not has_aws_credentials():
@@ -1754,12 +1758,14 @@ def run_doctor(args):
             return _ConnectivityResult("Azure Foundry (Entra ID)", [], [])
 
         try:
-            from agent.azure_identity_adapter import (
-                EntraIdentityConfig,
-                SCOPE_AI_AZURE_DEFAULT,
-                describe_active_credential,
-                has_azure_identity_installed,
-            )
+            from agent.plugin_registries import registries
+            _azure_ns = registries.get_provider_namespace("azure")
+            EntraIdentityConfig = _azure_ns.get("EntraIdentityConfig")
+            SCOPE_AI_AZURE_DEFAULT = _azure_ns.get("SCOPE_AI_AZURE_DEFAULT")
+            describe_active_credential = _azure_ns.get("describe_active_credential")
+            has_azure_identity_installed = _azure_ns.get("has_azure_identity_installed")
+            if not all([EntraIdentityConfig, SCOPE_AI_AZURE_DEFAULT, describe_active_credential, has_azure_identity_installed]):
+                raise ImportError("azure provider services not fully registered")
         except Exception as exc:
             return _ConnectivityResult(
                 "Azure Foundry (Entra ID)",

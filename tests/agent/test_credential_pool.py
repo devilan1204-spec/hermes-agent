@@ -1038,13 +1038,14 @@ def test_load_pool_removes_stale_file_backed_singleton_entry(tmp_path, monkeypat
         },
     )
 
+    from agent.plugin_registries import registries
+    _orig_get = registries.get_provider_service
     monkeypatch.setattr(
-        "agent.anthropic_adapter.read_hermes_oauth_credentials",
-        lambda: None,
-    )
-    monkeypatch.setattr(
-        "agent.anthropic_adapter.read_claude_code_credentials",
-        lambda: None,
+        registries,
+        "get_provider_service",
+        lambda p, n: (lambda: None) if p == "anthropic" and n in (
+            "read_hermes_oauth_credentials", "read_claude_code_credentials"
+        ) else _orig_get(p, n),
     )
 
     from agent.credential_pool import load_pool
@@ -1130,17 +1131,18 @@ def test_singleton_seed_does_not_clobber_manual_oauth_entry(tmp_path, monkeypatc
         },
     )
 
+    from agent.plugin_registries import registries
+    _orig_get = registries.get_provider_service
     monkeypatch.setattr(
-        "agent.anthropic_adapter.read_hermes_oauth_credentials",
-        lambda: {
+        registries,
+        "get_provider_service",
+        lambda p, n: (lambda: {
             "accessToken": "seeded-token",
             "refreshToken": "seeded-refresh",
             "expiresAt": 1711234999000,
-        },
-    )
-    monkeypatch.setattr(
-        "agent.anthropic_adapter.read_claude_code_credentials",
-        lambda: None,
+        }) if p == "anthropic" and n == "read_hermes_oauth_credentials"
+        else (lambda: None) if p == "anthropic" and n == "read_claude_code_credentials"
+        else _orig_get(p, n),
     )
 
     from agent.credential_pool import load_pool
@@ -1159,17 +1161,18 @@ def test_load_pool_prefers_anthropic_env_token_over_file_backed_oauth(tmp_path, 
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
     _write_auth_store(tmp_path, {"version": 1, "providers": {}})
 
+    from agent.plugin_registries import registries
+    _orig_get = registries.get_provider_service
     monkeypatch.setattr(
-        "agent.anthropic_adapter.read_hermes_oauth_credentials",
-        lambda: {
+        registries,
+        "get_provider_service",
+        lambda p, n: (lambda: {
             "accessToken": "file-backed-token",
             "refreshToken": "refresh-token",
             "expiresAt": int(time.time() * 1000) + 3_600_000,
-        },
-    )
-    monkeypatch.setattr(
-        "agent.anthropic_adapter.read_claude_code_credentials",
-        lambda: None,
+        }) if p == "anthropic" and n == "read_hermes_oauth_credentials"
+        else (lambda: None) if p == "anthropic" and n == "read_claude_code_credentials"
+        else _orig_get(p, n),
     )
 
     from agent.credential_pool import load_pool
@@ -1630,13 +1633,15 @@ def test_load_pool_does_not_seed_claude_code_when_anthropic_not_configured(tmp_p
     _write_auth_store(tmp_path, {"version": 1, "credential_pool": {}})
 
     # Claude Code credentials exist on disk
+    from agent.plugin_registries import registries
+    _orig_get = registries.get_provider_service
     monkeypatch.setattr(
-        "agent.anthropic_adapter.read_claude_code_credentials",
-        lambda: {"accessToken": "sk-ant...oken", "refreshToken": "rt", "expiresAt": 9999999999999},
-    )
-    monkeypatch.setattr(
-        "agent.anthropic_adapter.read_hermes_oauth_credentials",
-        lambda: None,
+        registries,
+        "get_provider_service",
+        lambda p, n: (lambda: {"accessToken": "sk-ant...oken", "refreshToken": "rt", "expiresAt": 9999999999999})
+        if p == "anthropic" and n == "read_claude_code_credentials"
+        else (lambda: None) if p == "anthropic" and n == "read_hermes_oauth_credentials"
+        else _orig_get(p, n),
     )
     # User configured kimi-coding, NOT anthropic
     monkeypatch.setattr(

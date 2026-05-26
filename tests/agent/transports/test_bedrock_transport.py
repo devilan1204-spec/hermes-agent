@@ -11,6 +11,16 @@ from agent.transports.types import NormalizedResponse, ToolCall
 @pytest.fixture
 def transport():
     import agent.transports.bedrock  # noqa: F401
+    # Register the bedrock plugin so the transport can resolve provider services
+    from agent.plugin_registries import registries
+    if registries.get_provider_service("bedrock", "build_converse_kwargs") is None:
+        from hermes_agent_bedrock import register as _bedrock_register
+
+        class _Ctx:
+            def register_provider_services(self, name, services):
+                registries.register_provider_services(name, services)
+
+        _bedrock_register(_Ctx())
     return get_transport("bedrock_converse")
 
 

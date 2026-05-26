@@ -589,10 +589,12 @@ def _has_any_provider_configured() -> bool:
     # being installed doesn't mean the user wants Hermes to use their tokens.
     if _has_hermes_config:
         try:
-            from agent.anthropic_adapter import (
-                read_claude_code_credentials,
-                is_claude_code_token_valid,
-            )
+            from agent.plugin_registries import registries
+            _anthropic = registries.get_provider_namespace("anthropic")
+            read_claude_code_credentials = _anthropic.get("read_claude_code_credentials")
+            is_claude_code_token_valid = _anthropic.get("is_claude_code_token_valid")
+            if read_claude_code_credentials is None or is_claude_code_token_valid is None:
+                raise ImportError("anthropic plugin not registered")
 
             creds = read_claude_code_credentials()
             if creds and (
@@ -4087,13 +4089,15 @@ def _model_flow_azure_foundry(config, current_model=""):
 
     if use_entra:
         try:
-            from agent.azure_identity_adapter import (
-                EntraIdentityConfig,
-                SCOPE_AI_AZURE_DEFAULT,
-                build_token_provider,
-                describe_active_credential,
-                has_azure_identity_installed,
-            )
+            from agent.plugin_registries import registries
+            _azure = registries.get_provider_namespace("azure")
+            EntraIdentityConfig = _azure.get("EntraIdentityConfig")
+            SCOPE_AI_AZURE_DEFAULT = _azure.get("SCOPE_AI_AZURE_DEFAULT")
+            build_token_provider = _azure.get("build_token_provider")
+            describe_active_credential = _azure.get("describe_active_credential")
+            has_azure_identity_installed = _azure.get("has_azure_identity_installed")
+            if any(v is None for v in [EntraIdentityConfig, SCOPE_AI_AZURE_DEFAULT, build_token_provider, describe_active_credential, has_azure_identity_installed]):
+                raise ImportError("azure plugin not registered")
         except ImportError as exc:
             print()
             print(f"⚠ Could not import azure-identity adapter: {exc}")
@@ -5407,12 +5411,14 @@ def _model_flow_bedrock(config, current_model=""):
 
     # 1. Check for AWS credentials
     try:
-        from agent.bedrock_adapter import (
-            has_aws_credentials,
-            resolve_aws_auth_env_var,
-            resolve_bedrock_region,
-            discover_bedrock_models,
-        )
+        from agent.plugin_registries import registries
+        _bedrock = registries.get_provider_namespace("bedrock")
+        has_aws_credentials = _bedrock.get("has_aws_credentials")
+        resolve_aws_auth_env_var = _bedrock.get("resolve_aws_auth_env_var")
+        resolve_bedrock_region = _bedrock.get("resolve_bedrock_region")
+        discover_bedrock_models = _bedrock.get("discover_bedrock_models")
+        if any(v is None for v in [has_aws_credentials, resolve_aws_auth_env_var, resolve_bedrock_region, discover_bedrock_models]):
+            raise ImportError("bedrock plugin not registered")
     except ImportError:
         print("  ✗ boto3 is not installed. Install it with:")
         print("    pip install boto3")
@@ -5860,11 +5866,13 @@ def _model_flow_api_key_provider(config, provider_id, current_model=""):
 
 def _run_anthropic_oauth_flow(save_env_value):
     """Run the Claude OAuth setup-token flow. Returns True if credentials were saved."""
-    from agent.anthropic_adapter import (
-        run_oauth_setup_token,
-        read_claude_code_credentials,
-        is_claude_code_token_valid,
-    )
+    from agent.plugin_registries import registries
+    _anthropic = registries.get_provider_namespace("anthropic")
+    run_oauth_setup_token = _anthropic.get("run_oauth_setup_token")
+    read_claude_code_credentials = _anthropic.get("read_claude_code_credentials")
+    is_claude_code_token_valid = _anthropic.get("is_claude_code_token_valid")
+    if run_oauth_setup_token is None:
+        raise ImportError("anthropic plugin not registered")
     from hermes_cli.config import (
         save_anthropic_oauth_token,
         use_anthropic_claude_code_credentials,
@@ -5972,11 +5980,13 @@ def _model_flow_anthropic(config, current_model=""):
     existing_key = get_anthropic_key()
     cc_available = False
     try:
-        from agent.anthropic_adapter import (
-            read_claude_code_credentials,
-            is_claude_code_token_valid,
-            _is_oauth_token,
-        )
+        from agent.plugin_registries import registries
+        _anthropic = registries.get_provider_namespace("anthropic")
+        read_claude_code_credentials = _anthropic.get("read_claude_code_credentials")
+        is_claude_code_token_valid = _anthropic.get("is_claude_code_token_valid")
+        _is_oauth_token = _anthropic.get("_is_oauth_token")
+        if any(v is None for v in [read_claude_code_credentials, is_claude_code_token_valid, _is_oauth_token]):
+            raise ImportError("anthropic plugin not registered")
 
         cc_creds = read_claude_code_credentials()
         if cc_creds and is_claude_code_token_valid(cc_creds):
@@ -7977,71 +7987,13 @@ def _cleanup_quarantined_exes(scripts_dir: Path | None = None) -> None:
 
 
 def _refresh_active_lazy_features() -> None:
-    """Refresh lazy-installed backends after a code update.
+    """No-op — lazy deps removed.
 
-    When pyproject.toml's ``[all]`` extra was slimmed down (May 2026), most
-    optional backends moved to ``tools/lazy_deps.py`` and only install on
-    first use. ``hermes update`` runs ``uv pip install -e .[all]`` which
-    leaves those packages untouched — so if we bump a pin in
-    :data:`LAZY_DEPS` (CVE response, transitive bug fix), users who already
-    activated the backend keep the stale version forever.
-
-    This function asks lazy_deps which features the user has previously
-    activated and reinstalls them under the current pins. Features the
-    user never enabled stay quiet — no churn for cold backends.
-
-    Never raises. A failure here must not block the rest of the update.
+    Optional backends are now proper plugin packages (hermes-agent-anthropic,
+    hermes-agent-telegram, etc.) installed via extras. ``hermes update``
+    refreshes them through ``uv pip install -e .[all]`` like any other dep.
     """
-    try:
-        from tools import lazy_deps
-    except Exception as exc:
-        logger.debug("Lazy refresh skipped (import failed): %s", exc)
-        return
-
-    try:
-        active = lazy_deps.active_features()
-    except Exception as exc:
-        logger.debug("Lazy refresh skipped (active_features failed): %s", exc)
-        return
-
-    if not active:
-        return
-
-    print()
-    print(f"→ Refreshing {len(active)} active lazy backend(s)...")
-
-    try:
-        results = lazy_deps.refresh_active_features(prompt=False)
-    except Exception as exc:
-        # refresh_active_features is documented as never-raise, but defend
-        # the update flow against future regressions.
-        print(f"  ⚠ Lazy refresh failed unexpectedly: {exc}")
-        return
-
-    refreshed = [f for f, s in results.items() if s == "refreshed"]
-    current = [f for f, s in results.items() if s == "current"]
-    failed = [(f, s) for f, s in results.items() if s.startswith("failed:")]
-    skipped = [(f, s) for f, s in results.items() if s.startswith("skipped:")]
-
-    if refreshed:
-        print(f"  ↑ {len(refreshed)} refreshed: {', '.join(refreshed)}")
-    if current:
-        print(f"  ✓ {len(current)} already current")
-    if skipped:
-        # Most common reason: security.allow_lazy_installs=false. Show one
-        # line so the user knows why; not an error.
-        names = ", ".join(f for f, _ in skipped)
-        reason = skipped[0][1].split(": ", 1)[-1]
-        print(f"  · {len(skipped)} skipped ({reason}): {names}")
-    if failed:
-        for feature, status in failed:
-            reason = status.split(": ", 1)[-1]
-            # Clip noisy pip stderr to keep update output legible.
-            if len(reason) > 200:
-                reason = reason[:200] + "..."
-            print(f"  ⚠ {feature} failed to refresh: {reason}")
-        print("  Backends keep their previously-installed version; rerun")
-        print("  `hermes update` once the upstream issue is resolved.")
+    pass
 
 
 def _install_python_dependencies_with_optional_fallback(

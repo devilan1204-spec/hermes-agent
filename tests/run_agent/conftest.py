@@ -1,46 +1,74 @@
-"""Fast-path fixtures shared across tests/run_agent/.
+"""run_agent test conftest — same pattern as tests/agent/conftest.py."""
 
-Many tests in this directory exercise the retry/backoff paths in the
-agent loop. Production code uses ``jittered_backoff(base_delay=5.0)``
-with a ``while time.time() < sleep_end`` loop — a single retry test
-spends 5+ seconds of real wall-clock time on backoff waits.
-
-Mocking ``jittered_backoff`` to return 0.0 collapses the while-loop
-to a no-op (``time.time() < time.time() + 0`` is false immediately),
-which handles the most common case without touching ``time.sleep``.
-
-We deliberately DO NOT mock ``time.sleep`` here — some tests
-(test_interrupt_propagation, test_primary_runtime_restore, etc.) use
-the real ``time.sleep`` for threading coordination or assert that it
-was called with specific values. Tests that want to additionally
-fast-path direct ``time.sleep(N)`` calls in production code should
-monkeypatch ``run_agent.time.sleep`` locally (see
-``test_anthropic_error_handling.py`` for the pattern).
-"""
-
-from __future__ import annotations
-
+from unittest.mock import MagicMock, patch
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def _fast_retry_backoff(monkeypatch):
-    """Short-circuit retry backoff for all tests in this directory."""
-    try:
-        import run_agent
-    except ImportError:
-        return
+def _make_base_anthropic_namespace() -> dict:
+    mock_client = MagicMock(name="anthropic_client")
+    mock_client.base_url = "https://api.anthropic.com/v1"
+    mock_client.api_key = "sk-ant-mock"
 
-    monkeypatch.setattr(run_agent, "jittered_backoff", lambda *a, **k: 0.0)
-    # The conversation loop was extracted out of run_agent.py into
-    # ``agent.conversation_loop``, which imports ``jittered_backoff``
-    # directly (``from agent.retry_utils import jittered_backoff``).
-    # Patching ``run_agent.jittered_backoff`` alone misses every retry
-    # path under the new module — tests that exercise rate-limit /
-    # invalid-response / server-error retries burn real wall-clock
-    # seconds per retry. Patch both for full coverage.
-    try:
-        from agent import conversation_loop as _conv_loop
-        monkeypatch.setattr(_conv_loop, "jittered_backoff", lambda *a, **k: 0.0)
-    except ImportError:
-        pass
+    def _resolve_token():
+        import os
+        return os.environ.get("ANTHROPIC_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")
+
+    def _build_kwargs_passthrough(model=None, messages=None, tools=None,
+                                   max_tokens=None, **kwargs):
+        result = {}
+        if model is not None:
+            result["model"] = model
+        if messages is not None:
+            result["messages"] = messages
+        if tools:
+            result["tools"] = tools
+        if max_tokens is not None:
+            result["max_tokens"] = max_tokens
+        return result
+
+    def _convert_tools(tools):
+        result = []
+        for t in (tools or []):
+            fn = t.get("function", {})
+            result.append({
+                "name": fn.get("name", ""),
+                "description": fn.get("description", ""),
+                "input_schema": fn.get("parameters", {}),
+            })
+        return result
+
+    def _convert_messages(messages, **kwargs):
+        system = None
+        msgs = []
+        for m in (messages or []):
+            if m.get("role") == "system":
+                system = m.get("content")
+            else:
+                msgs.append(m)
+        return system, msgs
+
+    return {
+        "build_anthropic_client": MagicMock(return_value=mock_client),
+        "build_anthropic_kwargs": _build_kwargs_passthrough,
+        "convert_tools_to_anthropic": _convert_tools,
+        "convert_messages_to_anthropic": _convert_messages,
+        "resolve_anthropic_token": _resolve_token,
+        "_is_oauth_token": lambda k: bool(k) and not (k or "").startswith("sk-ant-api"),
+        "is_claude_code_token_valid": MagicMock(return_value=False),
+        "read_claude_code_credentials": MagicMock(return_value=None),
+        "write_claude_code_credentials": MagicMock(),
+        "refresh_oauth_token": MagicMock(return_value=None),
+        "run_hermes_oauth_login_pure": MagicMock(return_value=("mock-token", None)),
+        "_HERMES_OAUTH_FILE": MagicMock(),
+        "_to_plain_data": MagicMock(return_value=None),
+        "_anthropic_sdk": None,
+    }
+
+
+@pytest.fixture(autouse=True)
+def _seed_anthropic_registry():
+    """Install mock anthropic namespace before each test, restore after."""
+    from agent.plugin_registries import registries
+    ns = _make_base_anthropic_namespace()
+    with patch.dict(registries._provider_services, {"anthropic": ns}):
+        yield

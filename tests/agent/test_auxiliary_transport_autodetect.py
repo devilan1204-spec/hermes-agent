@@ -61,14 +61,17 @@ def test_endpoint_speaks_anthropic_messages(url, expected, label):
 def test_maybe_wrap_anthropic_rewraps_kimi_coding_url():
     """Plain OpenAI client pointed at api.kimi.com/coding gets rewrapped."""
     from agent.auxiliary_client import _maybe_wrap_anthropic, AnthropicAuxiliaryClient
+    from agent.plugin_registries import registries
 
     plain_client = MagicMock(name="plain_openai")
     fake_anthropic = MagicMock(name="anthropic_sdk_client")
 
-    with patch(
-        "agent.anthropic_adapter.build_anthropic_client",
-        return_value=fake_anthropic,
-    ):
+    with patch.dict(registries._provider_services, {"anthropic": {
+        "build_anthropic_client": MagicMock(return_value=fake_anthropic),
+        "resolve_anthropic_token": MagicMock(return_value="sk-test"),
+        "_is_oauth_token": lambda k: False,
+        "build_anthropic_kwargs": MagicMock(return_value={}),
+    }}):
         result = _maybe_wrap_anthropic(
             plain_client, "kimi-for-coding", "sk-kimi-test",
             "https://api.kimi.com/coding", api_mode=None,
@@ -79,14 +82,17 @@ def test_maybe_wrap_anthropic_rewraps_kimi_coding_url():
 def test_maybe_wrap_anthropic_rewraps_slash_anthropic_url():
     """Plain OpenAI client pointed at any /anthropic URL gets rewrapped."""
     from agent.auxiliary_client import _maybe_wrap_anthropic, AnthropicAuxiliaryClient
+    from agent.plugin_registries import registries
 
     plain_client = MagicMock(name="plain_openai")
     fake_anthropic = MagicMock(name="anthropic_sdk_client")
 
-    with patch(
-        "agent.anthropic_adapter.build_anthropic_client",
-        return_value=fake_anthropic,
-    ):
+    with patch.dict(registries._provider_services, {"anthropic": {
+        "build_anthropic_client": MagicMock(return_value=fake_anthropic),
+        "resolve_anthropic_token": MagicMock(return_value="sk-test"),
+        "_is_oauth_token": lambda k: False,
+        "build_anthropic_kwargs": MagicMock(return_value={}),
+    }}):
         result = _maybe_wrap_anthropic(
             plain_client, "MiniMax-M2.7", "mm-key",
             "https://api.minimax.io/anthropic", api_mode=None,
@@ -126,14 +132,17 @@ def test_maybe_wrap_anthropic_respects_explicit_chat_completions():
 def test_maybe_wrap_anthropic_honors_explicit_anthropic_messages():
     """api_mode=anthropic_messages wraps even when URL wouldn't trigger."""
     from agent.auxiliary_client import _maybe_wrap_anthropic, AnthropicAuxiliaryClient
+    from agent.plugin_registries import registries
 
     plain_client = MagicMock(name="plain_openai")
     fake_anthropic = MagicMock(name="anthropic_sdk_client")
 
-    with patch(
-        "agent.anthropic_adapter.build_anthropic_client",
-        return_value=fake_anthropic,
-    ):
+    with patch.dict(registries._provider_services, {"anthropic": {
+        "build_anthropic_client": MagicMock(return_value=fake_anthropic),
+        "resolve_anthropic_token": MagicMock(return_value="sk-test"),
+        "_is_oauth_token": lambda k: False,
+        "build_anthropic_kwargs": MagicMock(return_value={}),
+    }}):
         result = _maybe_wrap_anthropic(
             plain_client, "model-name", "some-key",
             "https://opaque.internal/v1",  # URL alone wouldn't trigger
@@ -174,33 +183,23 @@ def test_maybe_wrap_anthropic_codex_client_passes_through():
 def test_maybe_wrap_anthropic_sdk_missing_falls_back():
     """ImportError on anthropic SDK returns plain client with warning."""
     from agent.auxiliary_client import _maybe_wrap_anthropic, AnthropicAuxiliaryClient
+    from agent.plugin_registries import registries
 
     plain_client = MagicMock(name="plain_openai")
 
     def _raise_import(*args, **kwargs):
         raise ImportError("no anthropic SDK")
 
-    with patch(
-        "agent.anthropic_adapter.build_anthropic_client",
-        side_effect=_raise_import,
-    ):
-        # The ImportError is caught on the `from ... import` line inside
-        # _maybe_wrap_anthropic, which runs before build_anthropic_client is
-        # called. To exercise the ImportError path we need to patch the
-        # module lookup itself.
-        import sys as _sys
-        saved = _sys.modules.get("agent.anthropic_adapter")
-        _sys.modules["agent.anthropic_adapter"] = None  # force ImportError
-        try:
-            result = _maybe_wrap_anthropic(
-                plain_client, "kimi-for-coding", "sk-kimi-test",
-                "https://api.kimi.com/coding", api_mode=None,
-            )
-        finally:
-            if saved is not None:
-                _sys.modules["agent.anthropic_adapter"] = saved
-            else:
-                _sys.modules.pop("agent.anthropic_adapter", None)
+    # Mock at the registry boundary — simulate SDK missing by making
+    # build_anthropic_client raise ImportError when called.
+    with patch.dict(registries._provider_services, {
+        "anthropic": {**registries._provider_services.get("anthropic", {}),
+                      "build_anthropic_client": _raise_import}
+    }):
+        result = _maybe_wrap_anthropic(
+            plain_client, "kimi-for-coding", "sk-kimi-test",
+            "https://api.kimi.com/coding", api_mode=None,
+        )
 
     assert result is plain_client
     assert not isinstance(result, AnthropicAuxiliaryClient)
@@ -218,16 +217,27 @@ def test_resolve_provider_client_kimi_coding_wraps_anthropic(monkeypatch, tmp_pa
     generation 404s on every Kimi Coding Plan user after the "main model
     for every user" aux design shipped.
     """
+    from unittest.mock import MagicMock, patch
     from agent.auxiliary_client import (
         resolve_provider_client,
         AnthropicAuxiliaryClient,
     )
+    from agent.plugin_registries import registries
 
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     # sk-kimi- prefix triggers /coding endpoint auto-detection
-    monkeypatch.setenv("KIMI_API_KEY", "sk-kimi-faketesttoken123")
+    monkeypatch.setenv("KIMI_API_KEY", "sk-kim...n123")
 
-    client, model = resolve_provider_client("kimi-coding", "kimi-for-coding")
+    mock_client = MagicMock()
+    with patch.dict(registries._provider_services, {"anthropic": {
+        **registries._provider_services.get("anthropic", {}),
+        "build_anthropic_client": MagicMock(return_value=mock_client),
+        "resolve_anthropic_token": MagicMock(return_value="sk-test"),
+        "_is_oauth_token": lambda k: False,
+        "build_anthropic_kwargs": MagicMock(return_value={}),
+    }}):
+        client, model = resolve_provider_client("kimi-coding", "kimi-for-coding")
+
     assert client is not None, "Should resolve a client"
     assert isinstance(client, AnthropicAuxiliaryClient), (
         "Kimi Coding Plan endpoint (api.kimi.com/coding) speaks Anthropic "

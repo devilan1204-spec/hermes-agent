@@ -1545,8 +1545,11 @@ def get_model_context_length(
         and base_url_host_matches(base_url, "amazonaws.com")
     ):
         try:
-            from agent.bedrock_adapter import get_bedrock_context_length
-            return get_bedrock_context_length(model)
+            from agent.plugin_registries import registries
+            _bedrock = registries.get_provider_namespace("bedrock")
+            get_bedrock_context_length = _bedrock.get("get_bedrock_context_length")
+            if get_bedrock_context_length is not None:
+                return get_bedrock_context_length(model)
         except ImportError:
             pass  # boto3 not installed — fall through to generic resolution
 

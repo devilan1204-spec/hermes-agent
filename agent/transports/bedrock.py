@@ -1,6 +1,6 @@
 """AWS Bedrock Converse API transport.
 
-Delegates to the existing adapter functions in agent/bedrock_adapter.py.
+Delegates to the existing adapter functions in hermes_agent_bedrock.
 Bedrock uses its own boto3 client (not the OpenAI SDK), so the transport
 owns format conversion and normalization, while client construction and
 boto3 calls stay on AIAgent.
@@ -21,13 +21,19 @@ class BedrockTransport(ProviderTransport):
 
     def convert_messages(self, messages: List[Dict[str, Any]], **kwargs) -> Any:
         """Convert OpenAI messages to Bedrock Converse format."""
-        from agent.bedrock_adapter import convert_messages_to_converse
-        return convert_messages_to_converse(messages)
+        from agent.plugin_registries import registries
+        _fn = registries.get_provider_service("bedrock", "convert_messages_to_converse")
+        if _fn is None:
+            raise ImportError("bedrock plugin not registered")
+        return _fn(messages)
 
     def convert_tools(self, tools: List[Dict[str, Any]]) -> Any:
         """Convert OpenAI tool schemas to Bedrock Converse toolConfig."""
-        from agent.bedrock_adapter import convert_tools_to_converse
-        return convert_tools_to_converse(tools)
+        from agent.plugin_registries import registries
+        _fn = registries.get_provider_service("bedrock", "convert_tools_to_converse")
+        if _fn is None:
+            raise ImportError("bedrock plugin not registered")
+        return _fn(tools)
 
     def build_kwargs(
         self,
@@ -46,12 +52,15 @@ class BedrockTransport(ProviderTransport):
             guardrail_config: dict | None — Bedrock guardrails
             region: str — AWS region (default 'us-east-1')
         """
-        from agent.bedrock_adapter import build_converse_kwargs
+        from agent.plugin_registries import registries
+        _fn = registries.get_provider_service("bedrock", "build_converse_kwargs")
+        if _fn is None:
+            raise ImportError("bedrock plugin not registered")
 
         region = params.get("region", "us-east-1")
         guardrail = params.get("guardrail_config")
 
-        kwargs = build_converse_kwargs(
+        kwargs = _fn(
             model=model,
             messages=messages,
             tools=tools,
@@ -71,7 +80,10 @@ class BedrockTransport(ProviderTransport):
         1. Raw boto3 dict (from direct converse() calls)
         2. Already-normalized SimpleNamespace with .choices (from dispatch site)
         """
-        from agent.bedrock_adapter import normalize_converse_response
+        from agent.plugin_registries import registries
+        normalize_converse_response = registries.get_provider_service("bedrock", "normalize_converse_response")
+        if normalize_converse_response is None:
+            raise ImportError("bedrock plugin not registered")
 
         # Normalize to OpenAI-compatible SimpleNamespace
         if hasattr(response, "choices") and response.choices:

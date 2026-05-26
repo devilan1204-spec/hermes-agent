@@ -27,7 +27,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from agent.anthropic_adapter import _is_oauth_token
+from agent.plugin_registries import registries as _registries
 from agent.auxiliary_client import set_runtime_main
 from agent.codex_responses_adapter import _summarize_user_message_for_log
 from agent.display import KawaiiSpinner
@@ -2238,8 +2238,8 @@ def run_conversation(
                     and not anthropic_auth_retry_attempted
                 ):
                     anthropic_auth_retry_attempted = True
-                    from agent.anthropic_adapter import _is_oauth_token
-                    from agent.azure_identity_adapter import is_token_provider
+                    _is_oauth_token = _registries.get_provider_service("anthropic", "_is_oauth_token")
+                    is_token_provider = _registries.get_provider_service("azure", "is_token_provider")
                     if agent._try_refresh_anthropic_client_credentials():
                         print(f"{agent.log_prefix}🔐 Anthropic credentials refreshed after 401. Retrying request...")
                         continue
@@ -2256,7 +2256,7 @@ def run_conversation(
                         print(f"{agent.log_prefix}   Run `hermes doctor` for credential-chain diagnostics, or")
                         print(f"{agent.log_prefix}   `az login` if your developer session expired.")
                     else:
-                        auth_method = "Bearer (OAuth/setup-token)" if _is_oauth_token(key) else "x-api-key (API key)"
+                        auth_method = "Bearer (OAuth/setup-token)" if (_is_oauth_token is not None and _is_oauth_token(key)) else "x-api-key (API key)"
                         print(f"{agent.log_prefix}   Auth method: {auth_method}")
                         print(f"{agent.log_prefix}   Token prefix: {key[:12]}..." if isinstance(key, str) and len(key) > 12 else f"{agent.log_prefix}   Token: (empty or short)")
                     print(f"{agent.log_prefix}   Troubleshooting:")

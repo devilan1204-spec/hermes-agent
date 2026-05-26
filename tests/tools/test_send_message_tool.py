@@ -574,7 +574,7 @@ class TestSendToPlatformChunking:
     def test_slack_messages_are_formatted_before_send(self, monkeypatch):
         _ensure_slack_mock(monkeypatch)
 
-        import gateway.platforms.slack as slack_mod
+        import hermes_agent_slack as slack_mod
 
         monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
         send = AsyncMock(return_value={"success": True, "message_id": "1"})
@@ -599,7 +599,7 @@ class TestSendToPlatformChunking:
     def test_slack_bold_italic_formatted_before_send(self, monkeypatch):
         """Bold+italic ***text*** survives tool-layer formatting."""
         _ensure_slack_mock(monkeypatch)
-        import gateway.platforms.slack as slack_mod
+        import hermes_agent_slack as slack_mod
 
         monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
         send = AsyncMock(return_value={"success": True, "message_id": "1"})
@@ -619,7 +619,7 @@ class TestSendToPlatformChunking:
     def test_slack_blockquote_formatted_before_send(self, monkeypatch):
         """Blockquote '>' markers must survive formatting (not escaped to '&gt;')."""
         _ensure_slack_mock(monkeypatch)
-        import gateway.platforms.slack as slack_mod
+        import hermes_agent_slack as slack_mod
 
         monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
         send = AsyncMock(return_value={"success": True, "message_id": "1"})
@@ -641,7 +641,7 @@ class TestSendToPlatformChunking:
     def test_slack_pre_escaped_entities_not_double_escaped(self, monkeypatch):
         """Pre-escaped HTML entities survive tool-layer formatting without double-escaping."""
         _ensure_slack_mock(monkeypatch)
-        import gateway.platforms.slack as slack_mod
+        import hermes_agent_slack as slack_mod
         monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
         send = AsyncMock(return_value={"success": True, "message_id": "1"})
         with patch("tools.send_message_tool._send_slack", send):
@@ -662,7 +662,7 @@ class TestSendToPlatformChunking:
     def test_slack_url_with_parens_formatted_before_send(self, monkeypatch):
         """Wikipedia-style URL with parens survives tool-layer formatting."""
         _ensure_slack_mock(monkeypatch)
-        import gateway.platforms.slack as slack_mod
+        import hermes_agent_slack as slack_mod
         monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
         send = AsyncMock(return_value={"success": True, "message_id": "1"})
         with patch("tools.send_message_tool._send_slack", send):

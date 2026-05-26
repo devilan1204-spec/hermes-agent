@@ -6235,8 +6235,10 @@ class HermesCLI:
         
         # ``self.api_key`` may be a callable (Azure Foundry Entra ID bearer
         # provider). Never invoke it; just identify the auth surface.
-        from agent.azure_identity_adapter import is_token_provider
-        if is_token_provider(self.api_key):
+        from agent.plugin_registries import registries
+        _azure_ns = registries.get_provider_namespace("azure")
+        is_token_provider = _azure_ns.get("is_token_provider")
+        if is_token_provider and is_token_provider(self.api_key):
             api_key_display = "Microsoft Entra ID"
         elif isinstance(self.api_key, str) and len(self.api_key) > 12:
             api_key_display = f"{self.api_key[:8]}...{self.api_key[-4:]}"
@@ -10853,7 +10855,14 @@ class HermesCLI:
             return
         self._voice_tts_done.clear()
         try:
-            from tools.tts_tool import text_to_speech_tool
+            from agent.plugin_registries import registries
+            _tts_provider = registries.get_tool_provider("tts")
+            if _tts_provider is None:
+                raise ImportError("tts tool provider not registered")
+            text_to_speech_tool = _tts_provider.tool_functions.get("text_to_speech_tool")
+            check_tts_requirements = _tts_provider.check_fn
+            if text_to_speech_tool is None:
+                raise ImportError("text_to_speech_tool not found in tts provider")
             from tools.voice_mode import play_audio_file
 
             # Strip markdown and non-speech content for cleaner TTS
@@ -11036,8 +11045,10 @@ class HermesCLI:
         status = "enabled" if self._voice_tts else "disabled"
 
         if self._voice_tts:
-            from tools.tts_tool import check_tts_requirements
-            if not check_tts_requirements():
+            from agent.plugin_registries import registries
+            _tts_provider = registries.get_tool_provider("tts")
+            check_tts_requirements = _tts_provider.check_fn if _tts_provider else None
+            if check_tts_requirements and not check_tts_requirements():
                 _cprint(f"{_DIM}Warning: No TTS provider available. Install edge-tts or set API keys.{_RST}")
 
         _cprint(f"{_ACCENT}Voice TTS {status}.{_RST}")
@@ -11659,13 +11670,17 @@ class HermesCLI:
 
             if self._voice_tts:
                 try:
-                    from tools.tts_tool import (
-                        _load_tts_config as _load_tts_cfg,
-                        _get_provider as _get_prov,
-                        _import_elevenlabs,
-                        _import_sounddevice,
-                        stream_tts_to_speaker,
-                    )
+                    from agent.plugin_registries import registries
+                    _tts_provider = registries.get_tool_provider("tts")
+                    if _tts_provider is None:
+                        raise ImportError("tts tool provider not registered")
+                    _load_tts_cfg = _tts_provider.config_functions.get("_load_tts_config")
+                    _get_prov = _tts_provider.config_functions.get("_get_provider")
+                    _import_elevenlabs = _tts_provider.config_functions.get("_import_elevenlabs")
+                    _import_sounddevice = _tts_provider.config_functions.get("_import_sounddevice")
+                    stream_tts_to_speaker = _tts_provider.tool_functions.get("stream_tts_to_speaker")
+                    if not all([_load_tts_cfg, _get_prov, stream_tts_to_speaker]):
+                        raise ImportError("streaming TTS functions not found in tts provider")
                     _tts_cfg = _load_tts_cfg()
                     if _get_prov(_tts_cfg) == "elevenlabs":
                         # Verify both ElevenLabs SDK and audio output are available

@@ -971,7 +971,8 @@ class _AnthropicCompletionsAdapter:
         self._is_oauth = is_oauth
 
     def create(self, **kwargs) -> Any:
-        from agent.anthropic_adapter import build_anthropic_kwargs
+        from agent.plugin_registries import registries
+        build_anthropic_kwargs = registries.get_provider_service("anthropic", "build_anthropic_kwargs")
         from agent.transports import get_transport
 
         messages = kwargs.get("messages", [])
@@ -1011,8 +1012,8 @@ class _AnthropicCompletionsAdapter:
         # temperature for models that still accept it. build_anthropic_kwargs
         # additionally strips these keys as a safety net — keep both layers.
         if temperature is not None:
-            from agent.anthropic_adapter import _forbids_sampling_params
-            if not _forbids_sampling_params(model):
+            _forbids_sampling_params = registries.get_provider_service("anthropic", "_forbids_sampling_params")
+            if _forbids_sampling_params is None or not _forbids_sampling_params(model):
                 anthropic_kwargs["temperature"] = temperature
 
         response = self._client.messages.create(**anthropic_kwargs)
@@ -1182,7 +1183,8 @@ def _maybe_wrap_anthropic(
         return client_obj
 
     try:
-        from agent.anthropic_adapter import build_anthropic_client
+        from agent.plugin_registries import registries
+        build_anthropic_client = registries.get_provider_service("anthropic", "build_anthropic_client")
     except ImportError:
         logger.warning(
             "Endpoint %s speaks Anthropic Messages but the anthropic SDK is "
@@ -1824,7 +1826,11 @@ def _try_custom_endpoint() -> Tuple[Optional[Any], Optional[str]]:
         # LiteLLM proxies, etc.).  Must NEVER be treated as OAuth —
         # Anthropic OAuth claims only apply to api.anthropic.com.
         try:
-            from agent.anthropic_adapter import build_anthropic_client
+            from agent.plugin_registries import registries
+            _anthropic = registries.get_provider_namespace("anthropic")
+            build_anthropic_client = _anthropic.get("build_anthropic_client")
+            if build_anthropic_client is None:
+                raise ImportError("anthropic provider not registered")
             real_client = build_anthropic_client(custom_key, custom_base)
         except ImportError:
             logger.warning(
@@ -2027,10 +2033,28 @@ def _try_azure_foundry(
 
 
 def _try_anthropic(explicit_api_key: str = None) -> Tuple[Optional[Any], Optional[str]]:
-    try:
-        from agent.anthropic_adapter import build_anthropic_client, resolve_anthropic_token
-    except ImportError:
-        return None, None
+    from agent.plugin_registries import registries
+    _anthropic = registries.get_provider_namespace("anthropic")
+    build_anthropic_client = _anthropic.get("build_anthropic_client")
+    resolve_anthropic_token = _anthropic.get("resolve_anthropic_token")
+    if build_anthropic_client is None or resolve_anthropic_token is None:
+        # Registry empty (e.g. unit tests without plugin loading) — use module directly
+        # so that mock.patch("hermes_agent_anthropic.adapter.X") still intercepts calls.
+        try:
+            import hermes_agent_anthropic.adapter as _ant_mod  # type: ignore[import]
+
+            class _ModuleNamespace:
+                """Proxy that delegates .get() to module attribute lookup (live, patchable)."""
+                def get(self, name: str, default=None):
+                    return getattr(_ant_mod, name, default)
+
+            _anthropic = _ModuleNamespace()
+            build_anthropic_client = _anthropic.get("build_anthropic_client")
+            resolve_anthropic_token = _anthropic.get("resolve_anthropic_token")
+            if build_anthropic_client is None or resolve_anthropic_token is None:
+                return None, None
+        except ImportError:
+            return None, None
 
     pool_present, entry = _select_pool_entry("anthropic")
     if pool_present:
@@ -2060,8 +2084,8 @@ def _try_anthropic(explicit_api_key: str = None) -> Tuple[Optional[Any], Optiona
     except Exception:
         pass
 
-    from agent.anthropic_adapter import _is_oauth_token
-    is_oauth = _is_oauth_token(token)
+    _is_oauth_token = _anthropic.get("_is_oauth_token")
+    is_oauth = _is_oauth_token(token) if _is_oauth_token else False
     model = _get_aux_model_for_provider("anthropic") or "claude-haiku-4-5-20251001"
     logger.debug("Auxiliary client: Anthropic native (%s) at %s (oauth=%s)", model, base_url, is_oauth)
     try:
@@ -2715,12 +2739,19 @@ def _refresh_provider_credentials(provider: str) -> bool:
             _evict_cached_clients(normalized)
             return True
         if normalized == "anthropic":
-            from agent.anthropic_adapter import read_claude_code_credentials, _refresh_oauth_token, resolve_anthropic_token
+            from agent.plugin_registries import registries
+            _anthropic = registries.get_provider_namespace("anthropic")
+            read_claude_code_credentials = _anthropic.get("read_claude_code_credentials")
+            _refresh_oauth_token = _anthropic.get("_refresh_oauth_token")
+            resolve_anthropic_token = _anthropic.get("resolve_anthropic_token")
+            if read_claude_code_credentials is None:
+                return False
 
             creds = read_claude_code_credentials()
-            token = _refresh_oauth_token(creds) if isinstance(creds, dict) and creds.get("refreshToken") else None
+            token = _refresh_oauth_token(creds) if isinstance(creds, dict) and creds.get("refreshToken") and _refresh_oauth_token else None
             if not str(token or "").strip():
-                token = resolve_anthropic_token()
+                if resolve_anthropic_token is not None:
+                    token = resolve_anthropic_token()
             if not str(token or "").strip():
                 return False
             _evict_cached_clients(normalized)
@@ -3459,7 +3490,11 @@ def resolve_provider_client(
                 # branch in _try_custom_endpoint(). See #15033.
                 if entry_api_mode == "anthropic_messages":
                     try:
-                        from agent.anthropic_adapter import build_anthropic_client
+                        from agent.plugin_registries import registries
+                        _anthropic = registries.get_provider_namespace("anthropic")
+                        build_anthropic_client = _anthropic.get("build_anthropic_client")
+                        if build_anthropic_client is None:
+                            raise ImportError("anthropic provider not registered")
                         real_client = build_anthropic_client(custom_key, custom_base)
                     except ImportError:
                         logger.warning(
@@ -3697,8 +3732,14 @@ def resolve_provider_client(
         # AWS SDK providers (Bedrock) — use the Anthropic Bedrock client via
         # boto3's credential chain (IAM roles, SSO, env vars, instance metadata).
         try:
-            from agent.bedrock_adapter import has_aws_credentials, resolve_bedrock_region
-            from agent.anthropic_adapter import build_anthropic_bedrock_client
+            from agent.plugin_registries import registries
+            _bedrock = registries.get_provider_namespace("bedrock")
+            _anthropic = registries.get_provider_namespace("anthropic")
+            has_aws_credentials = _bedrock.get("has_aws_credentials")
+            resolve_bedrock_region = _bedrock.get("resolve_bedrock_region")
+            build_anthropic_bedrock_client = _anthropic.get("build_anthropic_bedrock_client")
+            if has_aws_credentials is None or resolve_bedrock_region is None or build_anthropic_bedrock_client is None:
+                raise ImportError("bedrock or anthropic provider not registered")
         except ImportError:
             logger.warning("resolve_provider_client: bedrock requested but "
                            "boto3 or anthropic SDK not installed")
@@ -4670,8 +4711,10 @@ def _build_call_kwargs(
     # structured-JSON extraction) don't 400 the moment
     # the aux model is flipped to 4.7.
     if temperature is not None:
-        from agent.anthropic_adapter import _forbids_sampling_params
-        if _forbids_sampling_params(model):
+        from agent.plugin_registries import registries
+        _anthropic = registries.get_provider_namespace("anthropic")
+        _forbids_sampling_params = _anthropic.get("_forbids_sampling_params")
+        if _forbids_sampling_params is not None and _forbids_sampling_params(model):
             temperature = None
 
     if temperature is not None:

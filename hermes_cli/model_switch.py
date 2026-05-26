@@ -1151,8 +1151,12 @@ def list_authenticated_providers(
         if slug_norm != current_norm:
             return False
         try:
-            from agent.bedrock_adapter import has_aws_credentials
-            return bool(has_aws_credentials())
+            from agent.plugin_registries import registries
+            _bedrock_ns = registries.get_provider_namespace("bedrock")
+            has_aws_credentials = _bedrock_ns.get("has_aws_credentials")
+            if has_aws_credentials:
+                return bool(has_aws_credentials())
+            return False
         except Exception:
             return False
 
@@ -1332,10 +1336,12 @@ def list_authenticated_providers(
         # configured.
         if not has_creds and hermes_slug == "anthropic":
             try:
-                from agent.anthropic_adapter import (
-                    read_claude_code_credentials,
-                    read_hermes_oauth_credentials,
-                )
+                from agent.plugin_registries import registries
+                _anthropic_ns = registries.get_provider_namespace("anthropic")
+                read_claude_code_credentials = _anthropic_ns.get("read_claude_code_credentials")
+                read_hermes_oauth_credentials = _anthropic_ns.get("read_hermes_oauth_credentials")
+                if read_claude_code_credentials is None or read_hermes_oauth_credentials is None:
+                    raise ImportError("anthropic credential readers not registered")
                 hermes_creds = read_hermes_oauth_credentials()
                 cc_creds = read_claude_code_credentials()
                 if (hermes_creds and hermes_creds.get("accessToken")) or \
@@ -1359,7 +1365,11 @@ def list_authenticated_providers(
         # reflects the active region (eu.*, ap.*) not the static us.* list.
         elif overlay.auth_type == "aws_sdk":
             try:
-                from agent.bedrock_adapter import bedrock_model_ids_or_none
+                from agent.plugin_registries import registries
+                _bedrock_ns = registries.get_provider_namespace("bedrock")
+                bedrock_model_ids_or_none = _bedrock_ns.get("bedrock_model_ids_or_none")
+                if bedrock_model_ids_or_none is None:
+                    raise ImportError("bedrock_model_ids_or_none not found")
                 _ids = bedrock_model_ids_or_none()
                 model_ids = _ids if _ids is not None else (curated.get(hermes_slug, []) or curated.get(pid, []))
             except Exception:
@@ -1436,7 +1446,11 @@ def list_authenticated_providers(
         # region (eu.*, us.*, ap.*) instead of the hardcoded us.* static list.
         if _cp_config and getattr(_cp_config, "auth_type", "") == "aws_sdk":
             try:
-                from agent.bedrock_adapter import bedrock_model_ids_or_none
+                from agent.plugin_registries import registries
+                _bedrock_ns = registries.get_provider_namespace("bedrock")
+                bedrock_model_ids_or_none = _bedrock_ns.get("bedrock_model_ids_or_none")
+                if bedrock_model_ids_or_none is None:
+                    raise ImportError("bedrock_model_ids_or_none not found")
                 _ids = bedrock_model_ids_or_none()
                 _cp_model_ids = _ids if _ids is not None else curated.get(_cp.slug, [])
             except Exception:

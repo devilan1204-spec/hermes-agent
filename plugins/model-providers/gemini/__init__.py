@@ -70,3 +70,9 @@ google_gemini_cli = GeminiProfile(
 
 register_provider(gemini)
 register_provider(google_gemini_cli)
+
+
+def register(ctx):
+    """No-op — this provider has no workspace package yet."""
+    pass
+

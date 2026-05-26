@@ -549,8 +549,12 @@ def _interactive_auth() -> None:
 
     # Show AWS Bedrock credential status (not in the pool — uses boto3 chain)
     try:
-        from agent.bedrock_adapter import has_aws_credentials, resolve_aws_auth_env_var, resolve_bedrock_region
-        if has_aws_credentials():
+        from agent.plugin_registries import registries
+        _bedrock = registries.get_provider_namespace("bedrock")
+        has_aws_credentials = _bedrock.get("has_aws_credentials")
+        resolve_aws_auth_env_var = _bedrock.get("resolve_aws_auth_env_var")
+        resolve_bedrock_region = _bedrock.get("resolve_bedrock_region")
+        if has_aws_credentials and has_aws_credentials():
             auth_source = resolve_aws_auth_env_var() or "unknown"
             region = resolve_bedrock_region()
             print(f"bedrock (AWS SDK credential chain):")
@@ -577,12 +581,12 @@ def _interactive_auth() -> None:
             _cfg_provider = str(_model_cfg.get("provider") or "").strip().lower()
             _cfg_auth_mode = str(_model_cfg.get("auth_mode") or "").strip().lower()
             if _cfg_provider == "azure-foundry" and _cfg_auth_mode == "entra_id":
-                from agent.azure_identity_adapter import (
-                    EntraIdentityConfig,
-                    SCOPE_AI_AZURE_DEFAULT,
-                    describe_active_credential,
-                    has_azure_identity_installed,
-                )
+                from agent.plugin_registries import registries
+                _azure = registries.get_provider_namespace("azure")
+                EntraIdentityConfig = _azure.get("EntraIdentityConfig")
+                SCOPE_AI_AZURE_DEFAULT = _azure.get("SCOPE_AI_AZURE_DEFAULT")
+                describe_active_credential = _azure.get("describe_active_credential")
+                has_azure_identity_installed = _azure.get("has_azure_identity_installed")
                 _base_url = str(_model_cfg.get("base_url") or "").strip()
                 _entra = _model_cfg.get("entra") or {}
                 if not isinstance(_entra, dict):

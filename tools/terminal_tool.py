@@ -887,10 +887,21 @@ from tools.environments.local import LocalEnvironment as _LocalEnvironment
 from tools.environments.singularity import SingularityEnvironment as _SingularityEnvironment
 from tools.environments.ssh import SSHEnvironment as _SSHEnvironment
 from tools.environments.docker import DockerEnvironment as _DockerEnvironment
-from tools.environments.modal import ModalEnvironment as _ModalEnvironment
+# ModalEnvironment is resolved lazily from the plugin registry (see
+# _get_modal_environment_class below) instead of a module-level import
+# from hermes_agent_modal.
 from tools.environments.managed_modal import ManagedModalEnvironment as _ManagedModalEnvironment
 from tools.managed_tool_gateway import is_managed_tool_gateway_ready
 import sys
+
+
+def _get_modal_environment_class():
+    """Return ModalEnvironment from the plugin registry, or None."""
+    from agent.plugin_registries import registries
+    _modal = registries.get_tool_provider("modal")
+    if _modal:
+        return _modal.environment_classes.get("ModalEnvironment")
+    return None
 
 
 # Tool description for LLM
@@ -1205,6 +1216,12 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
                 )
             raise ValueError(message)
 
+        _ModalEnvironment = _get_modal_environment_class()
+        if _ModalEnvironment is None:
+            raise ValueError(
+                "Modal backend selected but the hermes_agent_modal plugin is not loaded. "
+                "Ensure the modal plugin is installed and enabled."
+            )
         return _ModalEnvironment(
             image=image, cwd=cwd, timeout=timeout,
             modal_sandbox_kwargs=sandbox_kwargs,
@@ -1213,7 +1230,14 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
     
     elif env_type == "daytona":
         # Lazy import so daytona SDK is only required when backend is selected.
-        from tools.environments.daytona import DaytonaEnvironment as _DaytonaEnvironment
+        from agent.plugin_registries import registries
+        _daytona = registries.get_tool_provider("daytona")
+        _DaytonaEnvironment = _daytona.environment_classes.get("DaytonaEnvironment") if _daytona else None
+        if _DaytonaEnvironment is None:
+            raise ValueError(
+                "Daytona backend selected but the hermes_agent_daytona plugin is not loaded. "
+                "Ensure the daytona plugin is installed and enabled."
+            )
         return _DaytonaEnvironment(
             image=image, cwd=cwd, timeout=timeout,
             cpu=int(cpu), memory=memory, disk=disk,
@@ -1221,9 +1245,14 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
         )
 
     elif env_type == "vercel_sandbox":
-        from tools.environments.vercel_sandbox import (
-            VercelSandboxEnvironment as _VercelSandboxEnvironment,
-        )
+        from agent.plugin_registries import registries
+        _vercel = registries.get_tool_provider("vercel")
+        _VercelSandboxEnvironment = _vercel.environment_classes.get("VercelSandboxEnvironment") if _vercel else None
+        if _VercelSandboxEnvironment is None:
+            raise ValueError(
+                "Vercel Sandbox backend selected but the hermes_agent_vercel plugin is not loaded. "
+                "Ensure the vercel plugin is installed and enabled."
+            )
         return _VercelSandboxEnvironment(
             runtime=cc.get("vercel_runtime") or None,
             cwd=cwd,

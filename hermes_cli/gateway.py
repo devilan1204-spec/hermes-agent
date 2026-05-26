@@ -4370,7 +4370,9 @@ def _setup_feishu():
     if method_idx == 0:
         # ── QR scan-to-create ──
         try:
-            from gateway.platforms.feishu import qr_register
+            from agent.plugin_registries import registries
+            _feishu_entry = registries.get_platform("feishu")
+            qr_register = _feishu_entry.helper_functions.get("qr_register") if _feishu_entry else None
         except Exception as exc:
             print_error(f"  Feishu / Lark onboard import failed: {exc}")
             qr_register = None
@@ -4411,8 +4413,13 @@ def _setup_feishu():
         # Try to probe the bot with manual credentials
         bot_name = None
         try:
-            from gateway.platforms.feishu import probe_bot
-            bot_info = probe_bot(app_id, app_secret, domain)
+            from agent.plugin_registries import registries
+            _feishu_entry = registries.get_platform("feishu")
+            probe_bot = _feishu_entry.helper_functions.get("probe_bot") if _feishu_entry else None
+            if probe_bot:
+                bot_info = probe_bot(app_id, app_secret, domain)
+            else:
+                bot_info = None
             if bot_info:
                 bot_name = bot_info.get("bot_name")
                 print_success(f"  Credentials verified — bot: {bot_name or 'unnamed'}")

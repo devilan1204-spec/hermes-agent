@@ -1,6 +1,6 @@
 """Anthropic Messages API transport.
 
-Delegates to the existing adapter functions in agent/anthropic_adapter.py.
+Delegates to the existing adapter functions in hermes_agent_anthropic.
 This transport owns format conversion and normalization — NOT client lifecycle.
 """
 
@@ -13,7 +13,7 @@ from agent.transports.types import NormalizedResponse
 class AnthropicTransport(ProviderTransport):
     """Transport for api_mode='anthropic_messages'.
 
-    Wraps the existing functions in anthropic_adapter.py behind the
+    Wraps the existing functions in hermes_agent_anthropic behind the
     ProviderTransport ABC.  Each method delegates — no logic is duplicated.
     """
 
@@ -27,14 +27,16 @@ class AnthropicTransport(ProviderTransport):
         kwargs:
             base_url: Optional[str] — affects thinking signature handling.
         """
-        from agent.anthropic_adapter import convert_messages_to_anthropic
+        from agent.plugin_registries import registries
+        convert_messages_to_anthropic = registries.get_provider_service("anthropic", "convert_messages_to_anthropic")
 
         base_url = kwargs.get("base_url")
         return convert_messages_to_anthropic(messages, base_url=base_url)
 
     def convert_tools(self, tools: List[Dict[str, Any]]) -> Any:
         """Convert OpenAI tool schemas to Anthropic input_schema format."""
-        from agent.anthropic_adapter import convert_tools_to_anthropic
+        from agent.plugin_registries import registries
+        convert_tools_to_anthropic = registries.get_provider_service("anthropic", "convert_tools_to_anthropic")
 
         return convert_tools_to_anthropic(tools)
 
@@ -60,7 +62,8 @@ class AnthropicTransport(ProviderTransport):
             fast_mode: bool
             drop_context_1m_beta: bool
         """
-        from agent.anthropic_adapter import build_anthropic_kwargs
+        from agent.plugin_registries import registries
+        build_anthropic_kwargs = registries.get_provider_service("anthropic", "build_anthropic_kwargs")
 
         return build_anthropic_kwargs(
             model=model,
@@ -84,7 +87,8 @@ class AnthropicTransport(ProviderTransport):
         to OpenAI finish_reason, and collects reasoning_details in provider_data.
         """
         import json
-        from agent.anthropic_adapter import _to_plain_data
+        from agent.plugin_registries import registries
+        _to_plain_data = registries.get_provider_service("anthropic", "_to_plain_data")
         from agent.transports.types import ToolCall
 
         strip_tool_prefix = kwargs.get("strip_tool_prefix", False)
@@ -100,9 +104,10 @@ class AnthropicTransport(ProviderTransport):
                 text_parts.append(block.text)
             elif block.type == "thinking":
                 reasoning_parts.append(block.thinking)
-                block_dict = _to_plain_data(block)
-                if isinstance(block_dict, dict):
-                    reasoning_details.append(block_dict)
+                if _to_plain_data is not None:
+                    block_dict = _to_plain_data(block)
+                    if isinstance(block_dict, dict):
+                        reasoning_details.append(block_dict)
             elif block.type == "tool_use":
                 name = block.name
                 if strip_tool_prefix and name.startswith(_MCP_PREFIX):

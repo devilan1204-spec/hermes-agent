@@ -1,0 +1,6 @@
+name: vercel
+version: 0.1.0
+description: Vercel Sandbox execution environment
+kind: backend
+provides_tools: ["vercel_sandbox"]
+provides_hooks: []

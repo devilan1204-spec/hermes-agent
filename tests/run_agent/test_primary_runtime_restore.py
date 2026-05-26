@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 
 from run_agent import AIAgent
+from agent.plugin_registries import registries
 
 
 def _make_tool_defs(*names: str) -> list:
@@ -91,7 +92,11 @@ class TestPrimaryRuntimeSnapshot:
             patch("run_agent.get_tool_definitions", return_value=_make_tool_defs("web_search")),
             patch("run_agent.check_toolset_requirements", return_value={}),
             patch("run_agent.OpenAI"),
-            patch("agent.anthropic_adapter.build_anthropic_client", return_value=MagicMock()),
+            patch.dict(registries._provider_services, {"anthropic": {
+                "build_anthropic_client": MagicMock(return_value=MagicMock()),
+                "resolve_anthropic_token": MagicMock(return_value=None),
+                "_is_oauth_token": MagicMock(return_value=False),
+            }}),
         ):
             agent = AIAgent(
                 api_key="sk-ant-test-12345678",
