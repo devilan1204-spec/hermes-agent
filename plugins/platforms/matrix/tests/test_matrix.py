@@ -716,10 +716,8 @@ class TestMatrixModuleImport:
                 "sys.meta_path.insert(0, _Blocker())\n"
                 "for k in list(sys.modules):\n"
                 "    if k.startswith('mautrix'): del sys.modules[k]\n"
-                "from unittest.mock import patch\n"
                 "from hermes_agent_matrix import check_matrix_requirements\n"
-                "with patch('hermes_agent_matrix.adapter._require_mautrix', side_effect=ImportError('blocked')):\n"
-                "    assert not check_matrix_requirements()\n"
+                "assert not check_matrix_requirements()\n"
                 "print('OK')\n"
             )],
             capture_output=True, text=True, timeout=10,

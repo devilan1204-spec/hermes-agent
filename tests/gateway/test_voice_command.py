@@ -1533,7 +1533,7 @@ class TestStreamTtsToSpeaker:
 
     def test_none_sentinel_flushes_buffer(self):
         """None sentinel causes remaining buffer to be spoken."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()
@@ -1551,7 +1551,7 @@ class TestStreamTtsToSpeaker:
 
     def test_stop_event_aborts_early(self):
         """Setting stop_event causes early exit."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()
@@ -1567,7 +1567,7 @@ class TestStreamTtsToSpeaker:
 
     def test_done_event_set_on_exception(self):
         """tts_done_event is set even when an exception occurs."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()
@@ -1581,7 +1581,7 @@ class TestStreamTtsToSpeaker:
 
     def test_think_blocks_stripped(self):
         """<think>...</think> content is not spoken."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()
@@ -1599,7 +1599,7 @@ class TestStreamTtsToSpeaker:
 
     def test_sentence_splitting(self):
         """Sentences are split at boundaries and spoken individually."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()
@@ -1616,7 +1616,7 @@ class TestStreamTtsToSpeaker:
 
     def test_markdown_stripped_in_speech(self):
         """Markdown formatting is removed before display/speech."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()
@@ -1632,7 +1632,7 @@ class TestStreamTtsToSpeaker:
 
     def test_duplicate_sentences_deduped(self):
         """Repeated sentences are spoken only once."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()
@@ -1650,7 +1650,7 @@ class TestStreamTtsToSpeaker:
 
     def test_no_api_key_display_only(self):
         """Without ELEVENLABS_API_KEY, display callback still works."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()
@@ -1667,7 +1667,7 @@ class TestStreamTtsToSpeaker:
 
     def test_long_buffer_flushed_on_timeout(self):
         """Buffer longer than long_flush_len is flushed on queue timeout."""
-        from hermes_agent_tts import stream_tts_to_speaker
+        from hermes_agent_tts.tts_tool import stream_tts_to_speaker
         text_q = queue.Queue()
         stop_evt = threading.Event()
         done_evt = threading.Event()

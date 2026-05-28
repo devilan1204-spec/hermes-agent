@@ -453,7 +453,8 @@ class TestTelegramAdaptiveDelay:
 
 def _make_feishu_adapter():
     """Create a minimal FeishuAdapter for testing adaptive delay."""
-    from hermes_agent_feishu import FeishuAdapter, FeishuBatchState
+    from hermes_agent_feishu import FeishuAdapter
+    from hermes_agent_feishu.adapter import FeishuBatchState
 
     config = PlatformConfig(enabled=True, token="test-token")
     adapter = object.__new__(FeishuAdapter)

@@ -260,17 +260,18 @@ class TestPackaging:
         import tomllib
         from pathlib import Path
 
-        content = (Path(__file__).parent.parent.parent / "pyproject.toml").read_text()
+        content = (Path(__file__).parent.parent.parent.parent.parent / "pyproject.toml").read_text()
         return tomllib.loads(content)["project"]["optional-dependencies"]
 
     def test_bedrock_extra_exists(self):
         extras = self._optional_dependencies()
         assert "bedrock" in extras
-        assert any(dep.startswith("boto3==") for dep in extras["bedrock"])
+        assert any("hermes-agent-bedrock" in dep for dep in extras["bedrock"])
 
     def test_bedrock_is_not_eager_installed_by_all_extra(self):
         extras = self._optional_dependencies()
-        assert "hermes-agent[bedrock]" not in extras["all"]
+        # bedrock is now a lightweight plugin package; it IS in "all"
+        assert "hermes-agent[bedrock]" in extras["all"]
 
 
 # ---------------------------------------------------------------------------
@@ -360,14 +361,14 @@ class TestBedrockModelNameNormalization:
 
     def test_global_anthropic_inference_profile_preserved(self):
         """The reporter's exact model ID."""
-        from hermes_agent_anthropic import normalize_model_name
+        from agent.anthropic_format import normalize_model_name
         assert normalize_model_name(
             "global.anthropic.claude-opus-4-7", preserve_dots=True
         ) == "global.anthropic.claude-opus-4-7"
 
     def test_us_anthropic_dated_inference_profile_preserved(self):
         """Regional + dated Sonnet inference profile."""
-        from hermes_agent_anthropic import normalize_model_name
+        from agent.anthropic_format import normalize_model_name
         assert normalize_model_name(
             "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
             preserve_dots=True,
@@ -375,7 +376,7 @@ class TestBedrockModelNameNormalization:
 
     def test_apac_anthropic_haiku_inference_profile_preserved(self):
         """APAC inference profile — same structural-dot shape."""
-        from hermes_agent_anthropic import normalize_model_name
+        from agent.anthropic_format import normalize_model_name
         assert normalize_model_name(
             "apac.anthropic.claude-haiku-4-5", preserve_dots=True
         ) == "apac.anthropic.claude-haiku-4-5"
@@ -385,7 +386,7 @@ class TestBedrockModelNameNormalization:
         always returned unmangled -- ``preserve_dots`` is irrelevant for
         these IDs because the dots are namespace separators, not version
         separators.  Regression for #12295."""
-        from hermes_agent_anthropic import normalize_model_name
+        from agent.anthropic_format import normalize_model_name
         assert normalize_model_name(
             "global.anthropic.claude-opus-4-7", preserve_dots=False
         ) == "global.anthropic.claude-opus-4-7"
@@ -395,7 +396,7 @@ class TestBedrockModelNameNormalization:
         (e.g. ``anthropic.claude-3-5-sonnet-20241022-v2:0``) use dots as
         vendor separators and must also survive intact under
         ``preserve_dots=True``."""
-        from hermes_agent_anthropic import normalize_model_name
+        from agent.anthropic_format import normalize_model_name
         assert normalize_model_name(
             "anthropic.claude-3-5-sonnet-20241022-v2:0",
             preserve_dots=True,
@@ -410,7 +411,7 @@ class TestBedrockBuildAnthropicKwargsEndToEnd:
     regression for the reporter's HTTP 400."""
 
     def test_bedrock_inference_profile_survives_build_kwargs(self):
-        from hermes_agent_anthropic import build_anthropic_kwargs
+        from agent.anthropic_format import build_anthropic_kwargs
         kwargs = build_anthropic_kwargs(
             model="global.anthropic.claude-opus-4-7",
             messages=[{"role": "user", "content": "hi"}],
@@ -429,7 +430,7 @@ class TestBedrockBuildAnthropicKwargsEndToEnd:
         even without ``preserve_dots=True`` -- the prefix auto-detection
         in ``normalize_model_name`` is the load-bearing piece.
         Regression for #12295."""
-        from hermes_agent_anthropic import build_anthropic_kwargs
+        from agent.anthropic_format import build_anthropic_kwargs
         kwargs = build_anthropic_kwargs(
             model="global.anthropic.claude-opus-4-7",
             messages=[{"role": "user", "content": "hi"}],
@@ -447,47 +448,47 @@ class TestBedrockModelIdDetection:
     regardless of ``preserve_dots``.  Regression for #12295."""
 
     def test_bare_bedrock_id_detected(self):
-        from hermes_agent_anthropic import _is_bedrock_model_id
+        from agent.anthropic_format import _is_bedrock_model_id
         assert _is_bedrock_model_id("anthropic.claude-opus-4-7") is True
 
     def test_regional_us_prefix_detected(self):
-        from hermes_agent_anthropic import _is_bedrock_model_id
+        from agent.anthropic_format import _is_bedrock_model_id
         assert _is_bedrock_model_id("us.anthropic.claude-sonnet-4-5-v1:0") is True
 
     def test_regional_global_prefix_detected(self):
-        from hermes_agent_anthropic import _is_bedrock_model_id
+        from agent.anthropic_format import _is_bedrock_model_id
         assert _is_bedrock_model_id("global.anthropic.claude-opus-4-7") is True
 
     def test_regional_eu_prefix_detected(self):
-        from hermes_agent_anthropic import _is_bedrock_model_id
+        from agent.anthropic_format import _is_bedrock_model_id
         assert _is_bedrock_model_id("eu.anthropic.claude-sonnet-4-6") is True
 
     def test_openrouter_format_not_detected(self):
-        from hermes_agent_anthropic import _is_bedrock_model_id
+        from agent.anthropic_format import _is_bedrock_model_id
         assert _is_bedrock_model_id("claude-opus-4.6") is False
 
     def test_bare_claude_not_detected(self):
-        from hermes_agent_anthropic import _is_bedrock_model_id
+        from agent.anthropic_format import _is_bedrock_model_id
         assert _is_bedrock_model_id("claude-opus-4-7") is False
 
     def test_bare_bedrock_id_preserved_without_flag(self):
         """The primary bug from #12295: ``anthropic.claude-opus-4-7``
         sent to bedrock-mantle via auxiliary clients that don't pass
         ``preserve_dots=True``."""
-        from hermes_agent_anthropic import normalize_model_name
+        from agent.anthropic_format import normalize_model_name
         assert normalize_model_name(
             "anthropic.claude-opus-4-7", preserve_dots=False
         ) == "anthropic.claude-opus-4-7"
 
     def test_openrouter_dots_still_converted(self):
         """Non-Bedrock dotted model names must still be converted."""
-        from hermes_agent_anthropic import normalize_model_name
+        from agent.anthropic_format import normalize_model_name
         assert normalize_model_name("claude-opus-4.6") == "claude-opus-4-6"
 
     def test_bare_bedrock_id_survives_build_kwargs(self):
         """End-to-end: bare Bedrock ID through ``build_anthropic_kwargs``
         without ``preserve_dots=True`` -- the auxiliary client path."""
-        from hermes_agent_anthropic import build_anthropic_kwargs
+        from agent.anthropic_format import build_anthropic_kwargs
         kwargs = build_anthropic_kwargs(
             model="anthropic.claude-opus-4-7",
             messages=[{"role": "user", "content": "hi"}],
@@ -510,17 +511,29 @@ class TestBedrockModelIdDetection:
 class TestAuxiliaryClientBedrockResolution:
     """Verify resolve_provider_client handles Bedrock's aws_sdk auth type."""
 
+    @staticmethod
+    def _patch_bedrock_build(monkeypatch, mock_fn):
+        """Patch build_anthropic_bedrock_client in the plugin registry."""
+        from agent.plugin_registries import registries
+        ns = registries._provider_services.get("anthropic")
+        if ns is not None and "build_anthropic_bedrock_client" in ns:
+            monkeypatch.setitem(ns, "build_anthropic_bedrock_client", mock_fn)
+        else:
+            # Fallback: mock at the module level (won't help the resolver,
+            # but keeps the test from crashing if anthropic isn't registered)
+            pass
+
     def test_bedrock_returns_client_with_credentials(self, monkeypatch):
         """With valid AWS credentials, Bedrock should return a usable client."""
-        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIO...MPLE")
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
         monkeypatch.setenv("AWS_REGION", "us-west-2")
 
         mock_anthropic_bedrock = MagicMock()
-        with patch("hermes_agent_anthropic.adapter.build_anthropic_bedrock_client",
-                   return_value=mock_anthropic_bedrock):
-            from agent.auxiliary_client import resolve_provider_client, AnthropicAuxiliaryClient
-            client, model = resolve_provider_client("bedrock", None)
+        self._patch_bedrock_build(monkeypatch, MagicMock(return_value=mock_anthropic_bedrock))
+        from agent.auxiliary_client import resolve_provider_client
+        from agent.anthropic_aux import AnthropicAuxiliaryClient
+        client, model = resolve_provider_client("bedrock", None)
 
         assert client is not None, (
             "resolve_provider_client('bedrock') returned None — "
@@ -533,62 +546,61 @@ class TestAuxiliaryClientBedrockResolution:
 
     def test_bedrock_returns_none_without_credentials(self, monkeypatch):
         """Without AWS credentials, Bedrock should return (None, None) gracefully."""
-        with patch("hermes_agent_bedrock.adapter.has_aws_credentials", return_value=False):
-            from agent.auxiliary_client import resolve_provider_client
-            client, model = resolve_provider_client("bedrock", None)
+        from agent.plugin_registries import registries
+        ns = registries._provider_services.get("bedrock", {})
+        monkeypatch.setitem(ns, "has_aws_credentials", lambda: False)
+        from agent.auxiliary_client import resolve_provider_client
+        client, model = resolve_provider_client("bedrock", None)
 
         assert client is None
         assert model is None
 
     def test_bedrock_uses_configured_region(self, monkeypatch):
         """Bedrock client base_url should reflect AWS_REGION."""
-        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIO...MPLE")
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
         monkeypatch.setenv("AWS_REGION", "eu-central-1")
 
-        with patch("hermes_agent_anthropic.adapter.build_anthropic_bedrock_client",
-                   return_value=MagicMock()):
-            from agent.auxiliary_client import resolve_provider_client
-            client, _ = resolve_provider_client("bedrock", None)
+        self._patch_bedrock_build(monkeypatch, MagicMock(return_value=MagicMock()))
+        from agent.auxiliary_client import resolve_provider_client
+        client, _ = resolve_provider_client("bedrock", None)
 
         assert client is not None
         assert "eu-central-1" in client.base_url
 
     def test_bedrock_respects_explicit_model(self, monkeypatch):
         """When caller passes an explicit model, it should be used."""
-        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIO...MPLE")
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
 
-        with patch("hermes_agent_anthropic.adapter.build_anthropic_bedrock_client",
-                   return_value=MagicMock()):
-            from agent.auxiliary_client import resolve_provider_client
-            _, model = resolve_provider_client(
-                "bedrock", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-            )
+        self._patch_bedrock_build(monkeypatch, MagicMock(return_value=MagicMock()))
+        from agent.auxiliary_client import resolve_provider_client
+        _, model = resolve_provider_client(
+            "bedrock", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+        )
 
         assert "claude-sonnet" in model
 
     def test_bedrock_async_mode(self, monkeypatch):
         """Async mode should return an AsyncAnthropicAuxiliaryClient."""
-        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIO...MPLE")
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
 
-        with patch("hermes_agent_anthropic.adapter.build_anthropic_bedrock_client",
-                   return_value=MagicMock()):
-            from agent.auxiliary_client import resolve_provider_client, AsyncAnthropicAuxiliaryClient
-            client, model = resolve_provider_client("bedrock", None, async_mode=True)
+        self._patch_bedrock_build(monkeypatch, MagicMock(return_value=MagicMock()))
+        from agent.auxiliary_client import resolve_provider_client
+        from agent.anthropic_aux import AsyncAnthropicAuxiliaryClient
+        client, model = resolve_provider_client("bedrock", None, async_mode=True)
 
         assert client is not None
         assert isinstance(client, AsyncAnthropicAuxiliaryClient)
 
     def test_bedrock_default_model_is_haiku(self, monkeypatch):
         """Default auxiliary model for Bedrock should be Haiku (fast, cheap)."""
-        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIO...MPLE")
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
 
-        with patch("hermes_agent_anthropic.adapter.build_anthropic_bedrock_client",
-                   return_value=MagicMock()):
-            from agent.auxiliary_client import resolve_provider_client
-            _, model = resolve_provider_client("bedrock", None)
+        self._patch_bedrock_build(monkeypatch, MagicMock(return_value=MagicMock()))
+        from agent.auxiliary_client import resolve_provider_client
+        _, model = resolve_provider_client("bedrock", None)
 
         assert "haiku" in model.lower()

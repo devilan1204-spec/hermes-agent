@@ -221,9 +221,12 @@ def auth_add_command(args) -> None:
         return
 
     if provider == "anthropic":
-        from agent import anthropic_adapter as anthropic_mod
-
-        creds = anthropic_mod.run_hermes_oauth_login_pure()
+        from agent.plugin_registries import registries
+        _anthropic_ns = registries.get_provider_namespace("anthropic")
+        run_hermes_oauth_login_pure = _anthropic_ns.get("run_hermes_oauth_login_pure")
+        if not run_hermes_oauth_login_pure:
+            raise SystemExit("Anthropic plugin not loaded — cannot run OAuth login.")
+        creds = run_hermes_oauth_login_pure()
         if not creds:
             raise SystemExit("Anthropic OAuth login did not return credentials.")
         label = (getattr(args, "label", None) or "").strip() or label_from_token(

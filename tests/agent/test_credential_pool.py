@@ -1132,6 +1132,7 @@ def test_singleton_seed_does_not_clobber_manual_oauth_entry(tmp_path, monkeypatc
     )
 
     from agent.plugin_registries import registries
+    from agent.plugin_registries import CredentialPoolHook
     _orig_get = registries.get_provider_service
     monkeypatch.setattr(
         registries,
@@ -1143,6 +1144,36 @@ def test_singleton_seed_does_not_clobber_manual_oauth_entry(tmp_path, monkeypatc
         }) if p == "anthropic" and n == "read_hermes_oauth_credentials"
         else (lambda: None) if p == "anthropic" and n == "read_claude_code_credentials"
         else _orig_get(p, n),
+    )
+
+    # The credential pool hook drives singleton seeding — mock it so the
+    # discover_credentials path reads from the mocked service above.
+    def _mock_discover(entries, provider, is_suppressed):
+        from unittest.mock import MagicMock as _MM
+        from agent.credential_pool import _upsert_entry, AUTH_TYPE_OAUTH
+        read_fn = registries.get_provider_service("anthropic", "read_hermes_oauth_credentials")
+        creds = read_fn() if read_fn else None
+        if not creds:
+            return False, set()
+        source = "hermes_pkce"
+        if is_suppressed(provider, source):
+            return False, set()
+        changed = _upsert_entry(
+            entries, provider, source,
+            {
+                "source": source,
+                "auth_type": AUTH_TYPE_OAUTH,
+                "access_token": creds.get("accessToken", ""),
+                "refresh_token": creds.get("refreshToken"),
+                "expires_at": creds.get("expiresAt"),
+            },
+        )
+        return changed, {source}
+
+    monkeypatch.setattr(
+        registries,
+        "get_credential_pool_hook",
+        lambda p: CredentialPoolHook(discover_credentials=_mock_discover) if p == "anthropic" else None,
     )
 
     from agent.credential_pool import load_pool

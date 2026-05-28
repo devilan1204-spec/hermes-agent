@@ -28,7 +28,6 @@ COPILOT_EDITOR_VERSION = "vscode/1.104.1"
 COPILOT_REASONING_EFFORTS_GPT5 = ["minimal", "low", "medium", "high"]
 COPILOT_REASONING_EFFORTS_O_SERIES = ["low", "medium", "high"]
 
-
 # Fallback OpenRouter snapshot used when the live catalog is unavailable.
 # (model_id, display description shown in menus)
 OPENROUTER_MODELS: list[tuple[str, str]] = [
@@ -68,7 +67,6 @@ OPENROUTER_MODELS: list[tuple[str, str]] = [
 
 _openrouter_catalog_cache: list[tuple[str, str]] | None = None
 
-
 # Fallback Vercel AI Gateway snapshot used when the live catalog is unavailable.
 # OSS / open-weight models prioritized first, then closed-source by family.
 # Slugs match Vercel's actual /v1/models catalog (e.g. alibaba/ for Qwen,
@@ -93,7 +91,6 @@ VERCEL_AI_GATEWAY_MODELS: list[tuple[str, str]] = [
 
 _ai_gateway_catalog_cache: list[tuple[str, str]] | None = None
 
-
 def _codex_curated_models() -> list[str]:
     """Derive the openai-codex curated list from codex_models.py.
 
@@ -103,7 +100,6 @@ def _codex_curated_models() -> list[str]:
     """
     from hermes_cli.codex_models import DEFAULT_CODEX_MODELS, _add_forward_compat_models
     return _add_forward_compat_models(list(DEFAULT_CODEX_MODELS))
-
 
 # Static fallback for xAI when the models.dev disk cache is empty (fresh
 # install, offline first run, etc.). Mirrors the xAI-direct model IDs from
@@ -122,16 +118,13 @@ _XAI_STATIC_FALLBACK: list[str] = [
     "grok-4.20-multi-agent-0309",
 ]
 
-
 _XAI_TOP_MODEL = "grok-4.3"
-
 
 def _xai_promote_top(ids: list[str]) -> list[str]:
     """Pin the headline xAI model to the top of the curated list."""
     if _XAI_TOP_MODEL in ids:
         return [_XAI_TOP_MODEL] + [m for m in ids if m != _XAI_TOP_MODEL]
     return ids
-
 
 def _xai_curated_models() -> list[str]:
     """Derive the xAI-direct curated list from models.dev disk cache.
@@ -158,7 +151,6 @@ def _xai_curated_models() -> list[str]:
         # falls through to the static list.
         pass
     return list(_XAI_STATIC_FALLBACK)
-
 
 _PROVIDER_MODELS: dict[str, list[str]] = {
     "nous": [
@@ -491,7 +483,6 @@ _PROVIDER_MODELS["ai-gateway"] = [mid for mid, _ in VERCEL_AI_GATEWAY_MODELS]
 # are currently offered (free or paid). We trust whatever it returns and
 # surface it to users as-is — no local allowlist filtering.
 
-
 def _is_model_free(model_id: str, pricing: dict[str, dict[str, str]]) -> bool:
     """Return True if *model_id* has zero-cost prompt AND completion pricing."""
     p = pricing.get(model_id)
@@ -501,7 +492,6 @@ def _is_model_free(model_id: str, pricing: dict[str, dict[str, str]]) -> bool:
         return float(p.get("prompt", "1")) == 0 and float(p.get("completion", "1")) == 0
     except (TypeError, ValueError):
         return False
-
 
 # ---------------------------------------------------------------------------
 # Nous Portal account tier detection
@@ -540,7 +530,6 @@ def fetch_nous_account_tier(access_token: str, portal_base_url: str = "") -> dic
     except Exception:
         return {}
 
-
 def is_nous_free_tier(account_info: dict[str, Any]) -> bool:
     """Return True if the account info indicates a free (unpaid) tier.
 
@@ -557,7 +546,6 @@ def is_nous_free_tier(account_info: dict[str, Any]) -> bool:
         return float(charge) == 0
     except (TypeError, ValueError):
         return False
-
 
 def partition_nous_models_by_tier(
     model_ids: list[str],
@@ -585,7 +573,6 @@ def partition_nous_models_by_tier(
         else:
             unavailable.append(mid)
     return (selectable, unavailable)
-
 
 def union_with_portal_free_recommendations(
     curated_ids: list[str],
@@ -651,7 +638,6 @@ def union_with_portal_free_recommendations(
 
     return (augmented_ids, augmented_pricing)
 
-
 def union_with_portal_paid_recommendations(
     curated_ids: list[str],
     pricing: dict[str, dict[str, str]],
@@ -716,14 +702,12 @@ def union_with_portal_paid_recommendations(
 
     return (augmented_ids, dict(pricing))
 
-
 # ---------------------------------------------------------------------------
 # TTL cache for free-tier detection — avoids repeated API calls within a
 # session while still picking up upgrades quickly.
 # ---------------------------------------------------------------------------
 _FREE_TIER_CACHE_TTL: int = 180  # seconds (3 minutes)
 _free_tier_cache: tuple[bool, float] | None = None  # (result, timestamp)
-
 
 def check_nous_free_tier() -> bool:
     """Check if the current Nous Portal user is on a free (unpaid) tier.
@@ -765,7 +749,6 @@ def check_nous_free_tier() -> bool:
         _free_tier_cache = (False, now)
         return False  # default to paid on error — don't block users
 
-
 # ---------------------------------------------------------------------------
 # Nous Portal recommended models
 #
@@ -790,7 +773,6 @@ NOUS_RECOMMENDED_MODELS_PATH = "/api/nous/recommended-models"
 _NOUS_RECOMMENDED_CACHE_TTL: int = 600  # seconds (10 minutes)
 # (result_dict, timestamp) keyed by portal_base_url so staging vs prod don't collide.
 _nous_recommended_cache: dict[str, tuple[dict[str, Any], float]] = {}
-
 
 def fetch_nous_recommended_models(
     portal_base_url: str = "",
@@ -833,7 +815,6 @@ def fetch_nous_recommended_models(
     _nous_recommended_cache[base] = (data, now)
     return data
 
-
 def _resolve_nous_portal_url() -> str:
     """Best-effort lookup of the Portal base URL the user is authed against."""
     try:
@@ -849,7 +830,6 @@ def _resolve_nous_portal_url() -> str:
     except Exception:
         return "https://portal.nousresearch.com"
 
-
 def _extract_model_name(entry: Any) -> Optional[str]:
     """Pull the ``modelName`` field from a recommended-model entry, else None."""
     if not isinstance(entry, dict):
@@ -858,7 +838,6 @@ def _extract_model_name(entry: Any) -> Optional[str]:
     if isinstance(model_name, str) and model_name.strip():
         return model_name.strip()
     return None
-
 
 def get_nous_recommended_aux_model(
     *,
@@ -915,7 +894,6 @@ def get_nous_recommended_aux_model(
         if name:
             return name
     return None
-
 
 # ---------------------------------------------------------------------------
 # Canonical provider list — single source of truth for provider identity.
@@ -994,7 +972,6 @@ except Exception:
 # Derived dicts — used throughout the codebase
 _PROVIDER_LABELS = {p.slug: p.label for p in CANONICAL_PROVIDERS}
 _PROVIDER_LABELS["custom"] = "Custom endpoint"  # special case: not a named provider
-
 
 _PROVIDER_ALIASES = {
     "glm": "zai",
@@ -1078,7 +1055,6 @@ _PROVIDER_ALIASES = {
     "ollama_cloud": "ollama-cloud",
 }
 
-
 def get_default_model_for_provider(provider: str) -> str:
     """Return the default model for a provider, or empty string if unknown.
 
@@ -1092,7 +1068,6 @@ def get_default_model_for_provider(provider: str) -> str:
     models = _PROVIDER_MODELS.get(provider, [])
     return models[0] if models else ""
 
-
 def _openrouter_model_is_free(pricing: Any) -> bool:
     """Return True when both prompt and completion pricing are zero."""
     if not isinstance(pricing, dict):
@@ -1101,7 +1076,6 @@ def _openrouter_model_is_free(pricing: Any) -> bool:
         return float(pricing.get("prompt", "0")) == 0 and float(pricing.get("completion", "0")) == 0
     except (TypeError, ValueError):
         return False
-
 
 def _openrouter_model_supports_tools(item: Any) -> bool:
     """Return True when the model's ``supported_parameters`` advertise tool calling.
@@ -1126,7 +1100,6 @@ def _openrouter_model_supports_tools(item: Any) -> bool:
         # Field absent / malformed / None — be permissive.
         return True
     return "tools" in params
-
 
 def fetch_openrouter_models(
     timeout: float = 8.0,
@@ -1195,11 +1168,9 @@ def fetch_openrouter_models(
     _openrouter_catalog_cache = curated
     return list(curated)
 
-
 def model_ids(*, force_refresh: bool = False) -> list[str]:
     """Return just the OpenRouter model-id strings."""
     return [mid for mid, _ in fetch_openrouter_models(force_refresh=force_refresh)]
-
 
 def get_curated_nous_model_ids() -> list[str]:
     """Return the curated Nous Portal model-id list.
@@ -1218,7 +1189,6 @@ def get_curated_nous_model_ids() -> list[str]:
         return list(remote)
     return list(_PROVIDER_MODELS.get("nous", []))
 
-
 def _ai_gateway_model_is_free(pricing: Any) -> bool:
     """Return True if an AI Gateway model has $0 input AND output pricing."""
     if not isinstance(pricing, dict):
@@ -1227,7 +1197,6 @@ def _ai_gateway_model_is_free(pricing: Any) -> bool:
         return float(pricing.get("input", "0")) == 0 and float(pricing.get("output", "0")) == 0
     except (TypeError, ValueError):
         return False
-
 
 def fetch_ai_gateway_models(
     timeout: float = 8.0,
@@ -1300,13 +1269,9 @@ def fetch_ai_gateway_models(
     _ai_gateway_catalog_cache = curated
     return list(curated)
 
-
 def ai_gateway_model_ids(*, force_refresh: bool = False) -> list[str]:
     """Return just the AI Gateway model-id strings."""
     return [mid for mid, _ in fetch_ai_gateway_models(force_refresh=force_refresh)]
-
-
-
 
 # ---------------------------------------------------------------------------
 # Pricing helpers — fetch live pricing from OpenRouter-compatible /v1/models
@@ -1314,7 +1279,6 @@ def ai_gateway_model_ids(*, force_refresh: bool = False) -> list[str]:
 
 # Cache: maps model_id → {"prompt": str, "completion": str} per endpoint
 _pricing_cache: dict[str, dict[str, dict[str, str]]] = {}
-
 
 def _format_price_per_mtok(per_token_str: str) -> str:
     """Convert a per-token price string to a human-friendly $/Mtok string.
@@ -1338,7 +1302,6 @@ def _format_price_per_mtok(per_token_str: str) -> str:
         return "free"
     per_m = val * 1_000_000
     return f"${per_m:.2f}"
-
 
 def format_model_pricing_table(
     models: list[tuple[str, str]],
@@ -1401,7 +1364,6 @@ def format_model_pricing_table(
 
     return lines
 
-
 def fetch_models_with_pricing(
     api_key: str | None = None,
     base_url: str = "https://openrouter.ai/api",
@@ -1452,7 +1414,6 @@ def fetch_models_with_pricing(
     _pricing_cache[cache_key] = result
     return result
 
-
 def fetch_ai_gateway_pricing(
     timeout: float = 8.0,
     *,
@@ -1502,14 +1463,11 @@ def fetch_ai_gateway_pricing(
     _pricing_cache[cache_key] = result
     return result
 
-
 def _resolve_openrouter_api_key() -> str:
     """Best-effort OpenRouter API key for pricing fetch."""
     return os.getenv("OPENROUTER_API_KEY", "").strip()
 
-
 _DEFAULT_NOUS_INFERENCE_BASE = "https://inference-api.nousresearch.com"
-
 
 def _resolve_nous_pricing_credentials() -> tuple[str, str]:
     """Return ``(api_key, base_url)`` for Nous Portal pricing.
@@ -1531,7 +1489,6 @@ def _resolve_nous_pricing_credentials() -> tuple[str, str]:
     except Exception:
         pass
     return ("", _DEFAULT_NOUS_INFERENCE_BASE)
-
 
 def get_pricing_for_provider(provider: str, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
     """Return live pricing for providers that support it (openrouter, nous, ai-gateway, novita)."""
@@ -1560,7 +1517,6 @@ def get_pricing_for_provider(provider: str, *, force_refresh: bool = False) -> d
                 force_refresh=force_refresh,
             )
     return {}
-
 
 def _fetch_novita_pricing(
     timeout: float = 8.0,
@@ -1620,14 +1576,12 @@ def _fetch_novita_pricing(
     _pricing_cache[cache_key] = result
     return result
 
-
 # All provider IDs and aliases that are valid for the provider:model syntax.
 _KNOWN_PROVIDER_NAMES: set[str] = (
     set(_PROVIDER_LABELS.keys())
     | set(_PROVIDER_ALIASES.keys())
     | {"openrouter", "custom"}
 )
-
 
 def list_available_providers() -> list[dict[str, str]]:
     """Return info about all providers the user could use with ``provider:model``.
@@ -1672,7 +1626,6 @@ def list_available_providers() -> list[dict[str, str]]:
         })
     return result
 
-
 def parse_model_input(raw: str, current_provider: str) -> tuple[str, str]:
     """Parse ``/model`` input into ``(provider, model)``.
 
@@ -1708,7 +1661,6 @@ def parse_model_input(raw: str, current_provider: str) -> tuple[str, str]:
             return (normalize_provider(provider_part), model_part)
     return (current_provider, stripped)
 
-
 def _get_custom_base_url() -> str:
     """Get the custom endpoint base_url from config.yaml."""
     try:
@@ -1720,7 +1672,6 @@ def _get_custom_base_url() -> str:
     except Exception:
         pass
     return ""
-
 
 def curated_models_for_provider(
     provider: Optional[str],
@@ -1746,12 +1697,10 @@ def curated_models_for_provider(
     models = _PROVIDER_MODELS.get(normalized, [])
     return [(m, "") for m in models]
 
-
 def _provider_keys(provider: str) -> set[str]:
     key = (provider or "").strip().lower()
     normalized = normalize_provider(provider)
     return {k for k in (key, normalized) if k}
-
 
 def _model_in_provider_catalog(name_lower: str, providers: set[str]) -> bool:
     return any(
@@ -1760,11 +1709,9 @@ def _model_in_provider_catalog(name_lower: str, providers: set[str]) -> bool:
         for model in _PROVIDER_MODELS.get(provider, [])
     )
 
-
 _AGGREGATOR_PROVIDERS = frozenset(
     {"nous", "openrouter", "ai-gateway", "copilot", "kilocode"}
 )
-
 
 def _resolve_static_model_alias(
     name_lower: str,
@@ -1812,7 +1759,6 @@ def _resolve_static_model_alias(
             return provider, matched
 
     return None
-
 
 def detect_static_provider_for_model(
     model_name: str,
@@ -1864,7 +1810,6 @@ def detect_static_provider_for_model(
 
     return None
 
-
 def detect_provider_for_model(
     model_name: str,
     current_provider: str,
@@ -1903,7 +1848,6 @@ def detect_provider_for_model(
 
     return None
 
-
 def _find_openrouter_slug(model_name: str) -> Optional[str]:
     """Find the full OpenRouter model slug for a bare or partial model name.
 
@@ -1930,7 +1874,6 @@ def _find_openrouter_slug(model_name: str) -> Optional[str]:
 
     return None
 
-
 def normalize_provider(provider: Optional[str]) -> str:
     """Normalize provider aliases to Hermes' canonical provider ids.
 
@@ -1941,7 +1884,6 @@ def normalize_provider(provider: Optional[str]) -> str:
     normalized = (provider or "openrouter").strip().lower()
     return _PROVIDER_ALIASES.get(normalized, normalized)
 
-
 def provider_label(provider: Optional[str]) -> str:
     """Return a human-friendly label for a provider id or alias."""
     original = (provider or "openrouter").strip()
@@ -1950,7 +1892,6 @@ def provider_label(provider: Optional[str]) -> str:
         return "Auto"
     normalized = normalize_provider(normalized)
     return _PROVIDER_LABELS.get(normalized, original or "OpenRouter")
-
 
 # Models that support OpenAI Priority Processing (service_tier="priority").
 # See https://openai.com/api-priority-processing/ for the canonical list.
@@ -1968,7 +1909,6 @@ _OPENAI_FAST_MODE_PREFIXES: tuple[str, ...] = (
     "o4",
 )
 
-
 def _is_openai_fast_model(model_id: Optional[str]) -> bool:
     """Return True if the model is an OpenAI flagship eligible for Priority Processing."""
     raw = _strip_vendor_prefix(str(model_id or ""))
@@ -1981,7 +1921,6 @@ def _is_openai_fast_model(model_id: Optional[str]) -> bool:
         return False
     return any(base.startswith(prefix) for prefix in _OPENAI_FAST_MODE_PREFIXES)
 
-
 # Models that support Anthropic Fast Mode (speed="fast").
 # See https://platform.claude.com/docs/en/build-with-claude/fast-mode
 #
@@ -1990,7 +1929,6 @@ def _is_openai_fast_model(model_id: Optional[str]) -> bool:
 # _is_third_party_anthropic_endpoint in agent/anthropic_adapter.py), so
 # third-party proxies that would reject the beta header are protected.
 
-
 def _strip_vendor_prefix(model_id: str) -> str:
     """Strip vendor/ prefix from a model ID (e.g. 'anthropic/claude-opus-4-6' -> 'claude-opus-4-6')."""
     raw = str(model_id or "").strip().lower()
@@ -1998,11 +1936,9 @@ def _strip_vendor_prefix(model_id: str) -> str:
         raw = raw.split("/", 1)[1]
     return raw
 
-
 def model_supports_fast_mode(model_id: Optional[str]) -> bool:
     """Return whether Hermes should expose the /fast toggle for this model."""
     return _is_anthropic_fast_model(model_id) or _is_openai_fast_model(model_id)
-
 
 def _is_anthropic_fast_model(model_id: Optional[str]) -> bool:
     """Return True if the model is a Claude model eligible for Anthropic Fast Mode.
@@ -2020,7 +1956,6 @@ def _is_anthropic_fast_model(model_id: Optional[str]) -> bool:
     # Only Opus 4.6 supports fast mode at present.
     return "opus-4-6" in base or "opus-4.6" in base
 
-
 def resolve_fast_mode_overrides(model_id: Optional[str]) -> dict[str, Any] | None:
     """Return request_overrides for fast/priority mode, or None if unsupported.
 
@@ -2037,7 +1972,6 @@ def resolve_fast_mode_overrides(model_id: Optional[str]) -> dict[str, Any] | Non
     if _is_anthropic_fast_model(model_id):
         return {"speed": "fast"}
     return {"service_tier": "priority"}
-
 
 def _resolve_copilot_catalog_api_key() -> str:
     """Best-effort GitHub token for fetching the Copilot model catalog.
@@ -2096,7 +2030,6 @@ def _resolve_copilot_catalog_api_key() -> str:
 
     return ""
 
-
 # Providers where models.dev is treated as authoritative: curated static
 # lists are kept only as an offline fallback and to capture custom additions
 # the registry doesn't publish yet. Adding a provider here causes its
@@ -2128,7 +2061,6 @@ _MODELS_DEV_PREFERRED: frozenset[str] = frozenset({
     "gemini",
     "google",
 })
-
 
 def _merge_with_models_dev(provider: str, curated: list[str]) -> list[str]:
     """Merge curated list with fresh models.dev entries for a preferred provider.
@@ -2165,7 +2097,6 @@ def _merge_with_models_dev(provider: str, curated: list[str]) -> list[str]:
         seen_lower.add(key)
         merged.append(mid)
     return merged
-
 
 def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) -> list[str]:
     """Return the best known model catalog for a provider.
@@ -2327,7 +2258,6 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
         return _merge_with_models_dev(normalized, curated_static)
     return curated_static
 
-
 def _fetch_anthropic_models(timeout: float = 5.0) -> Optional[list[str]]:
     """Fetch available models from the Anthropic /v1/models endpoint.
 
@@ -2339,9 +2269,10 @@ def _fetch_anthropic_models(timeout: float = 5.0) -> Optional[list[str]]:
         _anthropic_ns = registries.get_provider_namespace("anthropic")
         resolve_anthropic_token = _anthropic_ns.get("resolve_anthropic_token")
         _is_oauth_token = _anthropic_ns.get("_is_oauth_token")
-        _COMMON_BETAS = _anthropic_ns.get("_COMMON_BETAS")
+        # _COMMON_BETAS and _CONTEXT_1M_BETA are now in core
+        from agent.anthropic_format import _COMMON_BETAS, _CONTEXT_1M_BETA
         _OAUTH_ONLY_BETAS = _anthropic_ns.get("_OAUTH_ONLY_BETAS")
-        _CONTEXT_1M_BETA = _anthropic_ns.get("_CONTEXT_1M_BETA")
+
         if resolve_anthropic_token is None or _is_oauth_token is None:
             raise ImportError("anthropic provider services not registered")
     except ImportError:
@@ -2407,7 +2338,6 @@ def _fetch_anthropic_models(timeout: float = 5.0) -> Optional[list[str]]:
         logging.getLogger(__name__).debug("Failed to fetch Anthropic models: %s", e)
         return None
 
-
 def _payload_items(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
@@ -2416,7 +2346,6 @@ def _payload_items(payload: Any) -> list[dict[str, Any]]:
         if isinstance(data, list):
             return [item for item in data if isinstance(item, dict)]
     return []
-
 
 def copilot_default_headers() -> dict[str, str]:
     """Standard headers for Copilot API requests.
@@ -2434,7 +2363,6 @@ def copilot_default_headers() -> dict[str, str]:
             "Openai-Intent": "conversation-edits",
             "x-initiator": "agent",
         }
-
 
 def _copilot_catalog_item_is_text_model(item: dict[str, Any]) -> bool:
     model_id = str(item.get("id") or "").strip()
@@ -2463,7 +2391,6 @@ def _copilot_catalog_item_is_text_model(item: dict[str, Any]) -> bool:
             return False
 
     return True
-
 
 def fetch_github_model_catalog(
     api_key: Optional[str] = None, timeout: float = 5.0
@@ -2499,14 +2426,12 @@ def fetch_github_model_catalog(
             continue
     return None
 
-
 # ─── Copilot catalog context-window helpers ─────────────────────────────────
 
 # Module-level cache: {model_id: max_prompt_tokens}
 _copilot_context_cache: dict[str, int] = {}
 _copilot_context_cache_time: float = 0.0
 _COPILOT_CONTEXT_CACHE_TTL = 3600  # 1 hour
-
 
 def get_copilot_model_context(model_id: str, api_key: Optional[str] = None) -> Optional[int]:
     """Look up max_prompt_tokens for a Copilot model from the live /models API.
@@ -2544,7 +2469,6 @@ def get_copilot_model_context(model_id: str, api_key: Optional[str] = None) -> O
 
     return cache.get(model_id)
 
-
 def _is_github_models_base_url(base_url: Optional[str]) -> bool:
     normalized = (base_url or "").strip().rstrip("/").lower()
     return (
@@ -2552,7 +2476,6 @@ def _is_github_models_base_url(base_url: Optional[str]) -> bool:
         or normalized.startswith("https://models.github.ai/inference")
         or normalized.startswith("https://models.inference.ai.azure.com")
     )
-
 
 def _lmstudio_server_root(base_url: Optional[str]) -> Optional[str]:
     """Strip ``/v1`` suffix from an LM Studio base URL to get the native API root.
@@ -2564,7 +2487,6 @@ def _lmstudio_server_root(base_url: Optional[str]) -> Optional[str]:
         root = root[:-3].rstrip("/")
     return root or None
 
-
 def _lmstudio_request_headers(api_key: Optional[str] = None) -> dict:
     """Build HTTP headers for LM Studio native API requests."""
     headers = {"User-Agent": _HERMES_USER_AGENT}
@@ -2572,7 +2494,6 @@ def _lmstudio_request_headers(api_key: Optional[str] = None) -> dict:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
-
 
 def _lmstudio_fetch_raw_models(
     api_key: Optional[str] = None,
@@ -2623,7 +2544,6 @@ def _lmstudio_fetch_raw_models(
         return None
     return raw_models
 
-
 def probe_lmstudio_models(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
@@ -2654,7 +2574,6 @@ def probe_lmstudio_models(
             keys.append(key)
     return keys
 
-
 def fetch_lmstudio_models(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
@@ -2672,7 +2591,6 @@ def fetch_lmstudio_models(
     """
     models = probe_lmstudio_models(api_key=api_key, base_url=base_url, timeout=timeout)
     return models or []
-
 
 def ensure_lmstudio_model_loaded(
     model: str,
@@ -2742,7 +2660,6 @@ def ensure_lmstudio_model_loaded(
         return None
     return target_context_length
 
-
 def lmstudio_model_reasoning_options(
     model: str,
     base_url: Optional[str],
@@ -2775,13 +2692,11 @@ def lmstudio_model_reasoning_options(
         return []
     return []
 
-
 def _fetch_github_models(api_key: Optional[str] = None, timeout: float = 5.0) -> Optional[list[str]]:
     catalog = fetch_github_model_catalog(api_key=api_key, timeout=timeout)
     if not catalog:
         return None
     return [item.get("id", "") for item in catalog if item.get("id")]
-
 
 _COPILOT_MODEL_ALIASES = {
     "openai/gpt-5": "gpt-5-mini",
@@ -2821,7 +2736,6 @@ _COPILOT_MODEL_ALIASES = {
     "anthropic/claude-haiku-4-5": "claude-haiku-4.5",
 }
 
-
 def _copilot_catalog_ids(
     catalog: Optional[list[dict[str, Any]]] = None,
     api_key: Optional[str] = None,
@@ -2835,7 +2749,6 @@ def _copilot_catalog_ids(
         for item in catalog
         if str(item.get("id") or "").strip()
     }
-
 
 def normalize_copilot_model_id(
     model_id: Optional[str],
@@ -2877,7 +2790,6 @@ def normalize_copilot_model_id(
         return raw.split("/", 1)[1].strip()
     return raw
 
-
 def _github_reasoning_efforts_for_model_id(model_id: str) -> list[str]:
     raw = (model_id or "").strip().lower()
     if raw.startswith(("openai/o1", "openai/o3", "openai/o4", "o1", "o3", "o4")):
@@ -2886,7 +2798,6 @@ def _github_reasoning_efforts_for_model_id(model_id: str) -> list[str]:
     if normalized.startswith("gpt-5"):
         return list(COPILOT_REASONING_EFFORTS_GPT5)
     return []
-
 
 def _should_use_copilot_responses_api(model_id: str) -> bool:
     """Decide whether a Copilot model should use the Responses API.
@@ -2903,7 +2814,6 @@ def _should_use_copilot_responses_api(model_id: str) -> bool:
         return False
     major = int(match.group(1))
     return major >= 5 and not model_id.startswith("gpt-5-mini")
-
 
 def copilot_model_api_mode(
     model_id: Optional[str],
@@ -2945,7 +2855,6 @@ def copilot_model_api_mode(
 
     return "chat_completions"
 
-
 # Azure Foundry model families that require the Responses API.  Azure
 # rejects /chat/completions against these deployments with
 # ``400 "The requested operation is unsupported."`` — the same payload Bob
@@ -2961,7 +2870,6 @@ _AZURE_FOUNDRY_RESPONSES_PREFIXES = (
     "o3",          # o3, o3-mini
     "o4",          # o4, o4-mini
 )
-
 
 def azure_foundry_model_api_mode(model_name: Optional[str]) -> Optional[str]:
     """Infer Azure Foundry api_mode from a deployment/model name.
@@ -2991,7 +2899,6 @@ def azure_foundry_model_api_mode(model_name: Optional[str]) -> Optional[str]:
             return "codex_responses"
     return None
 
-
 def normalize_opencode_model_id(provider_id: Optional[str], model_id: Optional[str]) -> str:
     """Normalize OpenCode config IDs to the bare model slug used in API requests."""
     provider = normalize_provider(provider_id)
@@ -3003,7 +2910,6 @@ def normalize_opencode_model_id(provider_id: Optional[str], model_id: Optional[s
     if current.lower().startswith(prefix):
         return current[len(prefix):]
     return current
-
 
 def opencode_model_api_mode(provider_id: Optional[str], model_id: Optional[str]) -> str:
     """Determine the API mode for an OpenCode Zen / Go model.
@@ -3037,7 +2943,6 @@ def opencode_model_api_mode(provider_id: Optional[str], model_id: Optional[str])
         return "chat_completions"
 
     return "chat_completions"
-
 
 def github_model_reasoning_efforts(
     model_id: Optional[str],
@@ -3081,7 +2986,6 @@ def github_model_reasoning_efforts(
             return []
 
     return _github_reasoning_efforts_for_model_id(str(model_id or normalized))
-
 
 def probe_api_models(
     api_key: Optional[str],
@@ -3160,7 +3064,6 @@ def probe_api_models(
         "used_fallback": False,
     }
 
-
 def _fetch_ai_gateway_models(timeout: float = 5.0) -> Optional[list[str]]:
     """Fetch available language models with tool-use from AI Gateway."""
     api_key = os.getenv("AI_GATEWAY_API_KEY", "").strip()
@@ -3190,7 +3093,6 @@ def _fetch_ai_gateway_models(timeout: float = 5.0) -> Optional[list[str]]:
     except Exception:
         return None
 
-
 def fetch_api_models(
     api_key: Optional[str],
     base_url: Optional[str],
@@ -3204,15 +3106,11 @@ def fetch_api_models(
     """
     return probe_api_models(api_key, base_url, timeout=timeout, api_mode=api_mode).get("models")
 
-
 # ---------------------------------------------------------------------------
 # Ollama Cloud — merged model discovery with disk cache
 # ---------------------------------------------------------------------------
 
-
-
 _OLLAMA_CLOUD_CACHE_TTL = 3600  # 1 hour
-
 
 def _strip_ollama_cloud_suffix(model_id: str) -> str:
     """Strip :cloud / -cloud suffixes that models.dev appends to Ollama Cloud IDs.
@@ -3226,12 +3124,10 @@ def _strip_ollama_cloud_suffix(model_id: str) -> str:
             return model_id[: -len(suffix)]
     return model_id
 
-
 def _ollama_cloud_cache_path() -> Path:
     """Return the path for the Ollama Cloud model cache."""
     from hermes_constants import get_hermes_home
     return get_hermes_home() / "ollama_cloud_models_cache.json"
-
 
 def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
     """Load cached Ollama Cloud models from disk.
@@ -3259,7 +3155,6 @@ def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
         pass
     return None
 
-
 def _save_ollama_cloud_cache(models: list[str]) -> None:
     """Persist the merged Ollama Cloud model list to disk."""
     try:
@@ -3269,7 +3164,6 @@ def _save_ollama_cloud_cache(models: list[str]) -> None:
         atomic_json_write(cache_path, {"models": models, "cached_at": time.time()}, indent=None)
     except Exception:
         pass
-
 
 def fetch_ollama_cloud_models(
     api_key: Optional[str] = None,
@@ -3336,7 +3230,6 @@ def fetch_ollama_cloud_models(
         return stale["models"]
 
     return []
-
 
 def validate_requested_model(
     model_name: str,

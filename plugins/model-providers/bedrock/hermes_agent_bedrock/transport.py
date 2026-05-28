@@ -42,16 +42,7 @@ class BedrockTransport(ProviderTransport):
         tools: Optional[List[Dict[str, Any]]] = None,
         **params,
     ) -> Dict[str, Any]:
-        """Build Bedrock converse() kwargs.
-
-        Calls convert_messages and convert_tools internally.
-
-        params:
-            max_tokens: int — output token limit (default 4096)
-            temperature: float | None
-            guardrail_config: dict | None — Bedrock guardrails
-            region: str — AWS region (default 'us-east-1')
-        """
+        """Build Bedrock converse() kwargs."""
         from agent.plugin_registries import registries
         _fn = registries.get_provider_service("bedrock", "build_converse_kwargs")
         if _fn is None:
@@ -74,23 +65,15 @@ class BedrockTransport(ProviderTransport):
         return kwargs
 
     def normalize_response(self, response: Any, **kwargs) -> NormalizedResponse:
-        """Normalize Bedrock response to NormalizedResponse.
-
-        Handles two shapes:
-        1. Raw boto3 dict (from direct converse() calls)
-        2. Already-normalized SimpleNamespace with .choices (from dispatch site)
-        """
+        """Normalize Bedrock response to NormalizedResponse."""
         from agent.plugin_registries import registries
         normalize_converse_response = registries.get_provider_service("bedrock", "normalize_converse_response")
         if normalize_converse_response is None:
             raise ImportError("bedrock plugin not registered")
 
-        # Normalize to OpenAI-compatible SimpleNamespace
         if hasattr(response, "choices") and response.choices:
-            # Already normalized at dispatch site
             ns = response
         else:
-            # Raw boto3 dict
             ns = normalize_converse_response(response)
 
         choice = ns.choices[0]
@@ -128,27 +111,15 @@ class BedrockTransport(ProviderTransport):
         )
 
     def validate_response(self, response: Any) -> bool:
-        """Check Bedrock response structure.
-
-        After normalize_converse_response, the response has OpenAI-compatible
-        .choices — same check as chat_completions.
-        """
         if response is None:
             return False
-        # Raw Bedrock dict response — check for 'output' key
         if isinstance(response, dict):
             return "output" in response
-        # Already-normalized SimpleNamespace
         if hasattr(response, "choices"):
             return bool(response.choices)
         return False
 
     def map_finish_reason(self, raw_reason: str) -> str:
-        """Map Bedrock stop reason to OpenAI finish_reason.
-
-        The adapter already does this mapping inside normalize_converse_response,
-        so this is only used for direct access to raw responses.
-        """
         _MAP = {
             "end_turn": "stop",
             "tool_use": "tool_calls",
@@ -158,9 +129,3 @@ class BedrockTransport(ProviderTransport):
             "content_filtered": "content_filter",
         }
         return _MAP.get(raw_reason, "stop")
-
-
-# Auto-register on import
-from agent.transports import register_transport  # noqa: E402
-
-register_transport("bedrock_converse", BedrockTransport)

@@ -49,7 +49,14 @@ def _run_setup_feishu(
          patch("hermes_cli.gateway.print_warning"), \
          patch("hermes_cli.gateway.print_error"), \
          patch("hermes_cli.gateway.color", side_effect=lambda t, c: t), \
-         patch("hermes_agent_feishu.adapter.qr_register", return_value=qr_result):
+         patch("hermes_agent_feishu.adapter.qr_register", return_value=qr_result), \
+         patch("agent.plugin_registries.registries") as mock_registries:
+
+        # Make the registry lookup return our qr_register mock
+        from unittest.mock import MagicMock
+        _feishu_entry = MagicMock()
+        _feishu_entry.helper_functions = {"qr_register": lambda: qr_result, "probe_bot": None}
+        mock_registries.get_platform.return_value = _feishu_entry
 
         from hermes_cli.gateway import _setup_feishu
         _setup_feishu()

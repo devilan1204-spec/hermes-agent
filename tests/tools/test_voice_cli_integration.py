@@ -503,7 +503,7 @@ class TestEdgeTTSLazyImport:
         reference bare 'edge_tts' module name."""
         import ast as _ast
 
-        with open("tools/tts_tool.py") as f:
+        with open("plugins/tts/hermes_agent_tts/tts_tool.py") as f:
             tree = _ast.parse(f.read())
 
         for node in _ast.walk(tree):
@@ -541,7 +541,7 @@ class TestStreamingTTSOutputStreamCleanup:
         output_stream even on exception."""
         import ast as _ast
 
-        with open("tools/tts_tool.py") as f:
+        with open("plugins/tts/hermes_agent_tts/tts_tool.py") as f:
             tree = _ast.parse(f.read())
 
         for node in _ast.walk(tree):

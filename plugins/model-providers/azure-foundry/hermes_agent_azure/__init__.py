@@ -40,3 +40,18 @@ def register(ctx):
         "_require_azure_identity": adapter._require_azure_identity,
         "describe_active_credential": adapter.describe_active_credential,
     })
+
+    # Register the provider resolver — core dispatches to this instead of
+    # having a per-azure-foundry if/elif branch in resolve_provider_client().
+    from hermes_agent_azure.resolve import resolve_auxiliary_client as _azure_resolver
+    ctx.register_provider_resolver("azure-foundry", _azure_resolver)
+
+    # Register the provider overlay — core merges this into HERMES_OVERLAYS
+    from agent.plugin_registries import ProviderOverlayEntry
+    ctx.register_provider_overlay(ProviderOverlayEntry(
+        provider_name="azure-foundry",
+        transport="openai_chat",  # default; overridden by api_mode in config
+        base_url_env_var="AZURE_FOUNDRY_BASE_URL",
+        display_name="Azure AI Foundry",
+        aliases=[],
+    ))

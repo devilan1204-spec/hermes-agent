@@ -1,79 +1,33 @@
 """hermes-agent-anthropic: Anthropic Messages API adapter for Hermes Agent."""
 
+# -----------------------------------------------------------------------
+# Re-exports from adapter.py — SDK-dependent orchestration only.
+# Wire-format code (message conversion, aux client wrappers, transport)
+# has moved to core and is no longer re-exported here.
+# -----------------------------------------------------------------------
 from hermes_agent_anthropic.adapter import (  # noqa: F401
-    ADAPTIVE_EFFORT_MAP,
-    THINKING_BUDGET,
-    _ANTHROPIC_DEFAULT_OUTPUT_LIMIT,
-    _ANTHROPIC_OUTPUT_LIMITS,
-    _ADAPTIVE_THINKING_SUBSTRINGS,
-    _CLAUDE_CODE_SYSTEM_PREFIX,
     _CLAUDE_CODE_VERSION_FALLBACK,
-    _COMMON_BETAS,
-    _CONTEXT_1M_BETA,
-    _FAST_MODE_BETA,
-    _FAST_MODE_SUPPORTED_SUBSTRINGS,
     _HERMES_OAUTH_FILE,
-    _KIMI_FAMILY_MODEL_PREFIXES,
-    _MCP_TOOL_PREFIX,
-    _NO_SAMPLING_PARAMS_SUBSTRINGS,
     _OAUTH_CLIENT_ID,
-    _OAUTH_ONLY_BETAS,
     _OAUTH_REDIRECT_URI,
     _OAUTH_SCOPES,
     _OAUTH_TOKEN_URL,
-    _TOOL_STREAMING_BETA,
-    _XHIGH_EFFORT_SUBSTRINGS,
     _build_anthropic_client_with_bearer_hook,
-    _common_betas_for_base_url,
-    _content_parts_to_anthropic_blocks,
-    _convert_assistant_message,
-    _convert_content_part_to_anthropic,
-    _convert_content_to_anthropic,
-    _convert_tool_message_to_result,
-    _convert_user_message,
     _detect_claude_code_version,
-    _evict_old_screenshots,
-    _extract_preserved_thinking_blocks,
-    _forbids_sampling_params,
     _generate_pkce,
-    _get_anthropic_max_output,
     _get_anthropic_sdk,
     _get_claude_code_version,
-    _image_source_from_openai_url,
     _is_azure_anthropic_endpoint,
-    _is_bedrock_model_id,
-    _is_deepseek_anthropic_endpoint,
-    _is_kimi_coding_endpoint,
-    _is_kimi_family_endpoint,
-    _is_minimax_anthropic_endpoint,
     _is_oauth_token,
-    _is_third_party_anthropic_endpoint,
-    _manage_thinking_signatures,
-    _merge_consecutive_roles,
-    _model_name_is_kimi_family,
-    _normalize_base_url_text,
-    _normalize_tool_input_schema,
     _prefer_refreshable_claude_code_token,
     _read_claude_code_credentials_from_keychain,
     _refresh_oauth_token,
     _requires_bearer_auth,
-    _resolve_anthropic_messages_max_tokens,
     _resolve_claude_code_token_from_credentials,
-    _resolve_positive_anthropic_max_tokens,
-    _sanitize_tool_id,
-    _strip_orphaned_tool_blocks,
-    _supports_adaptive_thinking,
-    _supports_fast_mode,
-    _supports_xhigh_effort,
     _write_claude_code_credentials,
-    _base_url_needs_context_1m_beta,
     build_anthropic_bedrock_client,
     build_anthropic_client,
-    build_anthropic_kwargs,
-    convert_messages_to_anthropic,
-    convert_tools_to_anthropic,
     is_claude_code_token_valid,
-    normalize_model_name,
     read_claude_code_credentials,
     read_claude_managed_key,
     read_hermes_oauth_credentials,
@@ -83,88 +37,53 @@ from hermes_agent_anthropic.adapter import (  # noqa: F401
     run_oauth_setup_token,
 )
 
+# Re-exports from resolve.py — client resolution & endpoint detection
+from hermes_agent_anthropic.resolve import (  # noqa: F401
+    _ANTHROPIC_DEFAULT_BASE_URL as ANTHROPIC_DEFAULT_BASE_URL,
+    convert_openai_images_to_anthropic,
+    endpoint_speaks_anthropic_messages,
+    is_anthropic_compat_endpoint,
+    maybe_wrap_anthropic,
+    resolve_auxiliary_client,
+)
+
 
 def register(ctx):
     """Entry point for the hermes_agent.plugins entry point group."""
     from hermes_agent_anthropic import adapter
 
-    # Register every public symbol that __init__.py re-exports from adapter
-    # as a provider service so core code can look them up via the registry
-    # instead of importing from hermes_agent_anthropic directly.
+    # -----------------------------------------------------------------------
+    # Plugin-only symbols — SDK-dependent orchestration that stays in the
+    # plugin package.  Wire-format code (message conversion, aux client
+    # wrappers, transport) has moved to core (agent.anthropic_format,
+    # agent.anthropic_aux, agent.transports.anthropic) and is no longer
+    # registered here.
+    # -----------------------------------------------------------------------
     _symbols = [
-        "ADAPTIVE_EFFORT_MAP",
-        "THINKING_BUDGET",
-        "_ANTHROPIC_DEFAULT_OUTPUT_LIMIT",
-        "_ANTHROPIC_OUTPUT_LIMITS",
-        "_ADAPTIVE_THINKING_SUBSTRINGS",
-        "_CLAUDE_CODE_SYSTEM_PREFIX",
+        # OAuth / auth constants
         "_CLAUDE_CODE_VERSION_FALLBACK",
-        "_COMMON_BETAS",
-        "_CONTEXT_1M_BETA",
-        "_FAST_MODE_BETA",
-        "_FAST_MODE_SUPPORTED_SUBSTRINGS",
         "_HERMES_OAUTH_FILE",
-        "_KIMI_FAMILY_MODEL_PREFIXES",
-        "_MCP_TOOL_PREFIX",
-        "_NO_SAMPLING_PARAMS_SUBSTRINGS",
         "_OAUTH_CLIENT_ID",
-        "_OAUTH_ONLY_BETAS",
         "_OAUTH_REDIRECT_URI",
         "_OAUTH_SCOPES",
         "_OAUTH_TOKEN_URL",
-        "_TOOL_STREAMING_BETA",
-        "_XHIGH_EFFORT_SUBSTRINGS",
+        # SDK-dependent functions
         "_build_anthropic_client_with_bearer_hook",
-        "_common_betas_for_base_url",
-        "_content_parts_to_anthropic_blocks",
-        "_convert_assistant_message",
-        "_convert_content_part_to_anthropic",
-        "_convert_content_to_anthropic",
-        "_convert_tool_message_to_result",
-        "_convert_user_message",
         "_detect_claude_code_version",
-        "_evict_old_screenshots",
-        "_extract_preserved_thinking_blocks",
-        "_forbids_sampling_params",
         "_generate_pkce",
-        "_get_anthropic_max_output",
         "_get_anthropic_sdk",
         "_get_claude_code_version",
-        "_image_source_from_openai_url",
         "_is_azure_anthropic_endpoint",
-        "_is_bedrock_model_id",
-        "_is_deepseek_anthropic_endpoint",
-        "_is_kimi_coding_endpoint",
-        "_is_kimi_family_endpoint",
-        "_is_minimax_anthropic_endpoint",
         "_is_oauth_token",
-        "_is_third_party_anthropic_endpoint",
-        "_manage_thinking_signatures",
-        "_merge_consecutive_roles",
-        "_model_name_is_kimi_family",
-        "_normalize_base_url_text",
-        "_normalize_tool_input_schema",
         "_prefer_refreshable_claude_code_token",
         "_read_claude_code_credentials_from_keychain",
         "_refresh_oauth_token",
         "_requires_bearer_auth",
-        "_resolve_anthropic_messages_max_tokens",
         "_resolve_claude_code_token_from_credentials",
-        "_resolve_positive_anthropic_max_tokens",
-        "_sanitize_tool_id",
-        "_strip_orphaned_tool_blocks",
-        "_supports_adaptive_thinking",
-        "_supports_fast_mode",
-        "_supports_xhigh_effort",
         "_write_claude_code_credentials",
-        "_base_url_needs_context_1m_beta",
         "build_anthropic_bedrock_client",
         "build_anthropic_client",
-        "build_anthropic_kwargs",
-        "convert_messages_to_anthropic",
-        "convert_tools_to_anthropic",
         "is_claude_code_token_valid",
-        "normalize_model_name",
         "read_claude_code_credentials",
         "read_claude_managed_key",
         "read_hermes_oauth_credentials",
@@ -173,6 +92,83 @@ def register(ctx):
         "run_hermes_oauth_login_pure",
         "run_oauth_setup_token",
     ]
-    ctx.register_provider_services("anthropic", {
-        name: getattr(adapter, name) for name in _symbols
-    })
+
+    # resolve.py symbols — client resolution & endpoint detection
+    _resolve_symbols = [
+        "_ANTHROPIC_DEFAULT_BASE_URL",
+        "_ANTHROPIC_COMPAT_PROVIDERS",
+        "convert_openai_images_to_anthropic",
+        "endpoint_speaks_anthropic_messages",
+        "is_anthropic_compat_endpoint",
+        "maybe_wrap_anthropic",
+        "resolve_auxiliary_client",
+    ]
+    _all_symbols = _symbols + _resolve_symbols
+    _services = {}
+    for name in _symbols:
+        _services[name] = getattr(adapter, name)
+    for name in _resolve_symbols:
+        from hermes_agent_anthropic import resolve as _resolve_mod
+        _services[name] = getattr(_resolve_mod, name)
+    # Also expose ANTHROPIC_DEFAULT_BASE_URL under the public (no-underscore) name
+    _services["ANTHROPIC_DEFAULT_BASE_URL"] = _services.get("_ANTHROPIC_DEFAULT_BASE_URL", "")
+
+    # Also expose the model name normalizer as a provider service
+    from hermes_agent_anthropic.pricing import normalize_anthropic_model_name
+    _services["normalize_model_name"] = normalize_anthropic_model_name
+
+    ctx.register_provider_services("anthropic", _services)
+
+    # Register the provider resolver — core dispatches to this instead of
+    # having per-anthropic if/elif branches in resolve_provider_client().
+    ctx.register_provider_resolver("anthropic", resolve_auxiliary_client)
+
+    # Register the anthropic transport so core doesn't need to import it.
+    from agent.transports.anthropic import AnthropicTransport
+    ctx.register_transport("anthropic_messages", AnthropicTransport)
+
+    # Register the credential pool hook — core dispatches to this instead of
+    # having per-anthropic if/elif branches in credential_pool.py.
+    from agent.plugin_registries import CredentialPoolHook
+    from hermes_agent_anthropic.credential_pool_hook import (
+        sync_from_credentials_file,
+        refresh_oauth,
+        needs_refresh,
+        should_include_in_pool,
+        source_priority,
+        discover_credentials,
+        ANTHROPIC_ENV_VAR_ORDER,
+        detect_auth_type,
+    )
+    ctx.register_credential_pool_hook("anthropic", CredentialPoolHook(
+        sync_from_credentials_file=sync_from_credentials_file,
+        refresh_oauth=refresh_oauth,
+        needs_refresh=needs_refresh,
+        should_include_in_pool=should_include_in_pool,
+        source_priority=source_priority,
+        discover_credentials=discover_credentials,
+        env_var_order=ANTHROPIC_ENV_VAR_ORDER,
+        detect_auth_type=detect_auth_type,
+    ))
+
+    # Register pricing entries — core looks these up via the registry
+    # instead of hardcoding them in _OFFICIAL_DOCS_PRICING.
+    from hermes_agent_anthropic.pricing import (
+        get_anthropic_pricing_entries,
+        ANTHROPIC_PRICING_KEYS,
+    )
+    _entries = get_anthropic_pricing_entries()
+    _keyed = []
+    for (prov, model), entry in zip(ANTHROPIC_PRICING_KEYS, _entries):
+        _keyed.append((prov, model, entry))
+    ctx.register_pricing_provider("anthropic", _keyed)
+
+    # Register the provider overlay — core merges this into HERMES_OVERLAYS
+    from agent.plugin_registries import ProviderOverlayEntry
+    ctx.register_provider_overlay(ProviderOverlayEntry(
+        provider_name="anthropic",
+        transport="anthropic_messages",
+        extra_env_vars=("ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"),
+        display_name="Anthropic",
+        aliases=[],
+    ))

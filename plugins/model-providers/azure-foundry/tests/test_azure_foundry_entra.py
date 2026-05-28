@@ -41,7 +41,7 @@ def _reset_credential_cache():
 def fake_azure_identity(monkeypatch):
     """Identical fake to test_azure_identity_adapter — keeps Azure SDK
     out of these tests so they run in CI without the package installed."""
-    from agent import azure_identity_adapter as _adapter
+    from hermes_agent_azure import adapter as _adapter
 
     last = {"scope": None, "kwargs": None, "credential_count": 0}
 
@@ -340,10 +340,12 @@ class TestAzureFoundryAuthStatus:
         # Patch has_azure_identity_installed to True; do NOT patch the
         # token provider — if the code path tried to mint, the SDK
         # missing would raise.
-        monkeypatch.setattr(
-            "agent.azure_identity_adapter.has_azure_identity_installed",
-            lambda: True,
-        )
+        # NOTE: _get_azure_foundry_auth_status reads from the plugin
+        # registry, not directly from the adapter module, so we must
+        # patch the registry entry.
+        from agent.plugin_registries import registries
+        _azure_ns = registries._provider_services.setdefault("azure", {})
+        _azure_ns["has_azure_identity_installed"] = lambda: True
         info = _auth._get_azure_foundry_auth_status()
         assert info["logged_in"] is True
         assert info["auth_mode"] == "entra_id"
@@ -363,7 +365,7 @@ class TestAzureFoundryAuthStatus:
             },
         )
         monkeypatch.setattr(
-            "agent.azure_identity_adapter.has_azure_identity_installed",
+            "hermes_agent_azure.adapter.has_azure_identity_installed",
             lambda: False,
         )
         info = _auth._get_azure_foundry_auth_status()

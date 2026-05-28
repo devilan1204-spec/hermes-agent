@@ -475,12 +475,7 @@ class TestResolveProviderClientUniversalModelFallback:
                 "agent.auxiliary_client._get_aux_model_for_provider",
                 return_value="claude-haiku-4-5-20251001",
             ),
-            patch.dict(registries._provider_services, {"anthropic": {
-                "build_anthropic_client": MagicMock(return_value=MagicMock()),
-                "resolve_anthropic_token": MagicMock(return_value="sk-ant-***"),
-                "_is_oauth_token": lambda k: False,
-                "build_anthropic_kwargs": MagicMock(return_value={}),
-            }}),
+            patch.dict(registries._provider_resolvers, {"anthropic": lambda **kw: (MagicMock(), kw.get("model") or "claude-haiku-4-5-20251001")}),
             patch(
                 "agent.auxiliary_client._read_nous_auth", return_value=None
             ),
@@ -526,15 +521,25 @@ class TestExplicitProviderRouting:
     """Test explicit provider selection bypasses auto chain correctly."""
 
     def test_explicit_anthropic_api_key(self, monkeypatch):
-        """provider='anthropic' + regular API key should work with is_oauth=False."""
+        """provider='anthropic' + regular API key should work with is_oauth=False.
+
+        Tests via the registry resolver boundary — the resolver is the plugin's
+        responsibility; core only dispatches to it.
+        """
         from agent.plugin_registries import registries
-        mock_build = MagicMock(return_value=MagicMock())
-        with patch.dict(registries._provider_services, {"anthropic": {
-            "build_anthropic_client": mock_build,
-            "resolve_anthropic_token": MagicMock(return_value="sk-ant...-key"),
-            "_is_oauth_token": lambda k: False,
-            "build_anthropic_kwargs": MagicMock(return_value={}),
-        }}), patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
+
+        # Build a mock client whose .chat.completions._is_oauth is False
+        mock_adapter = MagicMock()
+        mock_adapter._is_oauth = False
+        mock_client = MagicMock()
+        mock_client.chat.completions = mock_adapter
+
+        # Mock the resolver via the registry — core tests must not reach into
+        # plugin internals directly.
+        def _mock_resolver(**kwargs):
+            return mock_client, "claude-haiku-4-5"
+
+        with patch.dict(registries._provider_resolvers, {"anthropic": _mock_resolver}):
             client, model = resolve_provider_client("anthropic")
             assert client is not None
             adapter = client.chat.completions
@@ -1234,7 +1239,7 @@ def test_resolve_api_key_provider_skips_unconfigured_anthropic(monkeypatch):
         called.append("anthropic")
         return None, None
 
-    monkeypatch.setattr("agent.auxiliary_client._try_anthropic", mock_try_anthropic)
+    monkeypatch.setattr("agent.auxiliary_client._anthropic_plugin_service", lambda name: mock_try_anthropic if name == "resolve_auxiliary_client" else None)
     monkeypatch.setattr("hermes_cli.auth.PROVIDER_REGISTRY", fake_registry)
     monkeypatch.setattr(
         "hermes_cli.auth.is_provider_explicitly_configured",
@@ -1582,26 +1587,27 @@ class TestAuxiliaryTaskExtraBody:
 # ---------------------------------------------------------------------------
 
 class TestAnthropicCompatImageConversion:
-    """Tests for _is_anthropic_compat_endpoint and _convert_openai_images_to_anthropic."""
+    """Tests for is_anthropic_compat_endpoint and convert_openai_images_to_anthropic."""
 
     def test_known_providers_detected(self):
-        from agent.auxiliary_client import _is_anthropic_compat_endpoint
+        from agent.plugin_registries import registries as _regs_is_compat; _is_anthropic_compat_endpoint = _regs_is_compat.get_provider_service("anthropic", "is_anthropic_compat_endpoint")
         assert _is_anthropic_compat_endpoint("minimax", "")
         assert _is_anthropic_compat_endpoint("minimax-cn", "")
 
     def test_openrouter_not_detected(self):
-        from agent.auxiliary_client import _is_anthropic_compat_endpoint
+        from agent.plugin_registries import registries as _regs_is_compat; _is_anthropic_compat_endpoint = _regs_is_compat.get_provider_service("anthropic", "is_anthropic_compat_endpoint")
         assert not _is_anthropic_compat_endpoint("openrouter", "")
         assert not _is_anthropic_compat_endpoint("anthropic", "")
 
     def test_url_based_detection(self):
-        from agent.auxiliary_client import _is_anthropic_compat_endpoint
+        from agent.plugin_registries import registries as _regs_is_compat; _is_anthropic_compat_endpoint = _regs_is_compat.get_provider_service("anthropic", "is_anthropic_compat_endpoint")
         assert _is_anthropic_compat_endpoint("custom", "https://api.minimax.io/anthropic")
         assert _is_anthropic_compat_endpoint("custom", "https://example.com/anthropic/v1")
         assert not _is_anthropic_compat_endpoint("custom", "https://api.openai.com/v1")
 
     def test_base64_image_converted(self):
-        from agent.auxiliary_client import _convert_openai_images_to_anthropic
+        from agent.plugin_registries import registries
+        convert_openai_images_to_anthropic = registries.get_provider_service("anthropic", "convert_openai_images_to_anthropic")
         messages = [{
             "role": "user",
             "content": [
@@ -1609,7 +1615,7 @@ class TestAnthropicCompatImageConversion:
                 {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBOR="}}
             ]
         }]
-        result = _convert_openai_images_to_anthropic(messages)
+        result = convert_openai_images_to_anthropic(messages)
         img_block = result[0]["content"][1]
         assert img_block["type"] == "image"
         assert img_block["source"]["type"] == "base64"
@@ -1617,34 +1623,37 @@ class TestAnthropicCompatImageConversion:
         assert img_block["source"]["data"] == "iVBOR="
 
     def test_url_image_converted(self):
-        from agent.auxiliary_client import _convert_openai_images_to_anthropic
+        from agent.plugin_registries import registries
+        convert_openai_images_to_anthropic = registries.get_provider_service("anthropic", "convert_openai_images_to_anthropic")
         messages = [{
             "role": "user",
             "content": [
                 {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}}
             ]
         }]
-        result = _convert_openai_images_to_anthropic(messages)
+        result = convert_openai_images_to_anthropic(messages)
         img_block = result[0]["content"][0]
         assert img_block["type"] == "image"
         assert img_block["source"]["type"] == "url"
         assert img_block["source"]["url"] == "https://example.com/img.jpg"
 
     def test_text_only_messages_unchanged(self):
-        from agent.auxiliary_client import _convert_openai_images_to_anthropic
+        from agent.plugin_registries import registries
+        convert_openai_images_to_anthropic = registries.get_provider_service("anthropic", "convert_openai_images_to_anthropic")
         messages = [{"role": "user", "content": "Hello"}]
-        result = _convert_openai_images_to_anthropic(messages)
+        result = convert_openai_images_to_anthropic(messages)
         assert result[0] is messages[0]  # same object, not copied
 
     def test_jpeg_media_type_parsed(self):
-        from agent.auxiliary_client import _convert_openai_images_to_anthropic
+        from agent.plugin_registries import registries
+        convert_openai_images_to_anthropic = registries.get_provider_service("anthropic", "convert_openai_images_to_anthropic")
         messages = [{
             "role": "user",
             "content": [
                 {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,/9j/="}}
             ]
         }]
-        result = _convert_openai_images_to_anthropic(messages)
+        result = convert_openai_images_to_anthropic(messages)
         assert result[0]["content"][0]["source"]["media_type"] == "image/jpeg"
 
 

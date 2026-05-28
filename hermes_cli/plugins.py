@@ -935,6 +935,113 @@ class PluginContext:
             self.manifest.name, name,
         )
 
+    def register_provider_resolver(
+        self,
+        name: str,
+        resolver: Any,
+    ) -> None:
+        """Register a provider resolver callable.
+
+        The resolver handles ALL provider-specific client construction
+        logic for auxiliary tasks.  Core's ``resolve_provider_client()``
+        dispatches to it instead of using per-provider if/elif branches.
+
+        Signature::
+
+            def resolver(
+                *,
+                model: str | None,
+                explicit_api_key: str | None,
+                explicit_base_url: str | None,
+                async_mode: bool,
+                is_vision: bool,
+                main_runtime: dict | None,
+                api_mode: str | None,
+            ) -> tuple[Any, str] | tuple[None, None]:
+                ...
+
+        Returns ``(client, default_model)`` or ``(None, None)``.
+        """
+        from agent.plugin_registries import registries
+
+        registries.register_provider_resolver(name, resolver)
+        logger.debug(
+            "Plugin %s registered provider resolver: %s",
+            self.manifest.name, name,
+        )
+
+    def register_transport(
+        self,
+        api_mode: str,
+        transport_cls: type,
+    ) -> None:
+        """Register a ProviderTransport class for an api_mode string.
+
+        This lets the transport registry discover provider transports
+        from plugins without core needing to import the plugin package.
+        """
+        from agent.plugin_registries import registries
+
+        registries._transports[api_mode] = transport_cls
+        logger.debug(
+            "Plugin %s registered transport: %s → %s",
+            self.manifest.name, api_mode, transport_cls.__name__,
+        )
+
+    def register_credential_pool_hook(
+        self,
+        name: str,
+        hook: Any,
+    ) -> None:
+        """Register a credential pool hook for provider-specific pool operations.
+
+        The hook should be a :class:`agent.plugin_registries.CredentialPoolHook`
+        instance with optional ``sync_from_credentials_file``,
+        ``refresh_oauth``, and ``should_include_in_pool`` callables.
+        """
+        from agent.plugin_registries import registries
+
+        registries.register_credential_pool_hook(name, hook)
+        logger.debug(
+            "Plugin %s registered credential pool hook: %s",
+            self.manifest.name, name,
+        )
+
+    def register_pricing_provider(
+        self,
+        name: str,
+        entries: list,
+    ) -> None:
+        """Register pricing entries for a provider.
+
+        ``entries`` should be a list of
+        :class:`agent.plugin_registries.PricingEntry` instances.
+        """
+        from agent.plugin_registries import registries
+
+        registries.register_pricing_provider(name, entries)
+        logger.debug(
+            "Plugin %s registered pricing provider: %s (%d entries)",
+            self.manifest.name, name, len(entries),
+        )
+
+    def register_provider_overlay(
+        self,
+        entry: Any,
+    ) -> None:
+        """Register a provider overlay entry.
+
+        ``entry`` should be a :class:`agent.plugin_registries.ProviderOverlayEntry`
+        instance.
+        """
+        from agent.plugin_registries import registries
+
+        registries.register_provider_overlay(entry)
+        logger.debug(
+            "Plugin %s registered provider overlay: %s",
+            self.manifest.name, entry.provider_name,
+        )
+
     # -- hook registration --------------------------------------------------
 
     # -- auxiliary task registration ---------------------------------------

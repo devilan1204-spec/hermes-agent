@@ -13,18 +13,20 @@ from hermes_agent_anthropic.adapter import (
     _is_azure_anthropic_endpoint,
     _is_oauth_token,
     _refresh_oauth_token,
-    _to_plain_data,
     _write_claude_code_credentials,
     build_anthropic_client,
     build_anthropic_bedrock_client,
-    build_anthropic_kwargs,
-    convert_messages_to_anthropic,
-    convert_tools_to_anthropic,
     is_claude_code_token_valid,
-    normalize_model_name,
     read_claude_code_credentials,
     resolve_anthropic_token,
     run_oauth_setup_token,
+)
+from agent.anthropic_format import (
+    _to_plain_data,
+    build_anthropic_kwargs,
+    convert_messages_to_anthropic,
+    convert_tools_to_anthropic,
+    normalize_model_name,
 )
 from agent.transports import get_transport
 
@@ -1187,14 +1189,14 @@ class TestBuildAnthropicKwargs:
         # Because build_anthropic_kwargs doesn't currently accept sampling
         # params through its signature, we exercise the strip behavior by
         # calling the internal predicate directly.
-        from hermes_agent_anthropic.adapter import _forbids_sampling_params
+        from agent.anthropic_format import _forbids_sampling_params
         assert _forbids_sampling_params("claude-opus-4-7") is True
         assert _forbids_sampling_params("claude-opus-4-6") is False
         assert _forbids_sampling_params("claude-sonnet-4-5") is False
 
     def test_supports_fast_mode_predicate(self):
         """Fast mode is Opus 4.6 only — Opus 4.7 and others must be excluded."""
-        from hermes_agent_anthropic.adapter import _supports_fast_mode
+        from agent.anthropic_format import _supports_fast_mode
         assert _supports_fast_mode("claude-opus-4-6") is True
         assert _supports_fast_mode("anthropic/claude-opus-4-6") is True
         assert _supports_fast_mode("claude-opus-4-7") is False
@@ -1347,36 +1349,36 @@ class TestBuildAnthropicKwargs:
 
 class TestGetAnthropicMaxOutput:
     def test_opus_4_6(self):
-        from hermes_agent_anthropic.adapter import _get_anthropic_max_output
+        from agent.anthropic_format import _get_anthropic_max_output
         assert _get_anthropic_max_output("claude-opus-4-6") == 128_000
 
     def test_opus_4_6_variant(self):
-        from hermes_agent_anthropic.adapter import _get_anthropic_max_output
+        from agent.anthropic_format import _get_anthropic_max_output
         assert _get_anthropic_max_output("claude-opus-4-6:1m:fast") == 128_000
 
     def test_sonnet_4_6(self):
-        from hermes_agent_anthropic.adapter import _get_anthropic_max_output
+        from agent.anthropic_format import _get_anthropic_max_output
         assert _get_anthropic_max_output("claude-sonnet-4-6") == 64_000
 
     def test_sonnet_4_date_stamped(self):
-        from hermes_agent_anthropic.adapter import _get_anthropic_max_output
+        from agent.anthropic_format import _get_anthropic_max_output
         assert _get_anthropic_max_output("claude-sonnet-4-20250514") == 64_000
 
     def test_claude_3_5_sonnet(self):
-        from hermes_agent_anthropic.adapter import _get_anthropic_max_output
+        from agent.anthropic_format import _get_anthropic_max_output
         assert _get_anthropic_max_output("claude-3-5-sonnet-20241022") == 8_192
 
     def test_claude_3_opus(self):
-        from hermes_agent_anthropic.adapter import _get_anthropic_max_output
+        from agent.anthropic_format import _get_anthropic_max_output
         assert _get_anthropic_max_output("claude-3-opus-20240229") == 4_096
 
     def test_unknown_future_model(self):
-        from hermes_agent_anthropic.adapter import _get_anthropic_max_output
+        from agent.anthropic_format import _get_anthropic_max_output
         assert _get_anthropic_max_output("claude-ultra-5-20260101") == 128_000
 
     def test_longest_prefix_wins(self):
         """'claude-3-5-sonnet' should match before 'claude-3-5'."""
-        from hermes_agent_anthropic.adapter import _get_anthropic_max_output
+        from agent.anthropic_format import _get_anthropic_max_output
         # claude-3-5-sonnet (8192) should win over a hypothetical shorter match
         assert _get_anthropic_max_output("claude-3-5-sonnet-20241022") == 8_192
 
@@ -1873,7 +1875,7 @@ class TestToolChoice:
 # max_tokens resolver — openclaw/openclaw#66664 port
 # ---------------------------------------------------------------------------
 
-from hermes_agent_anthropic.adapter import (
+from agent.anthropic_format import (
     _resolve_positive_anthropic_max_tokens,
     _resolve_anthropic_messages_max_tokens,
 )

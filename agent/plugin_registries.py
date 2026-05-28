@@ -19,6 +19,7 @@ from typing import (
     Optional,
     Protocol,
     Sequence,
+    Tuple,
     Type,
     runtime_checkable,
 )
@@ -219,6 +220,131 @@ class CredentialPoolEntry:
 
 
 # ---------------------------------------------------------------------------
+# Provider resolvers
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class ProviderResolver(Protocol):
+    """A plugin that resolves an auxiliary client for a specific provider.
+
+    Registered via ``ctx.register_provider_resolver(provider_name, resolver)``.
+    Queried by ``agent/auxiliary_client.py`` in ``resolve_provider_client()``.
+    """
+
+    def __call__(
+        self,
+        *,
+        model: str | None = None,
+        explicit_api_key: str | None = None,
+        explicit_base_url: str | None = None,
+        async_mode: bool = False,
+        is_vision: bool = False,
+        main_runtime: dict | None = None,
+        api_mode: str | None = None,
+    ) -> tuple[Any, str] | tuple[None, None]:
+        """Return ``(client, default_model)`` or ``(None, None)`` if unavailable."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Credential pool hooks
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CredentialPoolHook:
+    """Provider-specific credential pool operations.
+
+    Registered via ``ctx.register_credential_pool_hook(provider_name, hook)``.
+    Queried by ``agent/credential_pool.py``.
+    """
+
+    sync_from_credentials_file: Optional[Callable] = None
+    """Sync a pool entry from an external credentials file (e.g. ~/.claude/.credentials.json)."""
+
+    refresh_oauth: Optional[Callable] = None
+    """Refresh an OAuth token for a pool entry."""
+
+    should_include_in_pool: Optional[Callable] = None
+    """Return True if this provider's credentials should be included in the pool."""
+
+    needs_refresh: Optional[Callable] = None
+    """Return True if an OAuth entry needs a token refresh."""
+
+    source_priority: Optional[Callable] = None
+    """Return integer priority for a credential source (lower = preferred)."""
+
+    discover_credentials: Optional[Callable] = None
+    """Discover external credentials and upsert into the pool entries.
+
+    Signature: (entries: list, provider: str, is_suppressed: Callable) -> (changed: bool, active_sources: set)
+    """
+
+    env_var_order: Optional[list] = None
+    """Override env var scan order for this provider (e.g. ['ANTHROPIC_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'])."""
+
+    detect_auth_type: Optional[Callable] = None
+    """Given a token string, return the auth type for this provider.
+
+    Signature: (token: str) -> str  (e.g. AUTH_TYPE_OAUTH or AUTH_TYPE_API_KEY)
+    """
+
+
+# ---------------------------------------------------------------------------
+# Pricing providers
+# ---------------------------------------------------------------------------
+
+# Re-export PricingEntry from usage_pricing — that's the canonical definition
+# with Decimal fields. The registry stores these directly keyed by (provider, model).
+# Lazy import to avoid circular dependency (usage_pricing imports registries at runtime).
+def _get_pricing_entry_class():
+    from agent.usage_pricing import PricingEntry
+    return PricingEntry
+
+
+# ---------------------------------------------------------------------------
+# Provider overlays
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ProviderOverlayEntry:
+    """A provider overlay registered by a plugin.
+
+    Registered via ``ctx.register_provider_overlay(provider_name, entry)``.
+    Queried by ``hermes_cli/providers.py``.
+
+    This mirrors the fields of ``HermesOverlay`` so that providers.py
+    can merge plugin-registered overlays seamlessly.
+    """
+
+    provider_name: str
+    """Primary provider name (e.g. 'anthropic', 'bedrock')."""
+
+    transport: str = "openai_chat"
+    """Transport type: openai_chat | anthropic_messages | codex_responses | bedrock_converse"""
+
+    is_aggregator: bool = False
+    """Whether this provider aggregates multiple model providers."""
+
+    auth_type: str = "api_key"
+    """Auth type: api_key | oauth_device_code | oauth_external | aws_sdk | external_process"""
+
+    extra_env_vars: Tuple[str, ...] = ()
+    """Environment variable names that indicate this provider is configured."""
+
+    base_url_override: str = ""
+    """Override if models.dev URL is wrong/missing."""
+
+    base_url_env_var: str = ""
+    """Env var for user-custom base URL."""
+
+    display_name: str = ""
+    """Human-readable name for the provider (e.g. 'Anthropic', 'AWS Bedrock')."""
+
+    aliases: List[str] = field(default_factory=list)
+    """Alternative names that resolve to this provider."""
+
+
+# ---------------------------------------------------------------------------
 # The global registries (singleton)
 # ---------------------------------------------------------------------------
 
@@ -233,11 +359,16 @@ class PluginRegistries:
     def __init__(self) -> None:
         self.auth_providers: Dict[str, AuthProviderEntry] = {}
         self.transport_builders: Dict[str, TransportBuilder] = {}
+        self._transports: Dict[str, type] = {}
         self.platform_adapters: Dict[str, PlatformAdapterEntry] = {}
         self.tool_providers: Dict[str, ToolProviderEntry] = {}
         self.model_metadata: Dict[str, ModelMetadataEntry] = {}
         self.credential_pools: Dict[str, CredentialPoolEntry] = {}
         self._provider_services: Dict[str, Dict[str, Any]] = {}
+        self._provider_resolvers: Dict[str, Callable] = {}
+        self._credential_pool_hooks: Dict[str, CredentialPoolHook] = {}
+        self._pricing_providers: Dict[tuple, Any] = {}
+        self._provider_overlays: Dict[str, ProviderOverlayEntry] = {}
 
     # -- registration methods (called from PluginContext) --------------------
 
@@ -270,6 +401,46 @@ class PluginRegistries:
     def register_credential_pool(self, entry: CredentialPoolEntry) -> None:
         self.credential_pools[entry.name] = entry
 
+    def register_provider_resolver(self, name: str, resolver: Callable) -> None:
+        """Register a provider resolver callable.
+
+        The resolver is called by ``resolve_provider_client()`` to create an
+        auxiliary client for a specific provider.  Signature::
+
+            def resolver(
+                *,
+                model: str | None,
+                explicit_api_key: str | None,
+                explicit_base_url: str | None,
+                async_mode: bool,
+                is_vision: bool,
+                main_runtime: dict | None,
+                api_mode: str | None,
+            ) -> tuple[Any, str] | tuple[None, None]:
+                ...
+
+        Returns ``(client, default_model)`` or ``(None, None)``.
+        """
+        self._provider_resolvers[name] = resolver
+
+    def register_credential_pool_hook(self, name: str, hook: CredentialPoolHook) -> None:
+        """Register a credential pool hook for provider-specific pool operations."""
+        self._credential_pool_hooks[name] = hook
+
+    def register_pricing_provider(self, name: str, entries: List[tuple]) -> None:
+        """Register pricing entries for a provider.
+
+        Each entry is a (provider, model, PricingEntry) tuple so the
+        lookup key matches the (provider, model) pattern used by
+        _OFFICIAL_DOCS_PRICING.
+        """
+        for prov, model, entry in entries:
+            self._pricing_providers[(prov, model)] = entry
+
+    def register_provider_overlay(self, entry: ProviderOverlayEntry) -> None:
+        """Register a provider overlay entry from a plugin."""
+        self._provider_overlays[entry.provider_name] = entry
+
     # -- query helpers -------------------------------------------------------
 
     def get_auth_provider(self, name: str) -> AuthProviderEntry | None:
@@ -289,6 +460,30 @@ class PluginRegistries:
 
     def get_credential_pool(self, name: str) -> CredentialPoolEntry | None:
         return self.credential_pools.get(name)
+
+    def get_provider_resolver(self, name: str) -> Callable | None:
+        """Return the registered resolver for a provider, or None."""
+        return self._provider_resolvers.get(name)
+
+    def get_credential_pool_hook(self, name: str) -> CredentialPoolHook | None:
+        """Return the registered credential pool hook for a provider, or None."""
+        return self._credential_pool_hooks.get(name)
+
+    def get_pricing_entry(self, provider: str, model: str) -> Any:
+        """Return a registered pricing entry for (provider, model), or None."""
+        return self._pricing_providers.get((provider, model))
+
+    def all_pricing_entries(self) -> Dict[tuple, Any]:
+        """Return all registered pricing entries (keyed by (provider, model))."""
+        return dict(self._pricing_providers)
+
+    def get_provider_overlay(self, name: str) -> ProviderOverlayEntry | None:
+        """Return a registered provider overlay, or None."""
+        return self._provider_overlays.get(name)
+
+    def all_provider_overlays(self) -> Dict[str, ProviderOverlayEntry]:
+        """Return all registered provider overlays."""
+        return dict(self._provider_overlays)
 
     def all_auth_providers(self) -> List[AuthProviderEntry]:
         return list(self.auth_providers.values())
@@ -348,10 +543,17 @@ class PluginRegistries:
                     self._attr = attr
                     self._fallback = fallback
 
-                def __call__(self, *args: Any, **kwargs: Any) -> Any:
+                def _resolve(self) -> Any:
                     mod = sys.modules.get(self._mod)
-                    live = getattr(mod, self._attr, self._fallback) if mod else self._fallback
-                    return live(*args, **kwargs)
+                    return getattr(mod, self._attr, self._fallback) if mod else self._fallback
+
+                def __call__(self, *args: Any, **kwargs: Any) -> Any:
+                    return self._resolve()(*args, **kwargs)
+
+                def __getattr__(self, name: str) -> Any:
+                    if name.startswith("_"):
+                        raise AttributeError(name)
+                    return getattr(self._resolve(), name)
 
                 def __repr__(self) -> str:  # pragma: no cover
                     return f"<LazyRef {self._mod}.{self._attr}>"

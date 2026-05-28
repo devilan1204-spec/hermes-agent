@@ -195,7 +195,7 @@ class TestBuildBearerHttpClient:
                     "api-key": "leaked-placeholder",
                 },
             )
-            with caplog.at_level(logging.WARNING, logger="agent.azure_identity_adapter"):
+            with caplog.at_level(logging.WARNING, logger="hermes_agent_azure.adapter"):
                 hook(req)  # Must not raise.
             # Pre-set auth headers stripped — no sentinel makes it to Azure.
             assert "Authorization" not in req.headers
@@ -352,7 +352,7 @@ def fake_azure_identity(monkeypatch):
     # The adapter's `_require_azure_identity` does its own import, so
     # patch that too to make sure tests never hit the real package's
     # singleton state.
-    from agent import azure_identity_adapter as _adapter
+    from hermes_agent_azure import adapter as _adapter
     monkeypatch.setattr(_adapter, "_require_azure_identity", lambda: fake_module)
 
     return fake
@@ -459,7 +459,7 @@ class TestRequireAzureIdentityMissing:
     def test_clear_error_when_azure_identity_missing(self, monkeypatch):
         """When azure-identity isn't importable, the adapter must raise
         ImportError with an actionable message."""
-        from hermes_agent_azure import azure_identity_adapter as _adapter
+        from hermes_agent_azure import adapter as _adapter
 
         # Force the import path to fail.
         original_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __import__
@@ -484,7 +484,7 @@ class TestRequireAzureIdentityMissing:
 
 class TestHasAzureIdentityCredentials:
     def test_returns_false_when_package_missing_and_install_disabled(self, monkeypatch):
-        from agent import azure_identity_adapter as _adapter
+        from hermes_agent_azure import adapter as _adapter
         monkeypatch.setattr(_adapter, "has_azure_identity_installed", lambda: False)
         assert _adapter.has_azure_identity_credentials(
             "https://x/.default", allow_install=False,
@@ -495,7 +495,7 @@ class TestHasAzureIdentityCredentials:
         lazy-install path before bailing — otherwise the wizard's
         ``preflight`` would silently fail for fresh installs that haven't
         run ``pip install azure-identity`` yet."""
-        from agent import azure_identity_adapter as _adapter
+        from hermes_agent_azure import adapter as _adapter
 
         installed = {"called": False}
 
@@ -536,7 +536,7 @@ class TestHasAzureIdentityCredentials:
         assert has_azure_identity_credentials("https://x/.default", timeout_seconds=0.5) is True
 
     def test_returns_false_when_get_token_raises(self, monkeypatch):
-        from agent import azure_identity_adapter as _adapter
+        from hermes_agent_azure import adapter as _adapter
 
         def _failing_credential(_config):
             class _Cred:
@@ -551,7 +551,7 @@ class TestHasAzureIdentityCredentials:
     def test_returns_false_on_timeout(self, monkeypatch):
         """Slow IMDS / network must time out, not hang the caller."""
         import threading
-        from agent import azure_identity_adapter as _adapter
+        from hermes_agent_azure import adapter as _adapter
 
         slow_release = threading.Event()
 
@@ -581,7 +581,7 @@ class TestHasAzureIdentityCredentials:
 
 class TestDescribeActiveCredential:
     def test_reports_not_installed(self, monkeypatch):
-        from agent import azure_identity_adapter as _adapter
+        from hermes_agent_azure import adapter as _adapter
         monkeypatch.setattr(_adapter, "has_azure_identity_installed", lambda: False)
         info = _adapter.describe_active_credential(
             scope="https://x/.default", allow_install=False,
@@ -593,7 +593,7 @@ class TestDescribeActiveCredential:
     def test_reports_install_failure(self, monkeypatch):
         """When lazy install is allowed but fails (e.g. lazy installs
         disabled), the diagnostic surfaces the failure as the error."""
-        from agent import azure_identity_adapter as _adapter
+        from hermes_agent_azure import adapter as _adapter
         monkeypatch.setattr(_adapter, "has_azure_identity_installed", lambda: False)
 
         def _fail_install():
@@ -632,7 +632,7 @@ class TestDescribeActiveCredential:
         assert any("EnvironmentCredential" in s for s in sources)
 
     def test_reports_error_on_chain_failure(self, monkeypatch):
-        from agent import azure_identity_adapter as _adapter
+        from hermes_agent_azure import adapter as _adapter
 
         def _failing_credential(_config):
             class _Cred:

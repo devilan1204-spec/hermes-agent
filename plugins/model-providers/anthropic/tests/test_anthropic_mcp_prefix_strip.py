@@ -191,7 +191,7 @@ class TestAnthropicOAuthOutgoingPrefix:
     tools registered as ``mcp_<server>_<tool>``). GH-25255."""
 
     def _build(self, tools, is_oauth=True):
-        from hermes_agent_anthropic import build_anthropic_kwargs
+        from agent.anthropic_format import build_anthropic_kwargs
         return build_anthropic_kwargs(
             model="claude-sonnet-4-6",
             messages=[{"role": "user", "content": "Hi"}],

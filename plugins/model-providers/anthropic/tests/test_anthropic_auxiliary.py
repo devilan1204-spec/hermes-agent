@@ -14,8 +14,6 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
 from agent.auxiliary_client import (
-    _try_anthropic,
-    AnthropicAuxiliaryClient,
     resolve_provider_client,
     _read_codex_access_token,
     _resolve_auto,
@@ -23,6 +21,8 @@ from agent.auxiliary_client import (
     call_llm,
     async_call_llm,
 )
+from hermes_agent_anthropic.resolve import resolve_auxiliary_client as _try_anthropic
+from agent.anthropic_aux import AnthropicAuxiliaryClient
 
 
 class TestAnthropicOAuthFlag:
@@ -33,7 +33,8 @@ class TestAnthropicOAuthFlag:
         monkeypatch.setenv("ANTHROPIC_TOKEN", "sk-ant-oat01-test-token")
         with patch("hermes_agent_anthropic.adapter.build_anthropic_client") as mock_build:
             mock_build.return_value = MagicMock()
-            from agent.auxiliary_client import _try_anthropic, AnthropicAuxiliaryClient
+            from hermes_agent_anthropic.resolve import resolve_auxiliary_client as _try_anthropic
+            from agent.anthropic_aux import AnthropicAuxiliaryClient
             client, model = _try_anthropic()
             assert client is not None
             assert isinstance(client, AnthropicAuxiliaryClient)
@@ -45,9 +46,10 @@ class TestAnthropicOAuthFlag:
         """Regular API keys (sk-ant-api-*) should create client with is_oauth=False."""
         with patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="sk-ant-api03-testkey1234"), \
              patch("hermes_agent_anthropic.adapter.build_anthropic_client") as mock_build, \
-             patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
+             patch("hermes_agent_anthropic.resolve._select_pool_entry", return_value=(False, None)):
             mock_build.return_value = MagicMock()
-            from agent.auxiliary_client import _try_anthropic, AnthropicAuxiliaryClient
+            from hermes_agent_anthropic.resolve import resolve_auxiliary_client as _try_anthropic
+            from agent.anthropic_aux import AnthropicAuxiliaryClient
             client, model = _try_anthropic()
             assert client is not None
             assert isinstance(client, AnthropicAuxiliaryClient)
@@ -67,11 +69,11 @@ class TestAnthropicOAuthFlag:
                 return _Entry()
 
         with (
-            patch("agent.auxiliary_client.load_pool", return_value=_Pool()),
+            patch("agent.credential_pool.load_pool", return_value=_Pool()),
             patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", side_effect=AssertionError("legacy path should not run")),
             patch("hermes_agent_anthropic.adapter.build_anthropic_client", return_value=MagicMock()) as mock_build,
         ):
-            from agent.auxiliary_client import _try_anthropic
+            from hermes_agent_anthropic.resolve import resolve_auxiliary_client as _try_anthropic
 
             client, model = _try_anthropic()
 
@@ -93,10 +95,10 @@ class TestAnthropicExplicitApiKey:
         """_try_anthropic(explicit_api_key) must use the supplied key, not the env fallback."""
         with patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="env-fallback-key"), \
              patch("hermes_agent_anthropic.adapter.build_anthropic_client") as mock_build, \
-             patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
+             patch("hermes_agent_anthropic.resolve._select_pool_entry", return_value=(False, None)):
             mock_build.return_value = MagicMock()
-            from agent.auxiliary_client import _try_anthropic
-            client, model = _try_anthropic("explicit-pool-key")
+            from hermes_agent_anthropic.resolve import resolve_auxiliary_client as _try_anthropic
+            client, model = _try_anthropic(explicit_api_key="explicit-pool-key")
         assert client is not None
         assert mock_build.call_args.args[0] == "explicit-pool-key", (
             f"Expected explicit_api_key to be passed, got: {mock_build.call_args.args[0]}"
@@ -107,9 +109,9 @@ class TestAnthropicExplicitApiKey:
         """Without explicit_api_key, _try_anthropic falls back to resolve_anthropic_token."""
         with patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="env-fallback-key"), \
              patch("hermes_agent_anthropic.adapter.build_anthropic_client") as mock_build, \
-             patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
+             patch("hermes_agent_anthropic.resolve._select_pool_entry", return_value=(False, None)):
             mock_build.return_value = MagicMock()
-            from agent.auxiliary_client import _try_anthropic
+            from hermes_agent_anthropic.resolve import resolve_auxiliary_client as _try_anthropic
             client, model = _try_anthropic()
         assert client is not None
         assert mock_build.call_args.args[0] == "env-fallback-key"
@@ -118,7 +120,7 @@ class TestAnthropicExplicitApiKey:
         """resolve_provider_client(provider='anthropic', explicit_api_key=...) must propagate the key."""
         with patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="env-key"), \
              patch("hermes_agent_anthropic.adapter.build_anthropic_client") as mock_build, \
-             patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
+             patch("hermes_agent_anthropic.resolve._select_pool_entry", return_value=(False, None)):
             mock_build.return_value = MagicMock()
             client, model = resolve_provider_client(
                 provider="anthropic",
@@ -240,9 +242,9 @@ class TestExpiredCodexFallback:
     def test_hermes_oauth_file_sets_oauth_flag(self, monkeypatch):
         """OAuth-style tokens should get is_oauth=*** (token is not sk-ant-api-*)."""
         # Mock resolve_anthropic_token to return an OAuth-style token
-        with patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="sk-ant...oken"), \
+        with patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.sig"), \
              patch("hermes_agent_anthropic.adapter.build_anthropic_client") as mock_build, \
-             patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
+             patch("hermes_agent_anthropic.resolve._select_pool_entry", return_value=(False, None)):
             mock_build.return_value = MagicMock()
             client, model = _try_anthropic()
             assert client is not None, "Should resolve token"
@@ -294,7 +296,7 @@ class TestExpiredCodexFallback:
 
     def test_claude_code_oauth_env_sets_flag(self, monkeypatch):
         """CLAUDE_CODE_OAUTH_TOKEN env var should get is_oauth=True."""
-        monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant...oken")
+        monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "eyJhbG...test.sig")  # JWT → is_oauth=True
         monkeypatch.delenv("ANTHROPIC_TOKEN", raising=False)
         with patch("hermes_agent_anthropic.adapter.build_anthropic_client") as mock_build:
             mock_build.return_value = MagicMock()
@@ -315,7 +317,7 @@ class TestVisionClientFallback:
             patch("agent.auxiliary_client._read_main_provider", return_value="anthropic"),
             patch("agent.auxiliary_client._read_main_model", return_value="claude-sonnet-4"),
             patch("hermes_agent_anthropic.adapter.build_anthropic_client", return_value=MagicMock()),
-            patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="***"),
+            patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.sig"),
         ):
             backends = get_available_vision_backends()
 
@@ -326,7 +328,7 @@ class TestVisionClientFallback:
         with (
             patch("agent.auxiliary_client._read_nous_auth", return_value=None),
             patch("hermes_agent_anthropic.adapter.build_anthropic_client", return_value=MagicMock()),
-            patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="***"),
+            patch("hermes_agent_anthropic.adapter.resolve_anthropic_token", return_value="eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.sig"),
         ):
             client, model = resolve_provider_client("anthropic")
 
@@ -491,8 +493,8 @@ class TestAuxiliaryAuthRefreshRetry:
                 "expiresAt": 0,
             }),
             patch("hermes_agent_anthropic.adapter.refresh_anthropic_oauth_pure", return_value={
-                "access_token": "***",
-                "refresh_token": "***",
+                "access_token": "fresh-token",
+                "refresh_token": "refresh-token-2",
                 "expires_at_ms": 9999999999999,
             }) as mock_refresh_oauth,
             patch("hermes_agent_anthropic.adapter._write_claude_code_credentials") as mock_write,

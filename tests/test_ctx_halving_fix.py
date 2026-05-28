@@ -159,9 +159,16 @@ class TestEphemeralMaxOutputTokens:
         agent._ephemeral_max_output_tokens = 5_000
         agent.max_tokens = None  # will resolve to native ceiling (128K for Opus 4.6)
 
-        agent._build_api_kwargs([{"role": "user", "content": "hi"}])
-        # Second call — ephemeral is gone
-        kwargs2 = agent._build_api_kwargs([{"role": "user", "content": "hi"}])
+        # Use the real build_anthropic_kwargs so max_tokens resolves correctly
+        from agent.plugin_registries import registries
+        from unittest.mock import patch
+        from agent.anthropic_format import build_anthropic_kwargs as _real_bkw
+        with patch.dict(registries._provider_services, {
+            "anthropic": {**registries._provider_services.get("anthropic", {}), "build_anthropic_kwargs": _real_bkw}
+        }):
+            agent._build_api_kwargs([{"role": "user", "content": "hi"}])
+            # Second call — ephemeral is gone
+            kwargs2 = agent._build_api_kwargs([{"role": "user", "content": "hi"}])
         assert kwargs2["max_tokens"] == 128_000  # Opus 4.6 native ceiling
 
     def test_no_ephemeral_uses_self_max_tokens_directly(self):

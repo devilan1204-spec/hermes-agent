@@ -44,7 +44,7 @@ def _reset_credential_cache():
 def fake_azure_identity(monkeypatch):
     """Stand-in for azure.identity (keeps CI hermetic when the SDK is
     not installed)."""
-    from agent import azure_identity_adapter as _adapter
+    from hermes_agent_azure import adapter as _adapter
 
     last = {"scope": None}
 
@@ -300,6 +300,7 @@ class TestResolveProviderClientAzureFoundry:
         ``resolve_api_key_provider_credentials`` and return None for
         Entra users."""
         from agent import auxiliary_client as _aux
+        import openai as _openai_mod
 
         received = {}
 
@@ -309,7 +310,7 @@ class TestResolveProviderClientAzureFoundry:
                 self.api_key = kwargs.get("api_key", "")
                 self.base_url = kwargs.get("base_url", "")
 
-        monkeypatch.setattr(_aux, "OpenAI", _FakeOpenAI)
+        monkeypatch.setattr(_openai_mod, "OpenAI", _FakeOpenAI)
         patch_load_config({
             "provider": "azure-foundry",
             "base_url": "https://r.openai.azure.com/openai/v1",

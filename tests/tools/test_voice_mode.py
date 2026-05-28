@@ -259,6 +259,12 @@ class TestCheckVoiceRequirements:
         monkeypatch.setattr("tools.voice_mode._termux_api_app_installed", lambda: True)
         monkeypatch.setattr("tools.voice_mode.detect_audio_environment", lambda: {"available": True, "warnings": [], "notices": ["Termux:API microphone recording available"]})
         monkeypatch.setattr("hermes_agent_stt.transcription_tools._get_provider", lambda cfg: "openai")
+        # Mock the registry so voice_mode can find the stt provider
+        from unittest.mock import MagicMock
+        from agent.plugin_registries import registries
+        mock_stt = MagicMock()
+        mock_stt.config_functions = {"_get_provider": lambda cfg: "openai", "_load_stt_config": lambda: {}, "is_stt_enabled": lambda cfg=None: True}
+        monkeypatch.setattr(registries, "get_tool_provider", lambda name: mock_stt if name == "stt" else None)
 
         from tools.voice_mode import check_voice_requirements
         result = check_voice_requirements()

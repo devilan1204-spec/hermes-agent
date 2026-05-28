@@ -4,6 +4,10 @@ from hermes_agent_slack.adapter import (  # noqa: F401
     SlackAdapter,
     check_slack_requirements,
     _slash_user_id,
+    SLACK_AVAILABLE,
+    AsyncApp,
+    AsyncWebClient,
+    AsyncSocketModeHandler,
 )
 
 

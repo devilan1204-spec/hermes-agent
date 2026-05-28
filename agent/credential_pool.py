@@ -458,44 +458,6 @@ class CredentialPool:
         self._persist()
         return updated
 
-    def _sync_anthropic_entry_from_credentials_file(self, entry: PooledCredential) -> PooledCredential:
-        """Sync a claude_code pool entry from ~/.claude/.credentials.json if tokens differ.
-
-        OAuth refresh tokens are single-use. When something external (e.g.
-        Claude Code CLI, or another profile's pool) refreshes the token, it
-        writes the new pair to ~/.claude/.credentials.json. The pool entry's
-        refresh token becomes stale. This method detects that and syncs.
-        """
-        if self.provider != "anthropic" or entry.source != "claude_code":
-            return entry
-        try:
-            from agent.plugin_registries import registries
-            read_claude_code_credentials = registries.get_provider_service("anthropic", "read_claude_code_credentials")
-            creds = read_claude_code_credentials()
-            if not creds:
-                return entry
-            file_refresh = creds.get("refreshToken", "")
-            file_access = creds.get("accessToken", "")
-            file_expires = creds.get("expiresAt", 0)
-            # If the credentials file has a different token pair, sync it
-            if file_refresh and file_refresh != entry.refresh_token:
-                logger.debug("Pool entry %s: syncing tokens from credentials file (refresh token changed)", entry.id)
-                updated = replace(
-                    entry,
-                    access_token=file_access,
-                    refresh_token=file_refresh,
-                    expires_at_ms=file_expires,
-                    last_status=None,
-                    last_status_at=None,
-                    last_error_code=None,
-                )
-                self._replace_entry(entry, updated)
-                self._persist()
-                return updated
-        except Exception as exc:
-            logger.debug("Failed to sync from credentials file: %s", exc)
-        return entry
-
     def _sync_codex_entry_from_auth_store(self, entry: PooledCredential) -> PooledCredential:
         """Sync a Codex device_code pool entry from auth.json if tokens differ.
 
@@ -785,33 +747,11 @@ class CredentialPool:
             return None
 
         try:
-            if self.provider == "anthropic":
-                from agent.plugin_registries import registries
-                refresh_anthropic_oauth_pure = registries.get_provider_service("anthropic", "refresh_anthropic_oauth_pure")
-
-                refreshed = refresh_anthropic_oauth_pure(
-                    entry.refresh_token,
-                    use_json=entry.source.endswith("hermes_pkce"),
-                )
-                updated = replace(
-                    entry,
-                    access_token=refreshed["access_token"],
-                    refresh_token=refreshed["refresh_token"],
-                    expires_at_ms=refreshed["expires_at_ms"],
-                )
-                # Keep ~/.claude/.credentials.json in sync so that the
-                # fallback path (resolve_anthropic_token) and other profiles
-                # see the latest tokens.
-                if entry.source == "claude_code":
-                    try:
-                        _write_claude_code_credentials = registries.get_provider_service("anthropic", "_write_claude_code_credentials")
-                        _write_claude_code_credentials(
-                            refreshed["access_token"],
-                            refreshed["refresh_token"],
-                            refreshed["expires_at_ms"],
-                        )
-                    except Exception as wexc:
-                        logger.debug("Failed to write refreshed token to credentials file: %s", wexc)
+            # ── Plugin-registered credential pool hooks ──
+            from agent.plugin_registries import registries as _cph_reg2
+            _hook = _cph_reg2.get_credential_pool_hook(self.provider)
+            if _hook is not None and _hook.refresh_oauth is not None:
+                updated = _hook.refresh_oauth(entry, pool=self)
             elif self.provider == "openai-codex":
                 # Adopt fresher tokens from auth.json before spending the
                 # refresh_token — single-use tokens consumed by another Hermes
@@ -866,47 +806,18 @@ class CredentialPool:
                 return entry
         except Exception as exc:
             logger.debug("Credential refresh failed for %s/%s: %s", self.provider, entry.id, exc)
-            # For anthropic claude_code entries: the refresh token may have been
-            # consumed by another process. Check if ~/.claude/.credentials.json
-            # has a newer token pair and retry once.
-            if self.provider == "anthropic" and entry.source == "claude_code":
-                synced = self._sync_anthropic_entry_from_credentials_file(entry)
-                if synced.refresh_token != entry.refresh_token:
-                    logger.debug("Retrying refresh with synced token from credentials file")
-                    try:
-                        from agent.plugin_registries import registries
-                        refresh_anthropic_oauth_pure = registries.get_provider_service("anthropic", "refresh_anthropic_oauth_pure")
-                        refreshed = refresh_anthropic_oauth_pure(
-                            synced.refresh_token,
-                            use_json=synced.source.endswith("hermes_pkce"),
-                        )
-                        updated = replace(
-                            synced,
-                            access_token=refreshed["access_token"],
-                            refresh_token=refreshed["refresh_token"],
-                            expires_at_ms=refreshed["expires_at_ms"],
-                            last_status=STATUS_OK,
-                            last_status_at=None,
-                            last_error_code=None,
-                        )
-                        self._replace_entry(synced, updated)
-                        self._persist()
-                        try:
-                            _write_claude_code_credentials = registries.get_provider_service("anthropic", "_write_claude_code_credentials")
-                            _write_claude_code_credentials(
-                                refreshed["access_token"],
-                                refreshed["refresh_token"],
-                                refreshed["expires_at_ms"],
-                            )
-                        except Exception as wexc:
-                            logger.debug("Failed to write refreshed token to credentials file (retry path): %s", wexc)
-                        return updated
-                    except Exception as retry_exc:
-                        logger.debug("Retry refresh also failed: %s", retry_exc)
-                elif not self._entry_needs_refresh(synced):
-                    # Credentials file had a valid (non-expired) token — use it directly
-                    logger.debug("Credentials file has valid token, using without refresh")
-                    return synced
+            # ── Plugin-registered credential pool hooks ──
+            # The hook's refresh_oauth already handles retry-with-sync internally,
+            # so if we got here it means a non-hook provider failed.
+            from agent.plugin_registries import registries as _cph_reg3
+            _hook = _cph_reg3.get_credential_pool_hook(self.provider)
+            if _hook is not None and _hook.sync_from_credentials_file is not None:
+                # Give the hook a chance to sync from external file
+                synced = _hook.sync_from_credentials_file(entry)
+                if synced is not entry:
+                    entry = synced
+                    self._replace_entry(entry, synced)
+                    self._persist()
             # For xai-oauth: same race as nous — another process may have
             # consumed the refresh token between our proactive sync and the
             # HTTP call.  Re-check auth.json and adopt the fresh tokens if
@@ -1127,10 +1038,11 @@ class CredentialPool:
     def _entry_needs_refresh(self, entry: PooledCredential) -> bool:
         if entry.auth_type != AUTH_TYPE_OAUTH:
             return False
-        if self.provider == "anthropic":
-            if entry.expires_at_ms is None:
-                return False
-            return int(entry.expires_at_ms) <= int(time.time() * 1000) + 120_000
+        # ── Plugin-registered credential pool hooks ──
+        from agent.plugin_registries import registries as _cph_reg
+        _hook = _cph_reg.get_credential_pool_hook(self.provider)
+        if _hook is not None and _hook.needs_refresh is not None:
+            return _hook.needs_refresh(entry)
         if self.provider == "openai-codex":
             return _codex_access_token_is_expiring(
                 entry.access_token,
@@ -1163,12 +1075,16 @@ class CredentialPool:
         cleared_any = False
         available: List[PooledCredential] = []
         for entry in self._entries:
-            # For anthropic claude_code entries, sync from the credentials file
-            # before any status/refresh checks. This picks up tokens refreshed
-            # by other processes (Claude Code CLI, other Hermes profiles).
-            if (self.provider == "anthropic" and entry.source == "claude_code"
+            # ── Plugin-registered credential pool hooks ──
+            # Sync exhausted entries from external credentials files before
+            # status/refresh checks. This picks up tokens refreshed by other
+            # processes (e.g. Claude Code CLI, other Hermes profiles).
+            from agent.plugin_registries import registries as _cph_reg4
+            _avail_hook = _cph_reg4.get_credential_pool_hook(self.provider)
+            if (_avail_hook is not None
+                    and _avail_hook.sync_from_credentials_file is not None
                     and entry.last_status == STATUS_EXHAUSTED):
-                synced = self._sync_anthropic_entry_from_credentials_file(entry)
+                synced = _avail_hook.sync_from_credentials_file(entry)
                 if synced is not entry:
                     entry = synced
                     cleared_any = True
@@ -1518,44 +1434,15 @@ def _seed_from_singletons(provider: str, entries: List[PooledCredential]) -> Tup
         def _is_suppressed(_p, _s):  # type: ignore[misc]
             return False
 
-    if provider == "anthropic":
-        # Only auto-discover external credentials (Claude Code, Hermes PKCE)
-        # when the user has explicitly configured anthropic as their provider.
-        # Without this gate, auxiliary client fallback chains silently read
-        # ~/.claude/.credentials.json without user consent.  See PR #4210.
-        try:
-            from hermes_cli.auth import is_provider_explicitly_configured
-            if not is_provider_explicitly_configured("anthropic"):
-                return changed, active_sources
-        except ImportError:
-            pass
-
-        from agent.plugin_registries import registries
-        read_claude_code_credentials = registries.get_provider_service("anthropic", "read_claude_code_credentials")
-        read_hermes_oauth_credentials = registries.get_provider_service("anthropic", "read_hermes_oauth_credentials")
-
-        for source_name, creds in (
-            ("hermes_pkce", read_hermes_oauth_credentials()),
-            ("claude_code", read_claude_code_credentials()),
-        ):
-            if creds and creds.get("accessToken"):
-                if _is_suppressed(provider, source_name):
-                    continue
-                active_sources.add(source_name)
-                changed |= _upsert_entry(
-                    entries,
-                    provider,
-                    source_name,
-                    {
-                        "source": source_name,
-                        "auth_type": AUTH_TYPE_OAUTH,
-                        "access_token": creds.get("accessToken", ""),
-                        "refresh_token": creds.get("refreshToken"),
-                        "expires_at_ms": creds.get("expiresAt"),
-                        "label": label_from_token(creds.get("accessToken", ""), source_name),
-                    },
-                )
-
+    # ── Plugin-registered credential pool hooks ──
+    from agent.plugin_registries import registries as _cp_reg
+    _cp_hook = _cp_reg.get_credential_pool_hook(provider)
+    if _cp_hook is not None and _cp_hook.discover_credentials is not None:
+        hook_changed, hook_sources = _cp_hook.discover_credentials(
+            entries, provider, _is_suppressed,
+        )
+        changed |= hook_changed
+        active_sources |= hook_sources
     elif provider == "nous":
         state = _load_provider_state(auth_store, "nous")
         has_runtime_material = bool(
@@ -1866,12 +1753,11 @@ def _seed_from_env(provider: str, entries: List[PooledCredential]) -> Tuple[bool
         env_url = _get_env_prefer_dotenv(pconfig.base_url_env_var).rstrip("/")
 
     env_vars = list(pconfig.api_key_env_vars)
-    if provider == "anthropic":
-        env_vars = [
-            "ANTHROPIC_TOKEN",
-            "CLAUDE_CODE_OAUTH_TOKEN",
-            "ANTHROPIC_API_KEY",
-        ]
+    # ── Plugin-registered credential pool hooks: env var order override ──
+    from agent.plugin_registries import registries as _env_reg
+    _env_hook = _env_reg.get_credential_pool_hook(provider)
+    if _env_hook is not None and _env_hook.env_var_order is not None:
+        env_vars = _env_hook.env_var_order
 
     for env_var in env_vars:
         # Prefer ~/.hermes/.env over os.environ
@@ -1882,7 +1768,11 @@ def _seed_from_env(provider: str, entries: List[PooledCredential]) -> Tuple[bool
         if _is_source_suppressed(provider, source):
             continue
         active_sources.add(source)
-        auth_type = AUTH_TYPE_OAUTH if provider == "anthropic" and not token.startswith("sk-ant-api") else AUTH_TYPE_API_KEY
+        # ── Plugin-registered credential pool hooks: auth type detection ──
+        if _env_hook is not None and _env_hook.detect_auth_type is not None:
+            auth_type = _env_hook.detect_auth_type(token)
+        else:
+            auth_type = AUTH_TYPE_API_KEY
         base_url = env_url or pconfig.inference_base_url
         if provider == "kimi-coding":
             base_url = _resolve_kimi_base_url(token, pconfig.inference_base_url, env_url)

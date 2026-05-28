@@ -10,8 +10,7 @@ from agent.transports.types import NormalizedResponse, ToolCall
 
 @pytest.fixture
 def transport():
-    import agent.transports.bedrock  # noqa: F401
-    # Register the bedrock plugin so the transport can resolve provider services
+    # The bedrock plugin registers the transport via the plugin registry.
     from agent.plugin_registries import registries
     if registries.get_provider_service("bedrock", "build_converse_kwargs") is None:
         from hermes_agent_bedrock import register as _bedrock_register
@@ -19,8 +18,24 @@ def transport():
         class _Ctx:
             def register_provider_services(self, name, services):
                 registries.register_provider_services(name, services)
+            def register_provider_resolver(self, name, fn):
+                registries.register_provider_resolver(name, fn)
+            def register_transport(self, api_mode, transport_cls):
+                registries._transports[api_mode] = transport_cls
+            def register_pricing_provider(self, name, entries):
+                registries.register_pricing_provider(name, entries)
+            def register_credential_pool_hook(self, name, hook):
+                registries.register_credential_pool_hook(name, hook)
+            def register_provider_overlay(self, entry):
+                registries.register_provider_overlay(entry)
+            def __getattr__(self, name):
+                if name.startswith("register_"):
+                    return lambda *a, **kw: None
+                raise AttributeError(name)
 
         _bedrock_register(_Ctx())
+    import agent.transports as _t
+    _t._discovered = False
     return get_transport("bedrock_converse")
 
 

@@ -92,3 +92,34 @@ def register(ctx):
         "_extract_provider_from_arn": adapter._extract_provider_from_arn,
         "_traceback_frames_modules": adapter._traceback_frames_modules,
     })
+
+    # Register the provider resolver — core dispatches to this instead of
+    # having per-bedrock if/elif branches in resolve_provider_client().
+    from hermes_agent_bedrock.resolve import resolve_auxiliary_client as _bedrock_resolver
+    ctx.register_provider_resolver("bedrock", _bedrock_resolver)
+
+    # Register the bedrock transport so core doesn't need to import it.
+    from hermes_agent_bedrock.transport import BedrockTransport
+    ctx.register_transport("bedrock_converse", BedrockTransport)
+
+    # Register pricing entries — core looks these up via the registry
+    # instead of hardcoding them in _OFFICIAL_DOCS_PRICING.
+    from hermes_agent_bedrock.pricing import (
+        get_bedrock_pricing_entries,
+        BEDROCK_PRICING_KEYS,
+    )
+    _entries = get_bedrock_pricing_entries()
+    _keyed = []
+    for (prov, model), entry in zip(BEDROCK_PRICING_KEYS, _entries):
+        _keyed.append((prov, model, entry))
+    ctx.register_pricing_provider("bedrock", _keyed)
+
+    # Register the provider overlay — core merges this into HERMES_OVERLAYS
+    from agent.plugin_registries import ProviderOverlayEntry
+    ctx.register_provider_overlay(ProviderOverlayEntry(
+        provider_name="bedrock",
+        transport="bedrock_converse",
+        auth_type="aws_sdk",
+        display_name="AWS Bedrock",
+        aliases=["aws", "aws-bedrock", "amazon-bedrock", "amazon"],
+    ))

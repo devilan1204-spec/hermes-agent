@@ -21,6 +21,10 @@ def _ensure_telegram_mock():
     mod.constants.ChatType.SUPERGROUP = "supergroup"
     mod.constants.ChatType.CHANNEL = "channel"
     mod.constants.ChatType.PRIVATE = "private"
+    # Prevent pytest from interpreting auto-generated mock attributes as
+    # plugin specs.  Without this, ``mod.pytest_plugins`` returns a child
+    # MagicMock which trips _get_plugin_specs_as_list().
+    mod.pytest_plugins = None
     for name in ("telegram", "telegram.ext", "telegram.constants", "telegram.request"):
         sys.modules.setdefault(name, mod)
 

@@ -41,7 +41,7 @@ class TestBuildApiKwargsAnthropicMaxTokens:
         agent.max_tokens = 4096
         agent.reasoning_config = None
 
-        with patch("hermes_agent_anthropic.adapter.build_anthropic_kwargs") as mock_build:
+        with patch("agent.transports.anthropic.build_anthropic_kwargs") as mock_build:
             mock_build.return_value = {"model": "claude-sonnet-4-20250514", "messages": [], "max_tokens": 4096}
             agent._build_api_kwargs([{"role": "user", "content": "test"}])
             _, kwargs = mock_build.call_args
@@ -57,7 +57,7 @@ class TestBuildApiKwargsAnthropicMaxTokens:
         agent.max_tokens = None
         agent.reasoning_config = None
 
-        with patch("hermes_agent_anthropic.adapter.build_anthropic_kwargs") as mock_build:
+        with patch("agent.transports.anthropic.build_anthropic_kwargs") as mock_build:
             mock_build.return_value = {"model": "claude-sonnet-4-20250514", "messages": [], "max_tokens": 16384}
             agent._build_api_kwargs([{"role": "user", "content": "test"}])
             call_args = mock_build.call_args
@@ -83,7 +83,7 @@ class TestAnthropicImageFallback:
 
         with (
             patch("tools.vision_tools.vision_analyze_tool", new=AsyncMock(return_value=json.dumps({"success": True, "analysis": "A cat sitting on a chair."}))),
-            patch("hermes_agent_anthropic.adapter.build_anthropic_kwargs") as mock_build,
+            patch("agent.transports.anthropic.build_anthropic_kwargs") as mock_build,
         ):
             mock_build.return_value = {"model": "claude-sonnet-4-20250514", "messages": [], "max_tokens": 4096}
             agent._build_api_kwargs(api_messages)
@@ -123,7 +123,7 @@ class TestAnthropicImageFallback:
         mock_vision = AsyncMock(return_value=json.dumps({"success": True, "analysis": "A small test image."}))
         with (
             patch("tools.vision_tools.vision_analyze_tool", new=mock_vision),
-            patch("hermes_agent_anthropic.adapter.build_anthropic_kwargs") as mock_build,
+            patch("agent.transports.anthropic.build_anthropic_kwargs") as mock_build,
         ):
             mock_build.return_value = {"model": "claude-sonnet-4-20250514", "messages": [], "max_tokens": 4096}
             agent._build_api_kwargs(api_messages)

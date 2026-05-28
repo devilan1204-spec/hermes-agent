@@ -36,13 +36,19 @@ def _make_fake_anthropic_namespace(build_side_effect=None, build_return=None):
     else:
         mock_build = MagicMock(return_value=build_return or fake_client)
 
-    fake_ns = {"build_anthropic_client": mock_build}
+    from agent.anthropic_aux import AnthropicAuxiliaryClient as _AC
+    fake_ns = {
+        "build_anthropic_client": mock_build,
+        "AnthropicAuxiliaryClient": _AC,
+        "AsyncAnthropicAuxiliaryClient": MagicMock(),
+    }
     return fake_ns, fake_client, mock_build
 
 
 def test_custom_endpoint_anthropic_messages_builds_anthropic_wrapper():
     """api_mode=anthropic_messages → returns AnthropicAuxiliaryClient, not OpenAI."""
-    from agent.auxiliary_client import _try_custom_endpoint, AnthropicAuxiliaryClient
+    from agent.auxiliary_client import _try_custom_endpoint
+    from agent.anthropic_aux import AnthropicAuxiliaryClient
 
     fake_ns, fake_client, _ = _make_fake_anthropic_namespace()
 
@@ -60,6 +66,7 @@ def test_custom_endpoint_anthropic_messages_builds_anthropic_wrapper():
         "agent.plugin_registries.registries",
     ) as mock_reg:
         mock_reg.get_provider_namespace.return_value = fake_ns
+        mock_reg.get_provider_service.side_effect = lambda p, n: fake_ns.get(n) if p == "anthropic" else None
         client, model = _try_custom_endpoint()
 
     assert isinstance(client, AnthropicAuxiliaryClient), (
@@ -90,6 +97,7 @@ def test_custom_endpoint_anthropic_messages_falls_back_when_sdk_missing():
         "agent.plugin_registries.registries",
     ) as mock_reg:
         mock_reg.get_provider_namespace.return_value = fake_ns
+        mock_reg.get_provider_service.side_effect = lambda p, n: fake_ns.get(n) if p == "anthropic" else None
         client, model = _try_custom_endpoint()
 
     # Should fall back to an OpenAI-wire client rather than returning
@@ -97,13 +105,14 @@ def test_custom_endpoint_anthropic_messages_falls_back_when_sdk_missing():
     assert client is not None
     assert model == "claude-sonnet-4-6"
     # OpenAI client, not AnthropicAuxiliaryClient.
-    from agent.auxiliary_client import AnthropicAuxiliaryClient
+    from agent.anthropic_aux import AnthropicAuxiliaryClient
     assert not isinstance(client, AnthropicAuxiliaryClient)
 
 
 def test_custom_endpoint_chat_completions_still_uses_openai_wire():
     """Regression: default path (no api_mode) must remain OpenAI client."""
-    from agent.auxiliary_client import _try_custom_endpoint, AnthropicAuxiliaryClient
+    from agent.auxiliary_client import _try_custom_endpoint
+    from agent.anthropic_aux import AnthropicAuxiliaryClient
 
     with patch(
         "agent.auxiliary_client._resolve_custom_runtime",
