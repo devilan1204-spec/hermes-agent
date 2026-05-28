@@ -202,7 +202,7 @@
         "msi"
       ],
       "signtoolOptions": {
-        "sign": null
+        "sign": "./build-noop-sign.cjs"
       }
     },
     "nsis": {
