@@ -31,7 +31,6 @@ members = [
     "hermes-agent-stt",
     "hermes-agent-telegram",
     "hermes-agent-tts",
-    "hermes-agent-vercel",
 ]
 
 [[package]]
@@ -1615,7 +1614,7 @@ wheels = [
 
 [[package]]
 name = "hermes-agent"
-version = "0.14.0"
+version = "0.15.0"
 source = { editable = "." }
 dependencies = [
     { name = "croniter" },
@@ -1666,7 +1665,6 @@ all = [
     { name = "hermes-agent-stt" },
     { name = "hermes-agent-telegram" },
     { name = "hermes-agent-tts" },
-    { name = "hermes-agent-vercel" },
     { name = "mcp" },
     { name = "ptyprocess", marker = "sys_platform != 'win32'" },
     { name = "pytest" },
@@ -1793,11 +1791,11 @@ termux-all = [
 tts-premium = [
     { name = "hermes-agent-tts" },
 ]
-vercel = [
-    { name = "hermes-agent-vercel" },
-]
 voice = [
     { name = "hermes-agent-stt" },
+]
+wecom = [
+    { name = "defusedxml" },
 ]
 youtube = [
     { name = "youtube-transcript-api" },
@@ -1810,6 +1808,7 @@ requires-dist = [
     { name = "aiohttp", marker = "extra == 'sms'", specifier = "==3.13.3" },
     { name = "croniter", specifier = "==6.0.0" },
     { name = "debugpy", marker = "extra == 'dev'", specifier = "==1.8.20" },
+    { name = "defusedxml", marker = "extra == 'wecom'", specifier = "==0.7.1" },
     { name = "fire", specifier = "==0.7.1" },
     { name = "google-api-python-client", marker = "extra == 'google'", specifier = "==2.194.0" },
     { name = "google-auth-httplib2", marker = "extra == 'google'", specifier = "==0.3.1" },
@@ -1852,7 +1851,6 @@ requires-dist = [
     { name = "hermes-agent", extras = ["telegram"], marker = "extra == 'all'", editable = "." },
     { name = "hermes-agent", extras = ["termux"], marker = "extra == 'termux-all'", editable = "." },
     { name = "hermes-agent", extras = ["tts-premium"], marker = "extra == 'all'", editable = "." },
-    { name = "hermes-agent", extras = ["vercel"], marker = "extra == 'all'", editable = "." },
     { name = "hermes-agent", extras = ["voice"], marker = "extra == 'all'", editable = "." },
     { name = "hermes-agent", extras = ["web"], marker = "extra == 'all'", editable = "." },
     { name = "hermes-agent", extras = ["web"], marker = "extra == 'termux-all'", editable = "." },
@@ -1878,7 +1876,6 @@ requires-dist = [
     { name = "hermes-agent-telegram", marker = "extra == 'telegram'", editable = "plugins/platforms/telegram" },
     { name = "hermes-agent-tts", marker = "extra == 'edge-tts'", editable = "plugins/tts" },
     { name = "hermes-agent-tts", marker = "extra == 'tts-premium'", editable = "plugins/tts" },
-    { name = "hermes-agent-vercel", marker = "extra == 'vercel'", editable = "plugins/terminals/vercel" },
     { name = "httpx", extras = ["socks"], specifier = "==0.28.1" },
     { name = "jinja2", specifier = "==3.1.6" },
     { name = "mcp", marker = "extra == 'computer-use'", specifier = "==1.26.0" },
@@ -1907,7 +1904,7 @@ requires-dist = [
     { name = "tzdata", marker = "sys_platform == 'win32'", specifier = "==2025.3" },
     { name = "youtube-transcript-api", marker = "extra == 'youtube'", specifier = "==1.2.4" },
 ]
-provides-extras = ["anthropic", "bedrock", "azure-identity", "discord", "exa", "firecrawl", "parallel-web", "fal", "edge-tts", "tts-premium", "voice", "modal", "daytona", "vercel", "hindsight", "honcho", "slack", "telegram", "matrix", "dingtalk", "feishu", "dashboard", "dev", "cron", "cli", "pty", "mcp", "homeassistant", "sms", "computer-use", "acp", "google", "youtube", "termux", "termux-all", "all"]
+provides-extras = ["anthropic", "bedrock", "azure-identity", "discord", "exa", "firecrawl", "parallel-web", "fal", "edge-tts", "tts-premium", "voice", "modal", "daytona", "hindsight", "honcho", "slack", "telegram", "matrix", "dingtalk", "feishu", "dashboard", "dev", "cron", "wecom", "cli", "pty", "mcp", "homeassistant", "sms", "computer-use", "acp", "google", "youtube", "termux", "termux-all", "all"]
 
 [[package]]
 name = "hermes-agent-anthropic"
@@ -2237,21 +2234,6 @@ requires-dist = [
     { name = "edge-tts", specifier = "==7.2.7" },
     { name = "elevenlabs", specifier = "==1.59.0" },
     { name = "hermes-agent", editable = "." },
-]
-
-[[package]]
-name = "hermes-agent-vercel"
-version = "0.1.0"
-source = { editable = "plugins/terminals/vercel" }
-dependencies = [
-    { name = "hermes-agent" },
-    { name = "vercel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "hermes-agent", editable = "." },
-    { name = "vercel", specifier = "==0.5.7" },
 ]
 
 [[package]]
@@ -4740,39 +4722,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/37/945b4ca0ac27e3dc4952642d4c900edd030b3da6c9634875af6e13ae80e5/uvloop-0.22.1-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b91328c72635f6f9e0282e4a57da7470c7350ab1c9f48546c0f2866205349d21", size = 4467065, upload-time = "2025-10-16T22:16:58.206Z" },
     { url = "https://files.pythonhosted.org/packages/97/cc/48d232f33d60e2e2e0b42f4e73455b146b76ebe216487e862700457fbf3c/uvloop-0.22.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:daf620c2995d193449393d6c62131b3fbd40a63bf7b307a1527856ace637fe88", size = 4328384, upload-time = "2025-10-16T22:16:59.36Z" },
     { url = "https://files.pythonhosted.org/packages/e4/16/c1fd27e9549f3c4baf1dc9c20c456cd2f822dbf8de9f463824b0c0357e06/uvloop-0.22.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:6cde23eeda1a25c75b2e07d39970f3374105d5eafbaab2a4482be82f272d5a5e", size = 4296730, upload-time = "2025-10-16T22:17:00.744Z" },
-]
-
-[[package]]
-name = "vercel"
-version = "0.5.7"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "cbor2" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "vercel-workers", marker = "python_full_version >= '3.12'" },
-    { name = "websockets" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/68/a671ebc656afbb5e25fb88c681b61511cc13670ea771c87b2f711782022b/vercel-0.5.7.tar.gz", hash = "sha256:8070ea1b33962adfed98498f9273f24ea2066a20c74d38643d479d8280801c6e", size = 118597, upload-time = "2026-04-15T17:58:20.424Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/2e/bacf1ccc0ec95464a68398e64bf5e36f859cd51f3e379623f103802f85f1/vercel-0.5.7-py3-none-any.whl", hash = "sha256:90eb2689c34e403db2170fec3eb47e1a91092c200d91baf4b4501fb3e2a44d28", size = 139698, upload-time = "2026-04-15T17:58:18.945Z" },
-]
-
-[[package]]
-name = "vercel-workers"
-version = "0.0.16"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio", marker = "python_full_version >= '3.12'" },
-    { name = "httpx", marker = "python_full_version >= '3.12'" },
-    { name = "python-dotenv", marker = "python_full_version >= '3.12'" },
-    { name = "vercel", marker = "python_full_version >= '3.12'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/73/d8/17ba256fceff42be231ca8ff0567dcf2da54ee8de633e949fa08b9403b1f/vercel_workers-0.0.16.tar.gz", hash = "sha256:38df45dbf42fbae39ffa0e419f0908bf1beb047e38fc5ddd0a479feac340fb8c", size = 51615, upload-time = "2026-04-13T21:23:27.649Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/65/3a/0137d5b157845e1d41a70130d8dce8ba15d8712f34619693cda04ecb8f02/vercel_workers-0.0.16-py3-none-any.whl", hash = "sha256:542be839e46e236a68cc308695ccc3c970d76de72c978d7f416cc6ce09688896", size = 50141, upload-time = "2026-04-13T21:23:28.652Z" },
 ]
 
 [[package]]

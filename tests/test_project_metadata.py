@@ -57,7 +57,7 @@ def test_plugin_extras_are_workspace_member_refs():
         "discord", "exa", "firecrawl", "parallel",
         "honcho", "hindsight",
         "fal", "tts", "stt",
-        "daytona", "vercel", "modal",
+        "daytona", "modal",
         "telegram", "slack", "dingtalk", "feishu", "matrix",
         "dashboard",
     }

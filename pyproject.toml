@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "hermes-agent"
-version = "0.14.0"
+version = "0.15.0"
 description = "The self-improving AI agent — creates skills from experience, improves them during use, and runs anywhere"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -84,7 +84,6 @@ tts-premium = ["hermes-agent-tts"]
 voice = ["hermes-agent-stt"]
 modal = ["hermes-agent-modal"]
 daytona = ["hermes-agent-daytona"]
-vercel = ["hermes-agent-vercel"]
 hindsight = ["hermes-agent-hindsight"]
 honcho = ["hermes-agent-honcho"]
 slack = ["hermes-agent-slack"]
@@ -96,6 +95,12 @@ dashboard = ["hermes-agent-dashboard"]
 # Non-plugin extras (kept as inline dep specs — not workspace members)
 dev = ["debugpy==1.8.20", "pytest==9.0.2", "pytest-asyncio==1.3.0", "pytest-timeout==2.4.0", "mcp==1.26.0", "ty==0.0.21", "ruff==0.15.10"]
 cron = []  # croniter is now a core dependency; this extra kept for back-compat
+# WeCom callback-mode adapter — parses untrusted XML POST bodies from
+# WeCom-controlled callback endpoints, so we use defusedxml (drop-in
+# replacement for stdlib xml.etree.ElementTree) to block billion-laughs
+# and XXE. aiohttp/httpx are already in [messaging]; defusedxml lands
+# here to keep the dependency local to wecom_callback's threat model.
+wecom = ["defusedxml==0.7.1"]
 cli = ["simple-term-menu==1.6.6"]
 pty = [
   "ptyprocess==0.7.0; sys_platform != 'win32'",
@@ -184,7 +189,6 @@ all = [
   "hermes-agent[voice]",
   "hermes-agent[modal]",
   "hermes-agent[daytona]",
-  "hermes-agent[vercel]",
   "hermes-agent[hindsight]",
   "hermes-agent[honcho]",
     "hermes-agent[slack]",
@@ -234,7 +238,6 @@ members = [
   "plugins/stt",
   "plugins/image_gen/fal_pkg",
   "plugins/terminals/daytona",
-  "plugins/terminals/vercel",
   "plugins/terminals/modal",
   "plugins/dashboard",
 ]
@@ -259,7 +262,6 @@ hermes-agent-tts = { workspace = true }
 hermes-agent-stt = { workspace = true }
 hermes-agent-fal = { workspace = true }
 hermes-agent-daytona = { workspace = true }
-hermes-agent-vercel = { workspace = true }
 hermes-agent-modal = { workspace = true }
 hermes-agent-dashboard = { workspace = true }
 
