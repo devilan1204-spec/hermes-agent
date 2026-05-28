@@ -4042,6 +4042,41 @@ class TestCredentialPoolRecovery:
         assert context["message"] == "Weekly credits exhausted."
         assert context["reset_at"] == "2026-04-12T10:30:00Z"
 
+    def test_extract_api_error_context_uses_type_as_reason(self, agent):
+        error = SimpleNamespace(
+            body={
+                "error": {
+                    "type": "usage_limit_reached",
+                    "message": "The usage limit has been reached",
+                }
+            },
+            response=SimpleNamespace(headers={}),
+        )
+
+        context = agent._extract_api_error_context(error)
+
+        assert context["reason"] == "usage_limit_reached"
+        assert context["message"] == "The usage limit has been reached"
+
+    def test_extract_api_error_context_parses_resets_in_hours_and_minutes(self, agent, monkeypatch):
+        from agent import agent_runtime_helpers
+
+        monkeypatch.setattr(agent_runtime_helpers.time, "time", lambda: 1_000.0)
+        error = SimpleNamespace(
+            body={
+                "error": {
+                    "type": "GoUsageLimitError",
+                    "message": "Weekly usage limit reached. Resets in 6hr 29min.",
+                }
+            },
+            response=SimpleNamespace(headers={}),
+        )
+
+        context = agent._extract_api_error_context(error)
+
+        assert context["reason"] == "GoUsageLimitError"
+        assert context["reset_at"] == 1_000.0 + (6 * 60 * 60) + (29 * 60)
+
     def test_recover_with_pool_passes_error_context_on_rotated_429(self, agent):
         next_entry = SimpleNamespace(label="secondary")
         captured = {}

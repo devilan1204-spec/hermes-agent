@@ -22,7 +22,6 @@ Stable desktop builds ship signed/notarized macOS artifacts and Windows installe
 ### One-Line CLI Installer (Linux / macOS / WSL2)
 
 For a git-based install that tracks `main` and gives you the latest changes immediately:
->>>>>>> main
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
@@ -107,7 +106,7 @@ hermes setup          # Or run the full setup wizard to configure everything at 
 ```
 
 :::tip Fastest path: Nous Portal
-One subscription covers 300+ models plus the [Tool Gateway](/docs/user-guide/features/tool-gateway) (web search, image generation, TTS, cloud browser). Skip the per-tool key juggling:
+One subscription covers 300+ models plus the [Tool Gateway](/user-guide/features/tool-gateway) (web search, image generation, TTS, cloud browser). Skip the per-tool key juggling:
 
 ```bash
 hermes setup --portal
