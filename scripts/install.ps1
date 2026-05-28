@@ -1524,6 +1524,83 @@ function Set-PathVariable {
     Write-Success "hermes command ready"
 }
 
+function Write-BootstrapMarker {
+    # Writes $InstallDir\.hermes-bootstrap-complete which tells the Hermes
+    # desktop app (apps/desktop/electron/main.cjs) "install.ps1 ran
+    # successfully — DON'T trigger the legacy first-launch bootstrap
+    # runner."
+    #
+    # Schema mirrors what main.cjs's writeBootstrapMarker() / isBootstrap
+    # Complete() expect. Keep this in lockstep when either side changes:
+    #   apps/desktop/electron/main.cjs lines 1199-1222
+    #   BOOTSTRAP_MARKER_SCHEMA_VERSION = 1 (line 187)
+    #
+    # Pinned commit/branch come from -Commit + -Branch flags (passed by
+    # Hermes-Setup.exe) or fall back to whatever git resolves in the
+    # checkout. The desktop validates schemaVersion + pinnedCommit
+    # length but doesn't enforce that HEAD matches the pin (users
+    # update via `hermes update` which moves HEAD legitimately).
+    if (-not (Test-Path $InstallDir)) {
+        Write-Warn "Skipping bootstrap marker: $InstallDir doesn't exist"
+        return
+    }
+
+    # Resolve the pinned commit: explicit -Commit wins, otherwise read
+    # the checkout's HEAD via git. If git can't run, leave commit empty
+    # and the marker will fail desktop validation (pinnedCommit.length
+    # >= 7) — better to be invalid than wrong.
+    $pinnedCommit = $Commit
+    if (-not $pinnedCommit) {
+        # PS 5.1 doesn't support the ?. null-conditional operator, so
+        # check Get-Command's result explicitly before reading .Source.
+        $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+        $gitExe = if ($gitCmd) { $gitCmd.Source } else { $null }
+        if ($gitExe) {
+            Push-Location $InstallDir
+            try {
+                $resolved = & $gitExe rev-parse HEAD 2>$null
+                if ($LASTEXITCODE -eq 0 -and $resolved) {
+                    $pinnedCommit = $resolved.Trim()
+                }
+            } catch {
+                # Ignore — pinnedCommit stays empty, marker stays invalid,
+                # desktop falls through to its legacy bootstrap path.
+            } finally {
+                Pop-Location
+            }
+        }
+    }
+
+    $pinnedBranch = $Branch
+    if (-not $pinnedBranch) {
+        $pinnedBranch = "main"  # install.ps1's own default for -Branch
+    }
+
+    $markerPath = Join-Path $InstallDir ".hermes-bootstrap-complete"
+    $marker = [ordered]@{
+        schemaVersion = 1
+        pinnedCommit  = $pinnedCommit
+        pinnedBranch  = $pinnedBranch
+        completedAt   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+        # desktopVersion field intentionally omitted — only the desktop
+        # app knows its own version, and the marker validator doesn't
+        # require it. The desktop fills it in if/when it writes its
+        # own marker (e.g. after a future in-app upgrade).
+    }
+    $json = $marker | ConvertTo-Json -Compress:$false
+
+    # Write WITHOUT a UTF-8 BOM. PowerShell 5.1's `Set-Content -Encoding UTF8`
+    # always emits a BOM, and Node's plain JSON.parse rejects the BOM as an
+    # unexpected character — so a BOM'd marker would silently fail the
+    # desktop's readJson(), make isBootstrapComplete() return null, and the
+    # desktop would re-run the legacy bootstrap runner anyway. Defeats the
+    # whole point. Use the .NET API directly for BOM-less UTF-8.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($markerPath, $json, $utf8NoBom)
+
+    Write-Success "Bootstrap marker written: $markerPath"
+}
+
 function Copy-ConfigTemplates {
     Write-Info "Setting up configuration files..."
     
@@ -2376,6 +2453,7 @@ $InstallStages += @(
     @{ Name = "path";             Title = "Adding Hermes to PATH";                Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-Path" }
     @{ Name = "config-templates"; Title = "Writing configuration templates";      Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-ConfigTemplates" }
     @{ Name = "platform-sdks";    Title = "Installing messaging platform SDKs";   Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-PlatformSdks" }
+    @{ Name = "bootstrap-marker"; Title = "Marking install complete";              Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-BootstrapMarker" }
     # Interactive stages.  In non-interactive mode these become no-ops; the
     # caller (GUI / CI) handles the equivalent UX themselves.
     @{ Name = "configure";        Title = "Configuring API keys and models";      Category = "post-install"; NeedsUserInput = $true;  Worker = "Stage-Configure" }
@@ -2416,6 +2494,7 @@ function Stage-Desktop          { Install-Desktop }
 function Stage-Path             { Set-PathVariable }
 function Stage-ConfigTemplates  { Copy-ConfigTemplates }
 function Stage-PlatformSdks     { Resolve-UvCmd; Install-PlatformSdks }
+function Stage-BootstrapMarker  { Write-BootstrapMarker }
 function Stage-Configure        { Invoke-SetupWizard }
 function Stage-Gateway          { Start-GatewayIfConfigured }
 
