@@ -201,9 +201,7 @@
         "nsis",
         "msi"
       ],
-      "signtoolOptions": {
-        "sign": "./build-noop-sign.cjs"
-      }
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
