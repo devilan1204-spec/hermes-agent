@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, List, Optional
 import yaml
 
 from hermes_cli.config import get_hermes_home
+import hermes_events
 
 
 HOOKS_DIR = get_hermes_home() / "hooks"
@@ -170,6 +171,24 @@ class HookRegistry:
         """
         if context is None:
             context = {}
+
+        # Publish on the generic event bus (hermes_events) so plugins can
+        # subscribe to gateway lifecycle without having to register a
+        # full HOOK.yaml + handler.py. Translate the legacy ``:`` separator
+        # to the bus's ``.`` so a subscriber can match ``gateway.agent.*``
+        # or ``gateway.command.<name>``. ``publish()`` is sync — safe to
+        # call from inside this coroutine without ``await``; async
+        # subscribers are scheduled by the bus via asyncio.create_task().
+        # See docs/events.md for the topic taxonomy.
+        try:
+            hermes_events.publish(
+                f"gateway.{event_type.replace(':', '.')}", dict(context)
+            )
+        except Exception:
+            # Bus failures must never block the legacy hook pipeline. The
+            # bus already logs subscriber exceptions internally; this
+            # catch only handles a (very unlikely) publish-side error.
+            pass
 
         for fn in self._resolve_handlers(event_type):
             try:

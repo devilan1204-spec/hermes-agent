@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from hermes_constants import get_hermes_home
 from hermes_cli.env_loader import load_hermes_dotenv
+import hermes_events
 from utils import is_truthy_value
 from tui_gateway.transport import (
     StdioTransport,
@@ -388,6 +389,26 @@ def _emit(event: str, sid: str, payload: dict | None = None):
     if payload is not None:
         params["payload"] = payload
     write_json({"jsonrpc": "2.0", "method": "event", "params": params})
+    # Also publish on the generic event bus (hermes_events) so plugins
+    # (orb today, achievements / observability / debug taps tomorrow) can
+    # subscribe to TUI lifecycle without needing per-session WS plumbing.
+    # The bus payload mirrors the JSON-RPC params: ``session_id`` plus the
+    # event-specific ``payload`` dict (if any), flattened so subscribers
+    # don't need to dig into a nested envelope. The topic is prefixed with
+    # ``tui.`` to namespace it from gateway/agent events. See docs/events.md.
+    try:
+        bus_payload: dict = {"session_id": sid}
+        if payload is not None:
+            bus_payload.update(payload)
+        hermes_events.publish(f"tui.{event}", bus_payload)
+    except Exception:
+        # The bus is best-effort plumbing for plugins; a publish failure
+        # must never disturb the JSON-RPC emit that drives the React TUI.
+        # hermes_events itself already logs subscriber failures internally
+        # — this catch only handles a publish-side error (e.g. someone
+        # passed an unhashable topic), which shouldn't happen but isn't
+        # worth a crash if it does.
+        pass
 
 
 def _status_update(sid: str, kind: str, text: str | None = None):
