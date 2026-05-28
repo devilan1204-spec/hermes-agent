@@ -1837,106 +1837,6 @@ function Install-NodeDeps {
     }
 }
 
-function Initialize-ElectronBuilderCache {
-    # Pre-warm electron-builder's winCodeSign cache so it never tries to
-    # extract the .7z archive itself.
-    #
-    # The bug we're working around: winCodeSign-2.6.0.7z contains macOS
-    # symbolic links under darwin/10.12/lib/ (libcrypto.dylib, libssl.dylib
-    # pointing at versioned siblings). On Windows, 7-Zip's extraction of
-    # those symlinks requires SeCreateSymbolicLinkPrivilege — a per-user
-    # right that non-admin accounts on stock Windows don't have. So
-    # electron-builder fails the extraction every time it pulls a fresh
-    # cache, on every grandma-class box.
-    #
-    # The fix: do the extraction ourselves with `-x!darwin` to skip the
-    # entire macOS subtree. electron-builder is doing a WINDOWS build —
-    # it never reads anything under darwin/ on this code path. As long
-    # as the cache directory exists with the Windows-relevant files,
-    # electron-builder's "is the cache present?" check passes and it
-    # skips its own extraction entirely.
-    #
-    # Tooling: we use 7za.exe from the 7zip-bin npm package that
-    # electron-builder itself depends on (so we know it's present after
-    # the workspace `npm install` finishes). Falls back to no-op if
-    # neither is found — electron-builder will then attempt its own
-    # broken extraction and fail with a recognizable error.
-
-    $cacheRoot = "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
-    $extractedDir = "$cacheRoot\winCodeSign-2.6.0"
-    $sentinel = "$extractedDir\windows-10\x64\signtool.exe"
-
-    # Fast-path: already populated from a prior run.
-    if (Test-Path $sentinel) {
-        Write-Info "electron-builder winCodeSign cache already populated"
-        return
-    }
-
-    # Locate 7za.exe. electron-builder hoists 7zip-bin to the workspace
-    # root node_modules so apps/desktop's pack step can find it.
-    $sevenZip = "$InstallDir\node_modules\7zip-bin\win\x64\7za.exe"
-    if (-not (Test-Path $sevenZip)) {
-        # Some npm versions don't hoist; check apps/desktop's local copy.
-        $sevenZip = "$InstallDir\apps\desktop\node_modules\7zip-bin\win\x64\7za.exe"
-    }
-    if (-not (Test-Path $sevenZip)) {
-        Write-Warn "7za.exe not found in node_modules; electron-builder may fail to extract winCodeSign"
-        Write-Warn "  Looked at: $InstallDir\node_modules\7zip-bin\win\x64\7za.exe"
-        Write-Warn "  and:        $InstallDir\apps\desktop\node_modules\7zip-bin\win\x64\7za.exe"
-        return
-    }
-
-    New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
-
-    # Download to a TEMP path; electron-builder doesn't care about the
-    # archive itself once the extracted dir exists.
-    $tmpArchive = "$env:TEMP\hermes-wincodesign-$(Get-Random).7z"
-    $url = "https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z"
-
-    Write-Info "Pre-extracting winCodeSign to skip electron-builder's broken extraction..."
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $tmpArchive -UseBasicParsing -ErrorAction Stop
-    } catch {
-        Write-Warn "Failed to download winCodeSign: $_"
-        Write-Warn "  electron-builder will fall back to its own extraction (which fails on non-admin Windows)"
-        return
-    }
-
-    # 7-Zip flags:
-    #   x            extract with full paths
-    #   -y           assume yes on all prompts
-    #   -bd          no progress bar (silent)
-    #   -snl         do NOT extract symbolic links as links — store as the
-    #                resolved file content instead. This is what stops the
-    #                privilege-not-held crash on the darwin/*.dylib symlinks.
-    #   -x!darwin    exclude the entire darwin/ subtree (macOS-specific
-    #                code-signing tools that a Windows build doesn't need)
-    #   -o<dir>      output directory
-    #
-    # Belt-and-suspenders: we BOTH skip the darwin subtree AND tell 7-Zip
-    # to dereference any remaining symlinks. Either alone would fix it;
-    # together they're defensive against winCodeSign adding more symlinks
-    # under linux/ or appxAssets/ in some future release.
-    $prevEAP = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    & $sevenZip x -y -bd -snl "-x!darwin" "-o$cacheRoot" $tmpArchive 2>&1 | Out-Null
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = $prevEAP
-
-    Remove-Item -Force $tmpArchive -ErrorAction SilentlyContinue
-
-    if ($code -ne 0) {
-        Write-Warn "Pre-extraction of winCodeSign failed (7-Zip exit $code)"
-        return
-    }
-
-    if (Test-Path $sentinel) {
-        Write-Success "winCodeSign cache pre-populated at $extractedDir"
-    } else {
-        Write-Warn "winCodeSign extraction completed but expected file is missing: $sentinel"
-    }
-}
-
 function Install-Desktop {
     # Build apps/desktop into a launchable Hermes.exe. Only called from
     # Stage-Desktop, which is itself only included in the manifest when
@@ -2019,13 +1919,6 @@ function Install-Desktop {
     }
     Pop-Location
 
-    # Pre-warm electron-builder's winCodeSign cache so its own broken
-    # 7-Zip extraction doesn't fire later. Has to happen AFTER the
-    # workspace npm install (we need 7za.exe from 7zip-bin) but BEFORE
-    # `npm run pack` (which triggers electron-builder's first cache miss).
-    # See Initialize-ElectronBuilderCache for the full rationale.
-    Initialize-ElectronBuilderCache
-
     # 2. Build apps/desktop. `npm run pack` runs:
     #      assert-root-install + write-build-stamp + stage-native-deps +
     #      tsc -b + vite build + electron-builder --dir
@@ -2033,12 +1926,31 @@ function Install-Desktop {
     # apps/desktop/release/win-unpacked/ without bundling NSIS/MSI;
     # we don't need a distributable installer artifact, just a
     # launchable binary the Tauri installer can spawn.
+    #
+    # CSC_IDENTITY_AUTO_DISCOVERY=false tells electron-builder we are
+    # NOT signing the output. This short-circuits the winCodeSign fetch +
+    # extraction entirely (which fails on non-admin Windows due to a
+    # macOS-symlink extraction crash electron-builder hasn't fixed in
+    # years). We never had a signing cert to use, so the apparatus was
+    # dead weight that broke fresh installs. The produced Hermes.exe
+    # is functionally identical — just unsigned, same as it would be
+    # if signing had been attempted but no cert was configured.
+    #
+    # WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD explicitly cleared as
+    # belt-and-suspenders: if the user's environment has them set
+    # for some other tool, electron-builder would still try to sign.
     Write-Info "Building desktop app (this takes 1-3 minutes)..."
     $buildLog = "$env:TEMP\hermes-desktop-build-$(Get-Random).log"
     Push-Location $desktopDir
     $prevEAP = $ErrorActionPreference
+    $prevCSCAuto = $env:CSC_IDENTITY_AUTO_DISCOVERY
+    $prevWinCscLink = $env:WIN_CSC_LINK
+    $prevWinCscKeyPassword = $env:WIN_CSC_KEY_PASSWORD
     try {
         $ErrorActionPreference = "Continue"
+        $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
+        $env:WIN_CSC_LINK = ""
+        $env:WIN_CSC_KEY_PASSWORD = ""
         & $npmExe run pack 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $buildLog
         $code = $LASTEXITCODE
         $ErrorActionPreference = $prevEAP
@@ -2058,6 +1970,13 @@ function Install-Desktop {
         if ($prevEAP) { $ErrorActionPreference = $prevEAP }
         Pop-Location
         throw
+    } finally {
+        # Restore env to whatever the caller had — don't leak our
+        # signing-off override into anything install.ps1 invokes later
+        # (Stage-PlatformSdks, etc.).
+        $env:CSC_IDENTITY_AUTO_DISCOVERY = $prevCSCAuto
+        $env:WIN_CSC_LINK = $prevWinCscLink
+        $env:WIN_CSC_KEY_PASSWORD = $prevWinCscKeyPassword
     }
     Pop-Location
 
