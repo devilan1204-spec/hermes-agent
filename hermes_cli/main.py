@@ -350,7 +350,7 @@ try:
         mode=(
             "gui"
             if next((arg for arg in sys.argv[1:] if not arg.startswith("-")), "")
-            in {"dashboard", "gui"}
+            in {"dashboard", "gui", "desktop"}
             else "cli"
         )
     )
@@ -10172,6 +10172,7 @@ def _coalesce_session_name_args(argv: list) -> list:
         "uninstall",
         "profile",
         "dashboard",
+        "desktop",
         "gui",
         "honcho",
         "claw",
@@ -11043,7 +11044,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "computer-use",
         "config", "cron", "curator", "dashboard", "debug", "doctor",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
-        "gui", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
+        "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "plugins", "portal", "postinstall", "profile", "proxy",
         "send", "sessions", "setup",
         "skills", "slack", "status", "tools", "uninstall", "update",
@@ -14136,11 +14137,18 @@ Examples:
     dashboard_parser.set_defaults(func=cmd_dashboard)
 
     # =========================================================================
-    # gui command
+    # desktop (a.k.a. gui) command
+    #
+    # The canonical name is "desktop"; "gui" is kept as a deprecated alias
+    # for one release. The Hermes-Setup.exe success screen tells users to
+    # run `hermes desktop` from a terminal, so the canonical name needs
+    # to be the one that appears in --help (argparse promotes the primary
+    # name; aliases stay hidden).
     # =========================================================================
     gui_parser = subparsers.add_parser(
-        "gui",
-        help="Build and launch the native desktop GUI",
+        "desktop",
+        aliases=["gui"],
+        help="Build and launch the native desktop app",
         description=(
             "Launch the Hermes Electron desktop app. By default this installs "
             "workspace Node dependencies, builds the current OS's unpacked "

@@ -158,14 +158,24 @@ pub async fn get_bootstrap_status(
 
 /// Spawn the locally-built Hermes desktop binary, then close the installer
 /// window. Caller resolves the binary path from `install_root`.
+///
+/// Returns Err with a human-readable message if the binary doesn't exist
+/// (e.g. when Stage-Desktop was skipped) so the frontend can present
+/// actionable failure UI rather than silently doing nothing.
 #[tauri::command]
 pub async fn launch_hermes_desktop(
     app: AppHandle,
     install_root: String,
 ) -> Result<(), String> {
     let install_root = PathBuf::from(install_root);
-    let exe_path = resolve_hermes_desktop_exe(&install_root)
-        .ok_or_else(|| "Could not locate a built Hermes desktop binary".to_string())?;
+    let exe_path = resolve_hermes_desktop_exe(&install_root).ok_or_else(|| {
+        format!(
+            "Couldn't find a built Hermes desktop at {}. The desktop build step \
+             may have been skipped or failed. Run `hermes desktop` from a \
+             terminal to build and launch it.",
+            install_root.join("apps").join("desktop").join("release").display()
+        )
+    })?;
 
     tracing::info!(?exe_path, "launching Hermes desktop");
 
@@ -285,9 +295,18 @@ async fn run_bootstrap(
     ));
 
     // 2. Fetch manifest
+    //
+    // -IncludeDesktop MUST be passed to the manifest call too — install.ps1
+    // gates the desktop stage inclusion on this flag, so without it here
+    // the manifest comes back missing the desktop stage and we never run
+    // it. The per-stage call below also passes -IncludeDesktop to keep
+    // the contracts identical.
     let manifest_args = build_pin_args(&script);
     let mut manifest_args_full = vec!["-Manifest".to_string()];
     manifest_args_full.extend(manifest_args.clone());
+    if args.include_desktop {
+        manifest_args_full.push("-IncludeDesktop".to_string());
+    }
 
     let manifest_result = run_install_script(
         &app,

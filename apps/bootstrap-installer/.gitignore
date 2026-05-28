@@ -7,6 +7,12 @@
 /dist-ssr/
 *.local
 
+# TypeScript build info + tsc emit (we don't ship .js for the
+# vite.config.ts; Vite reads it directly via ts-node-style loader).
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+
 # Tauri generated artifacts (regenerated on each build)
 /src-tauri/gen/schemas/
 
