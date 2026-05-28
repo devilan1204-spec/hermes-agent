@@ -264,7 +264,11 @@ async fn run_bootstrap(
                 line: line.to_string(),
             },
         );
-        tracing::debug!(target: "bootstrap.log", "{line}");
+        // Bump to info-level so the line shows in bootstrap-installer.log
+        // under the default INFO filter. Previously this was debug! which
+        // got dropped on the floor, leaving us blind whenever install.ps1
+        // failed — the log only had the "bootstrap starting" banner.
+        tracing::info!(target: "bootstrap.log", "{line}");
     };
 
     // 1. Resolve install.ps1
@@ -570,6 +574,8 @@ async fn run_install_script(
     let stage_for_stdout = stage_name.clone();
     let app_for_stderr = app.clone();
     let stage_for_stderr = stage_name.clone();
+    let stage_for_stdout_log = stage_name.clone();
+    let stage_for_stderr_log = stage_name.clone();
 
     let sink = StreamSink {
         on_stdout_line: Box::new(move |line: &str| {
@@ -580,6 +586,16 @@ async fn run_install_script(
                     line: line.to_string(),
                 },
             );
+            // Tee to the rolling installer log so we have a persistent
+            // record of every install.ps1 line. Without this, the only
+            // log evidence of a failure was the Tauri event stream —
+            // which gets discarded the moment the failure route mounts.
+            match &stage_for_stdout_log {
+                Some(name) => {
+                    tracing::info!(target: "bootstrap.log", stage = %name, "{line}")
+                }
+                None => tracing::info!(target: "bootstrap.log", "{line}"),
+            }
         }),
         on_stderr_line: Box::new(move |line: &str| {
             emit_event(
@@ -589,6 +605,14 @@ async fn run_install_script(
                     line: format!("stderr: {line}"),
                 },
             );
+            // stderr-level lines get warn! so they're visually distinct
+            // when scrolling through the log later.
+            match &stage_for_stderr_log {
+                Some(name) => {
+                    tracing::warn!(target: "bootstrap.log", stage = %name, "stderr: {line}")
+                }
+                None => tracing::warn!(target: "bootstrap.log", "stderr: {line}"),
+            }
         }),
     };
 
@@ -614,6 +638,44 @@ fn build_pin_args(script: &install_script::ResolvedScript) -> Vec<String> {
 }
 
 fn emit_event(app: &AppHandle, event: BootstrapEvent) {
+    // Tee important state transitions to the rolling installer log so
+    // bootstrap-installer.log isn't just "starting" + final summary.
+    // Log lines (the noisy stuff) handle their own tracing in
+    // run_install_script's sink; here we cover the lifecycle frames.
+    match &event {
+        BootstrapEvent::Manifest { stages, .. } => {
+            tracing::info!(
+                stage_count = stages.len(),
+                names = ?stages.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+                "manifest received"
+            );
+        }
+        BootstrapEvent::Stage {
+            name,
+            state,
+            duration_ms,
+            error,
+            ..
+        } => {
+            tracing::info!(
+                stage = %name,
+                ?state,
+                duration_ms = ?duration_ms,
+                error = ?error,
+                "stage transition"
+            );
+        }
+        BootstrapEvent::Complete { install_root, .. } => {
+            tracing::info!(install_root = %install_root, "bootstrap complete");
+        }
+        BootstrapEvent::Failed { stage, error } => {
+            tracing::error!(stage = ?stage, error = %error, "bootstrap FAILED");
+        }
+        BootstrapEvent::Log { .. } => {
+            // Log lines are teed via the sink callbacks in
+            // run_install_script — don't double-emit here.
+        }
+    }
     if let Err(e) = app.emit(BootstrapEvent::CHANNEL, &event) {
         tracing::warn!(?e, "failed to emit bootstrap event");
     }
