@@ -110,9 +110,14 @@ export interface DesktopUpdateApplyResult {
   branch?: string
   error?: string
   message?: string
+  /** True when no staged updater exists (CLI install) and the user should run
+   *  `hermes update` themselves. `command` is the exact line to run. */
+  manual?: boolean
+  command?: string
+  hermesRoot?: string
 }
 
-export type DesktopUpdateStage = 'idle' | 'prepare' | 'fetch' | 'pull' | 'pydeps' | 'restart' | 'error'
+export type DesktopUpdateStage = 'idle' | 'prepare' | 'fetch' | 'pull' | 'pydeps' | 'restart' | 'manual' | 'error'
 
 export interface DesktopUpdateProgress {
   stage: DesktopUpdateStage

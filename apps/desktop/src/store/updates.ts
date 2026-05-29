@@ -22,10 +22,21 @@ export interface UpdateApplyState {
   message: string
   percent: number | null
   error: string | null
+  /** When the stage is 'manual': the exact command the user should run
+   *  (CLI install with no staged updater). */
+  command: string | null
   log: readonly { stage: DesktopUpdateStage; message: string; at: number }[]
 }
 
-const IDLE: UpdateApplyState = { applying: false, stage: 'idle', message: '', percent: null, error: null, log: [] }
+const IDLE: UpdateApplyState = {
+  applying: false,
+  stage: 'idle',
+  message: '',
+  percent: null,
+  error: null,
+  command: null,
+  log: []
+}
 
 export const $desktopVersion = atom<DesktopVersionInfo | null>(null)
 export const $updateApply = atom<UpdateApplyState>(IDLE)
@@ -142,7 +153,20 @@ export async function applyUpdates(opts: DesktopUpdateApplyOptions = {}): Promis
   $updateApply.set({ ...IDLE, applying: true, stage: 'prepare', message: 'Starting update…' })
 
   try {
-    return await bridge.apply(opts)
+    const result = await bridge.apply(opts)
+    // CLI install with no staged updater: not an error — the user just runs
+    // `hermes update` themselves. Land on a dedicated manual state so the
+    // overlay shows the command + copy button instead of a dead retry loop.
+    if (result?.manual) {
+      $updateApply.set({
+        ...IDLE,
+        applying: false,
+        stage: 'manual',
+        message: result.command ?? 'hermes update',
+        command: result.command ?? 'hermes update'
+      })
+    }
+    return result
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     $updateApply.set({ ...$updateApply.get(), applying: false, stage: 'error', error: 'apply-failed', message })
@@ -154,7 +178,7 @@ export async function applyUpdates(opts: DesktopUpdateApplyOptions = {}): Promis
 function ingestProgress(payload: DesktopUpdateProgress): void {
   const current = $updateApply.get()
   const log = [...current.log, { stage: payload.stage, message: payload.message, at: payload.at }].slice(-50)
-  const terminal = payload.stage === 'error' || payload.stage === 'restart'
+  const terminal = payload.stage === 'error' || payload.stage === 'restart' || payload.stage === 'manual'
 
   $updateApply.set({
     applying: !terminal,
@@ -162,6 +186,8 @@ function ingestProgress(payload: DesktopUpdateProgress): void {
     message: payload.message,
     percent: payload.percent,
     error: payload.error,
+    // 'manual' carries the command to run in its message field.
+    command: payload.stage === 'manual' ? payload.message : current.command,
     log
   })
 }

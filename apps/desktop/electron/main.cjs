@@ -1061,11 +1061,21 @@ async function applyUpdates(opts = {}) {
   try {
     const updater = resolveUpdaterBinary()
     if (!updater) {
-      const message =
-        'The Hermes updater was not found. Re-run the Hermes installer to ' +
-        'enable in-app updates, or run `hermes update` from a terminal.'
-      emitUpdateProgress({ stage: 'error', error: 'no-updater', message })
-      throw new Error(message)
+      // No staged updater binary — this is a CLI-installed user (they ran
+      // `hermes desktop`, never the Tauri installer that self-copies
+      // hermes-setup.exe into HERMES_HOME). They DO have a working `hermes`
+      // on PATH / in the venv, so the correct path is the one-liner in their
+      // native medium: `hermes update`. We surface that as an intentional
+      // "manual update" outcome — NOT an error with a dead retry button.
+      //
+      // We resolve the most copy-pasteable command we can: prefer the bare
+      // `hermes update` (works if hermes is on PATH, which install.sh/ps1
+      // both arrange), and include the resolved checkout dir as context.
+      const command = 'hermes update'
+      const updateRoot = resolveUpdateRoot()
+      rememberLog(`[updates] no staged updater; surfacing manual \`${command}\` for CLI install at ${updateRoot}`)
+      emitUpdateProgress({ stage: 'manual', message: command, percent: null })
+      return { ok: true, manual: true, command, hermesRoot: updateRoot }
     }
 
     emitUpdateProgress({ stage: 'restart', message: 'Handing off to the Hermes updater…', percent: 100 })

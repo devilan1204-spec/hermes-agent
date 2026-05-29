@@ -1,11 +1,12 @@
 import { useStore } from '@nanostores/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { writeClipboardText } from '@/components/ui/copy-button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import type { DesktopUpdateCommit, DesktopUpdateStage, DesktopUpdateStatus } from '@/global'
 import { buildCommitChangelog, type CommitGroup } from '@/lib/commit-changelog'
-import { AlertCircle, CheckCircle2, Loader2, Sparkles } from '@/lib/icons'
+import { AlertCircle, Check, CheckCircle2, Copy, Loader2, Sparkles, Terminal } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import {
   $updateApply,
@@ -26,6 +27,7 @@ const STAGE_LABELS: Record<DesktopUpdateStage, string> = {
   pull: 'Almost there…',
   pydeps: 'Finishing up…',
   restart: 'Restarting Hermes…',
+  manual: 'Update from your terminal',
   error: 'Update paused'
 }
 
@@ -47,8 +49,14 @@ export function UpdatesOverlay() {
 
   const behind = status?.behind ?? 0
 
-  const phase: 'idle' | 'applying' | 'error' =
-    apply.applying || apply.stage === 'restart' ? 'applying' : apply.stage === 'error' ? 'error' : 'idle'
+  const phase: 'idle' | 'applying' | 'manual' | 'error' =
+    apply.stage === 'manual'
+      ? 'manual'
+      : apply.applying || apply.stage === 'restart'
+        ? 'applying'
+        : apply.stage === 'error'
+          ? 'error'
+          : 'idle'
 
   const handleClose = (next: boolean) => {
     if (phase === 'applying') {
@@ -57,7 +65,7 @@ export function UpdatesOverlay() {
 
     setUpdateOverlayOpen(next)
 
-    if (!next && (apply.stage === 'error' || apply.stage === 'restart')) {
+    if (!next && (apply.stage === 'error' || apply.stage === 'restart' || apply.stage === 'manual')) {
       resetUpdateApplyState()
     }
   }
@@ -73,6 +81,10 @@ export function UpdatesOverlay() {
         showCloseButton={phase !== 'applying'}
       >
         {phase === 'applying' && <ApplyingView apply={apply} />}
+
+        {phase === 'manual' && (
+          <ManualView command={apply.command ?? 'hermes update'} onDone={() => handleClose(false)} />
+        )}
 
         {phase === 'error' && (
           <ErrorView message={apply.message} onDismiss={() => handleClose(false)} onRetry={handleInstall} />
@@ -227,6 +239,64 @@ function IdleView({
           + {remaining} more change{remaining === 1 ? '' : 's'} included.
         </p>
       )}
+    </div>
+  )
+}
+
+function ManualView({ command, onDone }: { command: string; onDone: () => void }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    void writeClipboardText(command).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    })
+  }
+
+  return (
+    <div className="grid gap-5 px-6 pb-6 pt-7 pr-8">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Terminal className="size-7" />
+        </span>
+
+        <DialogTitle className="text-center text-xl">Update from your terminal</DialogTitle>
+        <DialogDescription className="text-center text-sm">
+          You installed Hermes from the command line, so updates run there too. Paste this into your terminal:
+        </DialogDescription>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-left transition-colors hover:border-border hover:bg-muted/50"
+      >
+        <code className="select-all font-mono text-sm text-foreground">
+          <span className="text-muted-foreground">$ </span>
+          {command}
+        </code>
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+          {copied ? (
+            <>
+              <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="size-3.5" />
+              Copy
+            </>
+          )}
+        </span>
+      </button>
+
+      <p className="text-center text-xs text-muted-foreground">
+        Hermes will pick up the new version next time you launch it.
+      </p>
+
+      <Button className="h-10 text-sm font-semibold" onClick={onDone} variant="outline">
+        Done
+      </Button>
     </div>
   )
 }
