@@ -2014,13 +2014,13 @@ function Install-Desktop {
     # launchable binary the Tauri installer can spawn.
     #
     # CSC_IDENTITY_AUTO_DISCOVERY=false tells electron-builder we are
-    # NOT signing the output. This short-circuits the winCodeSign fetch +
-    # extraction entirely (which fails on non-admin Windows due to a
-    # macOS-symlink extraction crash electron-builder hasn't fixed in
-    # years). We never had a signing cert to use, so the apparatus was
-    # dead weight that broke fresh installs. The produced Hermes.exe
-    # is functionally identical — just unsigned, same as it would be
-    # if signing had been attempted but no cert was configured.
+    # NOT signing the output. Combined with signAndEditExecutable=false in
+    # apps/desktop/package.json's build.win block, electron-builder never
+    # invokes signtool and therefore never fetches/extracts winCodeSign
+    # (whose macOS symlinks crash 7-Zip on non-admin Windows — a dead end we
+    # are NOT trying to work around). The Hermes icon + product name are
+    # stamped onto Hermes.exe by our own rcedit step (Set-DesktopExeIdentity)
+    # AFTER this build, completely decoupled from electron-builder signing.
     #
     # WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD explicitly cleared as
     # belt-and-suspenders: if the user's environment has them set
@@ -2086,6 +2086,13 @@ function Install-Desktop {
         throw "Desktop build completed but no Hermes.exe was found under $desktopDir\release\*-unpacked\"
     }
 
+    # 3b. Stamp the Hermes icon + identity onto Hermes.exe ourselves.
+    #     electron-builder's own rcedit step is disabled (signAndEditExecutable
+    #     =false) because enabling it drags in signtool -> winCodeSign -> the
+    #     unfixable symlink crash. So we run rcedit directly on the produced
+    #     exe — no signing, no winCodeSign, just PE resource editing.
+    Set-DesktopExeIdentity -TargetExe $desktopExe -DesktopDir $desktopDir
+
     # 4. Create Start Menu + Desktop shortcuts pointing DIRECTLY at the packed
     #    Hermes.exe. We deliberately do NOT point them at `hermes desktop`: that
     #    command rebuilds (npm install + electron-builder) on every launch,
@@ -2093,6 +2100,57 @@ function Install-Desktop {
     #    launching it directly is instant, and updates flow through the
     #    installer's --update path (which rebuilds once, then relaunches).
     New-DesktopShortcuts -TargetExe $desktopExe
+}
+
+function Set-DesktopExeIdentity {
+    # Stamp the Hermes icon + version metadata into Hermes.exe via rcedit,
+    # delegated to apps/desktop/scripts/set-exe-identity.cjs (which uses the
+    # `rcedit` npm package — a direct devDependency, so always present).
+    #
+    # Why a Node script instead of calling rcedit from PowerShell: passing
+    # arguments through PowerShell -> exe -> JSON parsers double-escapes
+    # Windows backslashes and breaks app-builder's --args JSON. Letting Node
+    # build the rcedit argv natively sidesteps all shell-quoting hazards.
+    #
+    # This replaces electron-builder's built-in signAndEditExecutable step
+    # (kept false, because enabling it re-triggers signtool -> winCodeSign ->
+    # the macOS-symlink 7-Zip crash on non-admin Windows). rcedit is a pure PE
+    # resource editor — no signing, no certs, no winCodeSign, no symlinks.
+    #
+    # Best-effort: a stamping failure must not fail an otherwise-good install
+    # (worst case is the stock Electron icon, not a broken app).
+    param(
+        [Parameter(Mandatory = $true)][string]$TargetExe,
+        [Parameter(Mandatory = $true)][string]$DesktopDir
+    )
+
+    $nodeExe = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $nodeExe) {
+        Write-Warn "node not on PATH; cannot stamp Hermes.exe identity (it will keep the stock Electron icon)"
+        return
+    }
+
+    $script = Join-Path $DesktopDir "scripts\set-exe-identity.cjs"
+    if (-not (Test-Path $script)) {
+        Write-Warn "set-exe-identity.cjs not found at $script; skipping exe identity stamp"
+        return
+    }
+
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    # Run from $DesktopDir so the script's `require('rcedit')` resolves against
+    # the desktop workspace's node_modules.
+    Push-Location $DesktopDir
+    & $nodeExe.Source $script $TargetExe 2>&1 | ForEach-Object { "$_" }
+    $code = $LASTEXITCODE
+    Pop-Location
+    $ErrorActionPreference = $prevEAP
+
+    if ($code -eq 0) {
+        Write-Success "Stamped Hermes icon + identity onto $TargetExe"
+    } else {
+        Write-Warn "Exe identity stamp failed (exit $code); Hermes.exe keeps the stock Electron icon"
+    }
 }
 
 function New-DesktopShortcuts {
