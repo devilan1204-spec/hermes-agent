@@ -1058,6 +1058,32 @@ _ACTION_PROCS: Dict[str, subprocess.Popen] = {}
 _ACTION_SPAWN_LOCK = threading.Lock()
 
 
+def _current_git_branch() -> Optional[str]:
+    """Return the branch PROJECT_ROOT is on, or None if detached/unknown.
+
+    Used to pin ``hermes update`` to the tracked branch instead of letting it
+    default to main. Best-effort: returns None on detached HEAD, non-git
+    checkouts, or any git failure, in which case callers fall back to the
+    bare ``hermes update`` default.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    branch = result.stdout.strip()
+    if not branch or branch == "HEAD":  # empty or detached
+        return None
+    return branch
+
+
 def _spawn_hermes_action(subcommand: List[str], name: str) -> subprocess.Popen:
     """Spawn ``hermes <subcommand>`` detached and record the Popen handle.
 
@@ -1146,9 +1172,21 @@ async def restart_gateway():
 
 @app.post("/api/hermes/update")
 async def update_hermes():
-    """Kick off ``hermes update`` in the background."""
+    """Kick off ``hermes update`` in the background.
+
+    Pin the update to the branch the checkout is CURRENTLY on. Without this,
+    ``hermes update`` falls back to its built-in default (main) and switches
+    the working tree off the tracked branch — e.g. a bb/gui install silently
+    jumps to main and loses the desktop CLI. Pass --branch <current> so the
+    update stays on-branch. Detached HEAD / detection failure falls back to
+    bare ``hermes update`` (the prior behavior).
+    """
+    args: List[str] = ["update"]
+    branch = _current_git_branch()
+    if branch:
+        args += ["--branch", branch]
     try:
-        proc = _spawn_hermes_action(["update"], "hermes-update")
+        proc = _spawn_hermes_action(args, "hermes-update")
     except Exception as exc:
         _log.exception("Failed to spawn hermes update")
         raise HTTPException(status_code=500, detail=f"Failed to start update: {exc}")
