@@ -58,22 +58,10 @@ try:
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel
 except ImportError:
-    # First try lazy-installing the dashboard extras. Only the user actually
-    # running `hermes dashboard` needs fastapi+uvicorn; lazy install keeps
-    # them out of every other install path. After install, re-import.
-    try:
-        from tools.lazy_deps import ensure as _lazy_ensure
-        _lazy_ensure("tool.dashboard", prompt=False)
-        from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-        from fastapi.middleware.cors import CORSMiddleware
-        from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
-        from fastapi.staticfiles import StaticFiles
-        from pydantic import BaseModel
-    except Exception:
-        raise SystemExit(
-            "Web UI requires fastapi and uvicorn.\n"
-            f"Install with: {sys.executable} -m pip install 'fastapi' 'uvicorn[standard]'"
-        )
+    raise SystemExit(
+        "Web UI requires fastapi and uvicorn.\n"
+        "Install with: pip install 'hermes-agent[dashboard]'"
+    )
 
 WEB_DIST = Path(os.environ["HERMES_WEB_DIST"]) if "HERMES_WEB_DIST" in os.environ else Path(__file__).parent / "web_dist"
 _log = logging.getLogger(__name__)
@@ -1374,11 +1362,13 @@ def _anthropic_oauth_status() -> Dict[str, Any]:
     The dashboard reports the highest-priority source that's actually present.
     """
     try:
-        from agent.anthropic_adapter import (
-            read_hermes_oauth_credentials,
-            read_claude_code_credentials,
-            _HERMES_OAUTH_FILE,
-        )
+        from agent.plugin_registries import registries
+        _anthropic = registries.get_provider_namespace("anthropic")
+        read_hermes_oauth_credentials = _anthropic.get("read_hermes_oauth_credentials")
+        read_claude_code_credentials = _anthropic.get("read_claude_code_credentials")
+        _HERMES_OAUTH_FILE = _anthropic.get("_HERMES_OAUTH_FILE")
+        if read_hermes_oauth_credentials is None:
+            raise ImportError("anthropic plugin not registered")
     except ImportError:
         read_claude_code_credentials = None  # type: ignore
         read_hermes_oauth_credentials = None  # type: ignore
@@ -1437,7 +1427,11 @@ def _claude_code_only_status() -> Dict[str, Any]:
     when they also have a separate Hermes-managed PKCE login.
     """
     try:
-        from agent.anthropic_adapter import read_claude_code_credentials
+        from agent.plugin_registries import registries
+        _anthropic = registries.get_provider_namespace("anthropic")
+        read_claude_code_credentials = _anthropic.get("read_claude_code_credentials")
+        if read_claude_code_credentials is None:
+            raise ImportError("anthropic plugin not registered")
         creds = read_claude_code_credentials()
     except Exception:
         creds = None
@@ -1623,8 +1617,10 @@ async def disconnect_oauth_provider(provider_id: str, request: Request):
     # want to undo a disconnect.
     if provider_id in {"anthropic", "claude-code"}:
         try:
-            from agent.anthropic_adapter import _HERMES_OAUTH_FILE
-            if _HERMES_OAUTH_FILE.exists():
+            from agent.plugin_registries import registries
+            _anthropic = registries.get_provider_namespace("anthropic")
+            _HERMES_OAUTH_FILE = _anthropic.get("_HERMES_OAUTH_FILE")
+            if _HERMES_OAUTH_FILE is not None and _HERMES_OAUTH_FILE.exists():
                 _HERMES_OAUTH_FILE.unlink()
         except Exception:
             pass
@@ -1691,13 +1687,15 @@ _oauth_sessions_lock = threading.Lock()
 # Guarded so hermes web still starts if anthropic_adapter is unavailable;
 # Phase 2 endpoints will return 501 in that case.
 try:
-    from agent.anthropic_adapter import (
-        _OAUTH_CLIENT_ID as _ANTHROPIC_OAUTH_CLIENT_ID,
-        _OAUTH_TOKEN_URL as _ANTHROPIC_OAUTH_TOKEN_URL,
-        _OAUTH_REDIRECT_URI as _ANTHROPIC_OAUTH_REDIRECT_URI,
-        _OAUTH_SCOPES as _ANTHROPIC_OAUTH_SCOPES,
-        _generate_pkce as _generate_pkce_pair,
-    )
+    from agent.plugin_registries import registries
+    _anthropic = registries.get_provider_namespace("anthropic")
+    _ANTHROPIC_OAUTH_CLIENT_ID = _anthropic.get("_OAUTH_CLIENT_ID")
+    _ANTHROPIC_OAUTH_TOKEN_URL = _anthropic.get("_OAUTH_TOKEN_URL")
+    _ANTHROPIC_OAUTH_REDIRECT_URI = _anthropic.get("_OAUTH_REDIRECT_URI")
+    _ANTHROPIC_OAUTH_SCOPES = _anthropic.get("_OAUTH_SCOPES")
+    _generate_pkce_pair = _anthropic.get("_generate_pkce")
+    if any(v is None for v in [_ANTHROPIC_OAUTH_CLIENT_ID, _ANTHROPIC_OAUTH_TOKEN_URL, _ANTHROPIC_OAUTH_REDIRECT_URI, _ANTHROPIC_OAUTH_SCOPES, _generate_pkce_pair]):
+        raise ImportError("anthropic plugin not registered")
     _ANTHROPIC_OAUTH_AVAILABLE = True
 except ImportError:
     _ANTHROPIC_OAUTH_AVAILABLE = False
@@ -1735,7 +1733,11 @@ def _save_anthropic_oauth_creds(access_token: str, refresh_token: str, expires_a
     Mirrors what auth_commands.add_command does so the dashboard flow leaves
     the system in the same state as ``hermes auth add anthropic``.
     """
-    from agent.anthropic_adapter import _HERMES_OAUTH_FILE
+    from agent.plugin_registries import registries
+    _anthropic = registries.get_provider_namespace("anthropic")
+    _HERMES_OAUTH_FILE = _anthropic.get("_HERMES_OAUTH_FILE")
+    if _HERMES_OAUTH_FILE is None:
+        raise ImportError("anthropic plugin not registered")
     payload = {
         "accessToken": access_token,
         "refreshToken": refresh_token,

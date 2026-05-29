@@ -185,6 +185,16 @@ def test_managed_fal_submit_uses_gateway_origin_and_nous_token(monkeypatch):
         "tools.image_generation_tool",
         "image_generation_tool.py",
     )
+    # Inject _ManagedFalSyncClient from the plugin since the registry isn't populated
+    if image_generation_tool._ManagedFalSyncClient is None:
+        from hermes_agent_fal.fal_common import _ManagedFalSyncClient as _MSC
+        image_generation_tool._ManagedFalSyncClient = _MSC
+    if image_generation_tool._extract_http_status is None:
+        from hermes_agent_fal.fal_common import _extract_http_status as _EHS
+        image_generation_tool._extract_http_status = _EHS
+    if image_generation_tool._normalize_fal_queue_url_format is None:
+        from hermes_agent_fal.fal_common import _normalize_fal_queue_url_format as _NFQUF
+        image_generation_tool._normalize_fal_queue_url_format = _NFQUF
     monkeypatch.setattr(image_generation_tool.uuid, "uuid4", lambda: "fal-submit-123")
     
     image_generation_tool._submit_fal_request(

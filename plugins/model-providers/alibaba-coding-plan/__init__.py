@@ -19,3 +19,9 @@ alibaba_coding_plan = ProviderProfile(
 )
 
 register_provider(alibaba_coding_plan)
+
+
+def register(ctx):
+    """No-op — this provider has no workspace package yet."""
+    pass
+

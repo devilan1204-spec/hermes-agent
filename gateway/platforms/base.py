@@ -3750,8 +3750,11 @@ class BasePlatformAdapter(ABC):
                         and text_content
                         and not media_files):
                     try:
-                        from tools.tts_tool import text_to_speech_tool, check_tts_requirements
-                        if check_tts_requirements():
+                        from agent.plugin_registries import registries
+                        _tts = registries.get_tool_provider("tts")
+                        text_to_speech_tool = _tts.tool_functions.get("text_to_speech_tool") if _tts else None
+                        check_tts_requirements = _tts.check_fn if _tts else None
+                        if check_tts_requirements and text_to_speech_tool and check_tts_requirements():
                             import json as _json
                             speech_text = self.prepare_tts_text(text_content)
                             if not speech_text:

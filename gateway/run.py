@@ -6365,6 +6365,29 @@ class GatewayRunner:
                     # plugin adapters don't need a custom factory signature.
                     if hasattr(adapter, "gateway_runner"):
                         adapter.gateway_runner = self
+                    # ── Telegram: notification mode from config ──
+                    # Applied here (not in the adapter factory) because it
+                    # reads gateway-local config that only the gateway runner
+                    # has access to.
+                    if platform.value == "telegram":
+                        _notify_mode = os.getenv("HERMES_TELEGRAM_NOTIFICATIONS", "")
+                        if not _notify_mode:
+                            try:
+                                _gw_cfg = _load_gateway_config()
+                                _raw = cfg_get(_gw_cfg, "display", "platforms", "telegram", "notifications")
+                                if _raw not in {None, ""}:
+                                    _notify_mode = str(_raw).strip().lower()
+                            except Exception:
+                                pass
+                        _notify_mode = _notify_mode or "important"
+                        if _notify_mode not in {"all", "important"}:
+                            logger.warning(
+                                "Unknown telegram notifications mode '%s', "
+                                "defaulting to 'important' (valid: all, important)",
+                                _notify_mode,
+                            )
+                            _notify_mode = "important"
+                        adapter._notifications_mode = _notify_mode
                     return adapter
                 # Registered but failed to instantiate — don't silently fall
                 # through to built-ins (there are none for plugin platforms).
@@ -6378,49 +6401,13 @@ class GatewayRunner:
             logger.debug("Platform registry lookup for '%s' failed: %s", platform.value, e)
         # Fall through to built-in adapters below
 
-        if platform == Platform.TELEGRAM:
-            from gateway.platforms.telegram import TelegramAdapter, check_telegram_requirements
-            if not check_telegram_requirements():
-                logger.warning("Telegram: python-telegram-bot not installed")
-                return None
-            adapter = TelegramAdapter(config)
-            # Apply Telegram notification mode from config.  Controls whether
-            # intermediate messages (tool progress, streaming, status) trigger
-            # push notifications.  Supports ENV override for quick testing.
-            _notify_mode = os.getenv("HERMES_TELEGRAM_NOTIFICATIONS", "")
-            if not _notify_mode:
-                try:
-                    _gw_cfg = _load_gateway_config()
-                    _raw = cfg_get(_gw_cfg, "display", "platforms", "telegram", "notifications")
-                    if _raw not in {None, ""}:
-                        _notify_mode = str(_raw).strip().lower()
-                except Exception:
-                    pass
-            _notify_mode = _notify_mode or "important"
-            if _notify_mode not in {"all", "important"}:
-                logger.warning(
-                    "Unknown telegram notifications mode '%s', "
-                    "defaulting to 'important' (valid: all, important)",
-                    _notify_mode,
-                )
-                _notify_mode = "important"
-            adapter._notifications_mode = _notify_mode
-            return adapter
-        
-        elif platform == Platform.WHATSAPP:
+        if platform == Platform.WHATSAPP:
             from gateway.platforms.whatsapp import WhatsAppAdapter, check_whatsapp_requirements
             if not check_whatsapp_requirements():
                 logger.warning("WhatsApp: Node.js not installed or bridge not configured")
                 return None
             return WhatsAppAdapter(config)
         
-        elif platform == Platform.SLACK:
-            from gateway.platforms.slack import SlackAdapter, check_slack_requirements
-            if not check_slack_requirements():
-                logger.warning("Slack: slack-bolt not installed. Run: pip install 'hermes-agent[slack]'")
-                return None
-            return SlackAdapter(config)
-
         elif platform == Platform.SIGNAL:
             from gateway.platforms.signal import SignalAdapter, check_signal_requirements
             if not check_signal_requirements():
@@ -6449,20 +6436,6 @@ class GatewayRunner:
                 return None
             return SmsAdapter(config)
 
-        elif platform == Platform.DINGTALK:
-            from gateway.platforms.dingtalk import DingTalkAdapter, check_dingtalk_requirements
-            if not check_dingtalk_requirements():
-                logger.warning("DingTalk: dingtalk-stream not installed or DINGTALK_CLIENT_ID/SECRET not set")
-                return None
-            return DingTalkAdapter(config)
-
-        elif platform == Platform.FEISHU:
-            from gateway.platforms.feishu import FeishuAdapter, check_feishu_requirements
-            if not check_feishu_requirements():
-                logger.warning("Feishu: lark-oapi not installed or FEISHU_APP_ID/SECRET not set")
-                return None
-            return FeishuAdapter(config)
-
         elif platform == Platform.WECOM_CALLBACK:
             from gateway.platforms.wecom_callback import (
                 WecomCallbackAdapter,
@@ -6486,13 +6459,6 @@ class GatewayRunner:
                 logger.warning("Weixin: aiohttp/cryptography not installed")
                 return None
             return WeixinAdapter(config)
-
-        elif platform == Platform.MATRIX:
-            from gateway.platforms.matrix import MatrixAdapter, check_matrix_requirements
-            if not check_matrix_requirements():
-                logger.warning("Matrix: mautrix not installed or credentials not set. Run: pip install 'mautrix[encryption]'")
-                return None
-            return MatrixAdapter(config)
 
         elif platform == Platform.API_SERVER:
             from gateway.platforms.api_server import APIServerAdapter, check_api_server_requirements
@@ -11650,7 +11616,12 @@ class GatewayRunner:
         audio_path = None
         actual_path = None
         try:
-            from tools.tts_tool import text_to_speech_tool, _strip_markdown_for_tts
+            from agent.plugin_registries import registries
+            _tts_entry = registries.get_tool_provider("tts")
+            if _tts_entry is None:
+                return
+            text_to_speech_tool = _tts_entry.tool_functions["text_to_speech_tool"]
+            _strip_markdown_for_tts = _tts_entry.tool_functions["_strip_markdown_for_tts"]
 
             tts_text = _strip_markdown_for_tts(text[:4000])
             if not tts_text:
@@ -14941,9 +14912,32 @@ class GatewayRunner:
                 return f"{prefix}\n\n{user_text}"
             return prefix
 
-        from tools.transcription_tools import transcribe_audio
-
+        from agent.plugin_registries import registries
+        _stt_entry = registries.get_tool_provider("stt")
         enriched_parts = []
+        if _stt_entry is None or "transcribe_audio" not in _stt_entry.tool_functions:
+            # No STT plugin registered — treat each audio path the same way
+            # as a "No STT provider" transcription failure.
+            for path in audio_paths:
+                abs_path = os.path.abspath(path)
+                duration_str = await _probe_audio_duration(abs_path)
+                if duration_str:
+                    enriched_parts.append(
+                        f"[The user sent a voice message: {abs_path} (duration: {duration_str})]"
+                    )
+                else:
+                    enriched_parts.append(f"[The user sent a voice message: {abs_path}]")
+            if not enriched_parts:
+                return user_text
+            prefix = "\n\n".join(enriched_parts)
+            _placeholder = "(The user sent a message with no text content)"
+            if user_text and user_text.strip() == _placeholder:
+                return prefix
+            if user_text:
+                return f"{prefix}\n\n{user_text}"
+            return prefix
+        transcribe_audio = _stt_entry.tool_functions["transcribe_audio"]
+
         for path in audio_paths:
             try:
                 logger.debug("Transcribing user voice: %s", path)

@@ -19,8 +19,10 @@
         # Ships discord.py + python-telegram-bot + slack-sdk so a plain
         # `nix profile install .#messaging` connects to Discord/Telegram/Slack
         # on first run — lazy-install can't write to the read-only /nix/store.
+        # (Pluginify: the old `messaging` extra is now per-platform workspace
+        # members, so this aggregates discord/telegram/slack explicitly.)
         messaging = hermesAgent.override {
-          extraDependencyGroups = [ "messaging" ];
+          extraDependencyGroups = [ "discord" "telegram" "slack" ];
         };
 
         # All platform-portable optional integrations pre-built.
@@ -32,6 +34,7 @@
             "bedrock"
             "daytona"
             "dingtalk"
+            "discord"
             "edge-tts"
             "exa"
             "fal"
@@ -39,11 +42,11 @@
             "firecrawl"
             "hindsight"
             "honcho"
-            "messaging"
             "modal"
             "parallel-web"
+            "slack"
+            "telegram"
             "tts-premium"
-            "vercel"
             "voice"
           ] ++ lib.optionals pkgs.stdenv.isLinux [ "matrix" ];
         };

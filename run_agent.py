@@ -3082,7 +3082,12 @@ class AIAgent:
             return False
 
         try:
-            from agent.anthropic_adapter import resolve_anthropic_token, build_anthropic_client
+            from agent.plugin_registries import registries
+            _anthropic = registries.get_provider_namespace("anthropic")
+            resolve_anthropic_token = _anthropic.get("resolve_anthropic_token")
+            build_anthropic_client = _anthropic.get("build_anthropic_client")
+            if resolve_anthropic_token is None or build_anthropic_client is None:
+                raise ImportError("anthropic plugin not registered")
 
             new_token = resolve_anthropic_token()
         except Exception as exc:
@@ -3115,8 +3120,9 @@ class AIAgent:
         # Only treat as OAuth on native Anthropic; third-party endpoints using
         # the Anthropic protocol must not trip OAuth paths (#1739 & third-party
         # identity-injection guard).
-        from agent.anthropic_adapter import _is_oauth_token
-        self._is_anthropic_oauth = _is_oauth_token(new_token) if self.provider == "anthropic" else False
+        _anthropic = registries.get_provider_namespace("anthropic")
+        _is_oauth_token = _anthropic.get("_is_oauth_token")
+        self._is_anthropic_oauth = _is_oauth_token(new_token) if (_is_oauth_token is not None and self.provider == "anthropic") else False
         return True
 
     def _apply_client_headers_for_base_url(self, base_url: str) -> None:
@@ -3164,7 +3170,12 @@ class AIAgent:
         runtime_base = getattr(entry, "runtime_base_url", None) or getattr(entry, "base_url", None) or self.base_url
 
         if self.api_mode == "anthropic_messages":
-            from agent.anthropic_adapter import build_anthropic_client, _is_oauth_token
+            from agent.plugin_registries import registries
+            _anthropic = registries.get_provider_namespace("anthropic")
+            build_anthropic_client = _anthropic.get("build_anthropic_client")
+            _is_oauth_token = _anthropic.get("_is_oauth_token")
+            if build_anthropic_client is None or _is_oauth_token is None:
+                raise ImportError("anthropic plugin not registered")
 
             try:
                 self._anthropic_client.close()
@@ -3233,13 +3244,19 @@ class AIAgent:
         path when an OAuth subscription rejects the 1M-context beta) so the
         rebuilt client carries the reduced beta set.
         """
+        from agent.plugin_registries import registries
+        _anthropic = registries.get_provider_namespace("anthropic")
         _drop_1m = bool(getattr(self, "_oauth_1m_beta_disabled", False))
         if getattr(self, "provider", None) == "bedrock":
-            from agent.anthropic_adapter import build_anthropic_bedrock_client
+            build_anthropic_bedrock_client = _anthropic.get("build_anthropic_bedrock_client")
+            if build_anthropic_bedrock_client is None:
+                raise ImportError("anthropic plugin not registered")
             region = getattr(self, "_bedrock_region", "us-east-1") or "us-east-1"
             self._anthropic_client = build_anthropic_bedrock_client(region)
         else:
-            from agent.anthropic_adapter import build_anthropic_client
+            build_anthropic_client = _anthropic.get("build_anthropic_client")
+            if build_anthropic_client is None:
+                raise ImportError("anthropic plugin not registered")
             self._anthropic_client = build_anthropic_client(
                 self._anthropic_api_key,
                 getattr(self, "_anthropic_base_url", None),

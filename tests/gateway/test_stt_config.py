@@ -41,7 +41,7 @@ async def test_enrich_message_with_transcription_surfaces_path_when_stt_disabled
     runner._has_setup_skill = lambda: True  # Should NOT be consulted in disabled branch.
 
     with patch(
-        "tools.transcription_tools.transcribe_audio",
+        "hermes_agent_stt.transcription_tools.transcribe_audio",
         side_effect=AssertionError("transcribe_audio should not be called when STT is disabled"),
     ), patch(
         "gateway.run._probe_audio_duration",
@@ -86,7 +86,7 @@ async def test_enrich_message_with_transcription_avoids_bogus_no_provider_messag
     runner.config = GatewayConfig(stt_enabled=True)
 
     with patch(
-        "tools.transcription_tools.transcribe_audio",
+        "hermes_agent_stt.transcription_tools.transcribe_audio",
         return_value={"success": False, "error": "VOICE_TOOLS_OPENAI_KEY not set"},
     ):
         result = await runner._enrich_message_with_transcription(
@@ -124,7 +124,7 @@ async def test_prepare_inbound_message_text_transcribes_queued_voice_event():
     )
 
     with patch(
-        "tools.transcription_tools.transcribe_audio",
+        "hermes_agent_stt.transcription_tools.transcribe_audio",
         return_value={
             "success": True,
             "transcript": "queued voice transcript",
