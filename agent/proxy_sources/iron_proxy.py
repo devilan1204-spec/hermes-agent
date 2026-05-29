@@ -851,19 +851,32 @@ def build_proxy_config(
     else:
         deny_cidrs = list(upstream_deny_cidrs)
 
-    # Listen addresses.  Single canonical "http_listen" for backward compat
-    # plus a "http_listens" list (iron-proxy v0.39 accepts both; v0.40+ is
-    # listen-list-only).  We always emit both forms so a binary version
-    # bump can't silently regress the bind policy.
+    # Listen address.  iron-proxy v0.39 takes a single string at
+    # ``proxy.http_listen`` — there is no plural ``http_listens`` field,
+    # despite earlier drafts of this module claiming v0.39 accepts both.
+    # An empirical strings(1) audit + a live "start the binary and
+    # observe the YAML unmarshal error" confirms the singular form is
+    # the only one the binary accepts.  We bind loopback by default; the
+    # docker bridge listener is added as a second binary invocation if
+    # we ever need multi-bind, but a single bind is what v0.39 supports.
     listens = list(http_listen) if http_listen else _default_http_listen(tunnel_port)
     primary_listen = listens[0] if listens else f"127.0.0.1:{tunnel_port}"
 
     log_block: Dict = {"level": "info"}
-    if audit_log is not None:
-        # Wire the operator-requested audit-log path into the binary's log
-        # config.  iron-proxy reads ``log.audit_path``; setting it routes
-        # per-request records there (separately from server-level logs).
-        log_block["audit_path"] = str(audit_log)
+    # NOTE: ``log.audit_path`` is NOT a field in iron-proxy v0.39's
+    # ``config.Log`` struct — the binary rejects it with
+    # ``field audit_path not found in type config.Log``.  Per-request
+    # audit records are written to the same log destination as
+    # everything else at this binary version; the operator-facing
+    # ``audit.log`` file we pre-create is still useful as a sentinel
+    # for monitoring (logrotate target, downstream tail watchers) but
+    # the daemon does not write to it directly.  The kwarg is kept so
+    # we're forward-compatible with a future v0.40+ that adds the
+    # field; if you upgrade _IRON_PROXY_VERSION and the upstream gains
+    # ``log.audit_path``, re-enable the line below.
+    # if audit_log is not None:
+    #     log_block["audit_path"] = str(audit_log)
+    _ = audit_log  # consumed by ensure_audit_log() / docs only on v0.39
 
     return {
         # DNS section is required by the binary's config parser, but we run
@@ -878,12 +891,11 @@ def build_proxy_config(
             # http_listen is the HTTP-proxy listener that handles both plain
             # HTTP forwards AND CONNECT tunnels for HTTPS.  Sandboxes set
             # `HTTPS_PROXY=http://host:tunnel_port` and the same listener
-            # serves both protocols.  We bind loopback + the docker bridge
-            # gateway (Linux) — NOT 0.0.0.0.  LAN peers with a leaked
-            # sandbox token would otherwise be able to spend the operator's
-            # API quota against any allowlisted upstream.
+            # serves both protocols.  We bind loopback by default — NOT
+            # 0.0.0.0.  LAN peers with a leaked sandbox token would
+            # otherwise be able to spend the operator's API quota against
+            # any allowlisted upstream.
             "http_listen": primary_listen,
-            "http_listens": listens,
             # The HTTPS-listener (direct TLS termination, no CONNECT) and
             # the SOCKS5/CONNECT-only tunnel listener get loopback ephemeral
             # ports — we don't expose them.
@@ -895,6 +907,18 @@ def build_proxy_config(
             # SSRF protection: deny outbound to cloud metadata + loopback by
             # default.  An empty list opts out entirely.
             "upstream_deny_cidrs": deny_cidrs,
+        },
+        # iron-proxy v0.39 starts a Prometheus-style metrics server by
+        # default on ``:9090`` — which is the SAME port as our default
+        # ``tunnel_port: 9090``, causing a guaranteed bind collision on
+        # startup.  Pin the metrics listener to an ephemeral loopback
+        # port (``127.0.0.1:0``) so the metrics binding can't collide
+        # with the proxy listener regardless of what tunnel_port the
+        # operator chose.  The daemon still emits metrics for any local
+        # scraper that knows where to look (via ``hermes egress
+        # status``); we just don't expose them to the public default.
+        "metrics": {
+            "listen": "127.0.0.1:0",
         },
         "tls": {
             "ca_cert": str(ca_cert),

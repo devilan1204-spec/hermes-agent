@@ -213,8 +213,7 @@ def test_wizard_rendered_yaml_contains_deny_list(hermes_home, tmp_path):
 
 def test_default_bind_is_loopback_not_zero_zero(tmp_path):
     """``http_listen`` must NOT be ``0.0.0.0:PORT`` or ``:PORT`` (latter is
-    INADDR_ANY).  Loopback only by default; the docker bridge bind is
-    optional and added in addition, never instead."""
+    INADDR_ANY).  Loopback only by default."""
 
     cfg = ip.build_proxy_config(
         mappings=[_sample_mapping()],
@@ -224,20 +223,28 @@ def test_default_bind_is_loopback_not_zero_zero(tmp_path):
         http_listen=["127.0.0.1:12345"],  # explicit so test is deterministic
     )
     primary = cfg["proxy"]["http_listen"]
-    listens = cfg["proxy"]["http_listens"]
     assert primary == "127.0.0.1:12345"
-    assert listens == ["127.0.0.1:12345"]
     # Sentinel: confirm we didn't accidentally serialize a bare-port form
-    # like ":12345" anywhere in the listen list (that's INADDR_ANY).
-    for entry in listens:
-        assert not entry.startswith(":")
-        assert "0.0.0.0" not in entry
+    # like ":12345" (that's INADDR_ANY).
+    assert not primary.startswith(":")
+    assert "0.0.0.0" not in primary
+    # iron-proxy v0.39 doesn't support http_listens (plural).  We
+    # deliberately do NOT emit that key — re-emitting it would cause
+    # the daemon to fail YAML unmarshal at start time.
+    assert "http_listens" not in cfg["proxy"], (
+        "iron-proxy v0.39 rejects http_listens (plural); only the "
+        "singular http_listen string is accepted by the binary"
+    )
 
 
-def test_default_bind_includes_docker_bridge_on_linux(tmp_path, monkeypatch):
-    """When http_listen isn't passed AND we're on Linux AND a docker
-    bridge IP is detected, we should bind that bridge IP in addition to
-    loopback so containers reach the proxy via host-gateway."""
+def test_default_bind_uses_loopback_on_linux(tmp_path, monkeypatch):
+    """When http_listen isn't passed AND we're on Linux, the singular
+    http_listen field is the loopback bind.  iron-proxy v0.39 only
+    supports one bind per daemon process — earlier versions of this
+    code emitted a plural http_listens list with the docker bridge
+    appended, but v0.39 rejects that key so we keep loopback only.
+    Sandboxes still reach the daemon via host.docker.internal which
+    Docker maps to the host gateway, so loopback-only is functional."""
 
     monkeypatch.setattr(ip.platform, "system", lambda: "Linux")
     monkeypatch.setattr(ip, "_detect_docker_bridge_ip", lambda: "172.17.0.1")
@@ -247,23 +254,53 @@ def test_default_bind_includes_docker_bridge_on_linux(tmp_path, monkeypatch):
         ca_key=tmp_path / "ca.key",
         tunnel_port=9090,
     )
-    assert "127.0.0.1:9090" in cfg["proxy"]["http_listens"]
-    assert "172.17.0.1:9090" in cfg["proxy"]["http_listens"]
+    # Primary http_listen is loopback.
+    assert cfg["proxy"]["http_listen"] == "127.0.0.1:9090"
+    # No http_listens (plural) — v0.39 rejects that key.
+    assert "http_listens" not in cfg["proxy"]
+
+
+def test_metrics_listener_pinned_to_loopback_ephemeral(tmp_path):
+    """iron-proxy v0.39's default metrics_listen is ``:9090``, which
+    collides with our default tunnel_port=9090.  build_proxy_config MUST
+    explicitly pin metrics.listen to ``127.0.0.1:0`` so the bind
+    collision can never happen at start time."""
+
+    cfg = ip.build_proxy_config(
+        mappings=[_sample_mapping()],
+        ca_cert=tmp_path / "ca.crt",
+        ca_key=tmp_path / "ca.key",
+        tunnel_port=9090,
+    )
+    assert cfg["metrics"]["listen"] == "127.0.0.1:0"
 
 
 # ---------------------------------------------------------------------------
-# audit_log wiring (regression: parameter was accepted but never used)
+# audit_log file pre-creation (parameter still accepted; v0.39 doesn't
+# wire it into the binary config but ensure_audit_log() still creates
+# the file at 0o600 as a logrotate / monitoring sentinel)
 # ---------------------------------------------------------------------------
 
 
-def test_audit_log_path_lands_in_yaml(tmp_path):
+def test_audit_log_kwarg_does_not_inject_audit_path_v039(tmp_path):
+    """v0.39 of iron-proxy rejects ``log.audit_path`` (not a struct
+    field).  build_proxy_config still accepts the audit_log kwarg for
+    forward compatibility but MUST NOT emit it into the rendered yaml
+    until the upstream binary supports it.  See the kwarg's docstring
+    for the upgrade path."""
+
     cfg = ip.build_proxy_config(
         mappings=[_sample_mapping()],
         ca_cert=tmp_path / "ca.crt",
         ca_key=tmp_path / "ca.key",
         audit_log=tmp_path / "audit.log",
     )
-    assert cfg["log"]["audit_path"] == str(tmp_path / "audit.log")
+    assert "audit_path" not in cfg["log"], (
+        "iron-proxy v0.39 has no log.audit_path field; emitting it "
+        "causes 'field audit_path not found in type config.Log' at "
+        "daemon start.  ensure_audit_log() still creates the file as "
+        "an operator-facing logrotate target."
+    )
 
 
 def test_audit_log_omitted_when_caller_passes_none(tmp_path):
