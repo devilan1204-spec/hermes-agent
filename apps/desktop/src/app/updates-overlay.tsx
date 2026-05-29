@@ -63,7 +63,7 @@ export function UpdatesOverlay() {
   }
 
   const handleInstall = () => {
-    void applyUpdates({ dirtyStrategy: status?.dirty ? 'stash' : 'abort' })
+    void applyUpdates()
   }
 
   return (
@@ -248,7 +248,7 @@ function ApplyingView({ apply }: { apply: UpdateApplyState }) {
 
         <DialogTitle className="text-center text-xl">{label}</DialogTitle>
         <DialogDescription className="text-center text-sm">
-          Hermes will reopen automatically when this is done.
+          The Hermes updater will take over in its own window and reopen Hermes when it&rsquo;s done.
         </DialogDescription>
       </div>
 
@@ -262,7 +262,7 @@ function ApplyingView({ apply }: { apply: UpdateApplyState }) {
         />
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">Please keep this window open.</p>
+      <p className="text-center text-xs text-muted-foreground">Hermes will close to apply the update.</p>
     </div>
   )
 }

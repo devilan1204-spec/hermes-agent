@@ -62,7 +62,13 @@ const INITIAL: BootstrapStateModel = {
 
 export type Route = 'welcome' | 'progress' | 'success' | 'failure'
 
+/// How the installer was launched, mirrored from src-tauri AppMode.
+/// 'install' = first-run onboarding (bare launch). 'update' = driven by the
+/// desktop app handing off via `Hermes-Setup.exe --update`.
+export type AppMode = 'install' | 'update'
+
 export const $route = atom<Route>('welcome')
+export const $mode = atom<AppMode>('install')
 export const $bootstrap = atom<BootstrapStateModel>(INITIAL)
 export const $logPath = atom<string | null>(null)
 export const $hermesHome = atom<string | null>(null)
@@ -128,12 +134,14 @@ export async function initialize(): Promise<void> {
 
   // Pull static info on mount for the diagnostics footer.
   try {
-    const [logPath, hermesHome] = await Promise.all([
+    const [logPath, hermesHome, mode] = await Promise.all([
       invoke<string>('get_log_path'),
-      invoke<string>('get_hermes_home')
+      invoke<string>('get_hermes_home'),
+      invoke<AppMode>('get_mode')
     ])
     $logPath.set(logPath)
     $hermesHome.set(hermesHome)
+    $mode.set(mode)
   } catch (err) {
     console.warn('failed to fetch installer paths', err)
   }
@@ -211,6 +219,13 @@ export async function initialize(): Promise<void> {
         break
     }
   })
+
+  // Update mode is a hand-off, not a user-initiated flow: the desktop already
+  // exited and re-launched us as `--update`. Kick the update immediately so
+  // the user lands on progress, not a redundant "click to update" screen.
+  if ($mode.get() === 'update') {
+    void startUpdate()
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -230,6 +245,15 @@ export async function startInstall(opts?: { branch?: string }): Promise<void> {
       hermes_home: null
     }
   })
+}
+
+export async function startUpdate(): Promise<void> {
+  // Update is driven by the desktop handing off (Hermes-Setup.exe --update);
+  // there's no welcome click. Reset + jump straight to progress, then let the
+  // Rust side stream the synthetic update manifest.
+  $bootstrap.set(INITIAL)
+  $route.set('progress')
+  await invoke('start_update')
 }
 
 export async function cancelInstall(): Promise<void> {

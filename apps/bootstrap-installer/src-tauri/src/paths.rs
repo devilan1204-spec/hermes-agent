@@ -58,6 +58,55 @@ pub fn bootstrap_cache_dir() -> PathBuf {
     hermes_home().join("bootstrap-cache")
 }
 
+/// Stable location the installer copies itself to after a successful install.
+/// The desktop app re-invokes this with `--update`, and the start-menu /
+/// desktop shortcuts can point users back to it. Lives directly under
+/// HERMES_HOME so it survives repo checkout deletion (unlike anything under
+/// hermes-agent/).
+///
+/// On Windows this is `%LOCALAPPDATA%\hermes\hermes-setup.exe`; on other
+/// platforms the extension differs but the directory is the same.
+pub fn installer_dest() -> PathBuf {
+    let name = if cfg!(target_os = "windows") {
+        "hermes-setup.exe"
+    } else {
+        "hermes-setup"
+    };
+    hermes_home().join(name)
+}
+
+/// Copy the currently-running installer binary to `installer_dest()` so it's
+/// available for future `--update` runs and shortcut launches.
+///
+/// No-ops (returns Ok) when the running exe is ALREADY the destination — which
+/// is exactly the case during an `--update` run (the desktop launched us FROM
+/// that path), where copying onto ourselves would be a Windows sharing
+/// violation. Best-effort: a failure here must not fail the install, so the
+/// caller logs and continues.
+pub fn copy_self_to_hermes_home() -> std::io::Result<()> {
+    let src = std::env::current_exe()?;
+    let dest = installer_dest();
+
+    // Skip if we're already running from the destination (update re-invocation
+    // or a prior copy). canonicalize both so symlinks / 8.3 short paths / case
+    // differences don't trick us into a self-copy.
+    let same = match (src.canonicalize(), dest.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => src == dest,
+    };
+    if same {
+        tracing::info!(?dest, "installer already at destination; skipping self-copy");
+        return Ok(());
+    }
+
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(&src, &dest)?;
+    tracing::info!(?src, ?dest, "copied installer to HERMES_HOME");
+    Ok(())
+}
+
 /// Where install.ps1 writes the bootstrap-complete marker (existence-only file
 /// the Electron app also checks). Per main.cjs:
 ///   const BOOTSTRAP_COMPLETE_MARKER = path.join(ACTIVE_HERMES_ROOT, '.hermes-bootstrap-complete')

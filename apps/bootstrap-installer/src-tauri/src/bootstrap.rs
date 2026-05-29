@@ -539,6 +539,18 @@ async fn run_bootstrap(
         .unwrap_or_else(|| crate::paths::hermes_home().to_string_lossy().into_owned());
     let install_root = PathBuf::from(&hermes_home).join("hermes-agent");
 
+    // Copy ourselves to HERMES_HOME/hermes-setup.exe so the desktop app can
+    // re-invoke us with `--update` and shortcuts have a stable target. This is
+    // a one-shot install concern; an `--update` re-invocation no-ops because
+    // we're already running from that path. Best-effort — a failure here must
+    // not fail an otherwise-successful install.
+    if let Err(err) = crate::paths::copy_self_to_hermes_home() {
+        tracing::warn!(?err, "failed to copy installer into HERMES_HOME (non-fatal)");
+        emit_log(&format!(
+            "[bootstrap] warning: could not stage updater binary: {err}"
+        ));
+    }
+
     emit_event(
         &app,
         BootstrapEvent::Complete {

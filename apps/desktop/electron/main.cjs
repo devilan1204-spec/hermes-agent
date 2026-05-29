@@ -888,28 +888,6 @@ function getVenvPython(venvRoot) {
   return path.join(venvRoot, IS_WINDOWS ? path.join('Scripts', 'python.exe') : path.join('bin', 'python'))
 }
 
-function runProcess(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: options.env || process.env,
-      shell: Boolean(options.shell),
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-
-    child.stdout.on('data', rememberLog)
-    child.stderr.on('data', rememberLog)
-    child.once('error', reject)
-    child.once('exit', code => {
-      if (code === 0) {
-        resolve()
-      } else {
-        reject(new Error(`${path.basename(command)} exited with code ${code}: ${recentHermesLog()}`))
-      }
-    })
-  })
-}
-
 function recentHermesLog() {
   return hermesLog.slice(-20).join('\n')
 }
@@ -1051,108 +1029,65 @@ async function readCommitLog(cwd, branch) {
 
 let updateInFlight = false
 
+// Resolve the staged updater binary. The Tauri installer copies itself to
+// HERMES_HOME/hermes-setup.exe on a successful install (see
+// apps/bootstrap-installer paths::copy_self_to_hermes_home). That binary owns
+// ALL repo mutation — running `hermes update` + rebuilding the desktop — so
+// the desktop never touches its own bits while running. Returns null when the
+// updater isn't staged (e.g. a dev/source run that never went through the
+// installer); callers degrade gracefully.
+function resolveUpdaterBinary() {
+  const name = IS_WINDOWS ? 'hermes-setup.exe' : 'hermes-setup'
+  const candidate = path.join(HERMES_HOME, name)
+  return fileExists(candidate) ? candidate : null
+}
+
+// applyUpdates — hand off to the installer's --update flow, then exit.
+//
+// The desktop is a pure consumer: it does NOT git pull / pip install / rebuild
+// itself (the old open-coded git dance lived here and drifted from
+// `hermes update`). Instead we spawn the staged Hermes-Setup binary with
+// --update and quit, so it can run `hermes update` (which refuses while we
+// hold the venv shim) and rebuild the desktop with our exe already gone.
+//
+// Detection (checkUpdates / commit changelog / "N behind") stays in the UI;
+// only this apply action changed.
 async function applyUpdates(opts = {}) {
   if (updateInFlight) {
     throw new Error('An update is already in progress.')
   }
   updateInFlight = true
 
-  const dirtyStrategy = opts.dirtyStrategy === 'force' || opts.dirtyStrategy === 'stash' ? opts.dirtyStrategy : 'abort'
-
   try {
-    const updateRoot = resolveUpdateRoot()
-    const gitDir = path.join(updateRoot, '.git')
-    if (!directoryExists(gitDir)) {
-      const message = `${updateRoot} isn't a git checkout — cannot self-update.`
-      emitUpdateProgress({ stage: 'error', error: 'not-a-git-checkout', message })
+    const updater = resolveUpdaterBinary()
+    if (!updater) {
+      const message =
+        'The Hermes updater was not found. Re-run the Hermes installer to ' +
+        'enable in-app updates, or run `hermes update` from a terminal.'
+      emitUpdateProgress({ stage: 'error', error: 'no-updater', message })
       throw new Error(message)
     }
 
-    const { branch } = readDesktopUpdateConfig()
+    emitUpdateProgress({ stage: 'restart', message: 'Handing off to the Hermes updater…', percent: 100 })
 
-    emitUpdateProgress({ stage: 'prepare', message: 'Checking working tree…', percent: 5 })
-    const dirtyResult = await runGit(['status', '--porcelain'], { cwd: updateRoot })
-    const isDirty = dirtyResult.stdout.trim().length > 0
-
-    let stashRef = null
-    if (isDirty) {
-      if (dirtyStrategy === 'abort') {
-        const message = 'Uncommitted changes detected. Choose how to handle them and try again.'
-        emitUpdateProgress({ stage: 'error', error: 'dirty-tree', message })
-        throw new Error(message)
-      }
-      if (dirtyStrategy === 'stash') {
-        emitUpdateProgress({ stage: 'prepare', message: 'Stashing local changes…', percent: 10 })
-        const stashed = await runGit(['stash', 'push', '-u', '-m', `hermes-desktop-auto-${Date.now()}`], {
-          cwd: updateRoot
-        })
-        if (stashed.code !== 0) {
-          const message = firstLine(stashed.stderr) || 'git stash failed.'
-          emitUpdateProgress({ stage: 'error', error: 'stash-failed', message })
-          throw new Error(message)
-        }
-        stashRef = 'stash@{0}'
-      }
-      // dirtyStrategy === 'force' → pull --ff-only will refuse if anything
-      // conflicts, surfacing a clean error rather than us guessing.
-    }
-
-    const pyprojectBefore = sha256OfFile(path.join(updateRoot, 'pyproject.toml'))
-
-    emitUpdateProgress({ stage: 'fetch', message: `Fetching origin/${branch}…`, percent: 20 })
-    const fetched = await runGit(['fetch', 'origin', branch], { cwd: updateRoot })
-    if (fetched.code !== 0) {
-      const message = firstLine(fetched.stderr) || 'git fetch failed.'
-      emitUpdateProgress({ stage: 'error', error: 'fetch-failed', message })
-      throw new Error(message)
-    }
-
-    emitUpdateProgress({ stage: 'pull', message: `Fast-forward merging origin/${branch}…`, percent: 45 })
-    const pulled = await runGit(['pull', '--ff-only', 'origin', branch], {
-      cwd: updateRoot,
-      onLine: (_stream, text) => {
-        const line = firstLine(text)
-        if (line) emitUpdateProgress({ stage: 'pull', message: line.slice(0, 200), percent: 50 })
-      }
+    // Detached so the updater outlives this process — it needs us GONE before
+    // `hermes update` will run (the venv shim is locked while we live).
+    const child = spawn(updater, ['--update'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
     })
-    if (pulled.code !== 0) {
-      const message = firstLine(pulled.stderr || pulled.stdout) || 'git pull failed.'
-      if (stashRef) {
-        await runGit(['stash', 'pop'], { cwd: updateRoot }).catch(() => {})
-      }
-      emitUpdateProgress({ stage: 'error', error: 'pull-failed', message })
-      throw new Error(message)
-    }
+    child.unref()
 
-    if (stashRef) {
-      emitUpdateProgress({ stage: 'pull', message: 'Restoring stashed changes…', percent: 60 })
-      const popped = await runGit(['stash', 'pop'], { cwd: updateRoot })
-      if (popped.code !== 0) {
-        emitUpdateProgress({
-          stage: 'pull',
-          message: 'Stash pop had conflicts — your changes are preserved in `git stash list`.',
-          percent: 60
-        })
-      }
-    }
+    rememberLog(`[updates] launched updater: ${updater} --update; exiting desktop to release venv shim`)
 
-    // findPythonForRoot picks the venv beside the resolved checkout (.venv or
-    // venv), matching how the backend discovers its Python.
-    const pyprojectAfter = sha256OfFile(path.join(updateRoot, 'pyproject.toml'))
-    const pyprojectChanged = pyprojectBefore && pyprojectAfter && pyprojectBefore !== pyprojectAfter
-    const venvPython = pyprojectChanged ? findPythonForRoot(updateRoot) : null
-    if (venvPython && fileExists(venvPython)) {
-      emitUpdateProgress({ stage: 'pydeps', message: 'Updating Python dependencies…', percent: 75 })
-      await runProcess(venvPython, ['-m', 'pip', 'install', '-e', updateRoot, '--disable-pip-version-check'])
-    }
-
-    emitUpdateProgress({ stage: 'restart', message: 'Update complete. Restarting…', percent: 100 })
+    // Give the OS a beat to register the new process, then quit. The updater
+    // rebuilds and relaunches us when it's done.
     setTimeout(() => {
-      app.relaunch()
       app.quit()
-    }, 1500)
+    }, 600)
 
-    return { ok: true, branch }
+    return { ok: true, handedOff: true, updater }
   } finally {
     updateInFlight = false
   }
@@ -1161,18 +1096,6 @@ async function applyUpdates(opts = {}) {
 function readJson(filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'))
-  } catch {
-    return null
-  }
-}
-
-// Used by applyUpdates() to detect pyproject.toml drift after `git pull` so
-// we know whether to re-run `pip install -e .` against the venv. Returns
-// null on read failure.
-function sha256OfFile(filePath) {
-  try {
-    const buf = fs.readFileSync(filePath)
-    return crypto.createHash('sha256').update(buf).digest('hex')
   } catch {
     return null
   }

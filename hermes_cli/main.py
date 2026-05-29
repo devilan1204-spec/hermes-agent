@@ -6770,6 +6770,26 @@ def cmd_gui(args):
             sys.exit(build_result.returncode or 1)
         packaged_executable = _desktop_packaged_executable(desktop_dir)
 
+    # --build-only: produce the artifact but do NOT launch. The installer's
+    # --update flow drives the rebuild headlessly and then launches the desktop
+    # itself (detached, after the old exe has exited), so the launch must NOT
+    # happen here — it would block the installer and, on Windows, the old exe
+    # is still being replaced. Verify the expected artifact exists so a silent
+    # "built nothing" can't slip past, then return success.
+    if getattr(args, "build_only", False):
+        if source_mode:
+            if not _desktop_dist_exists(desktop_dir):
+                print(f"✗ --build-only --source produced no dist at: {desktop_dir / 'dist'}")
+                sys.exit(1)
+            print(f"✓ Desktop source build ready at {desktop_dir / 'dist'} (not launching; --build-only)")
+        elif packaged_executable is None:
+            print(f"✗ --build-only produced no launchable app at: {desktop_dir / 'release'}")
+            print("  Expected an unpacked Electron app for the current OS.")
+            sys.exit(1)
+        else:
+            print(f"✓ Desktop packaged app ready: {packaged_executable} (not launching; --build-only)")
+        return
+
     if source_mode:
         print("→ Launching Hermes Desktop from source build...")
         launch_result = subprocess.run([npm, "exec", "--", "electron", "."], cwd=desktop_dir, env=env, check=False)
@@ -14164,6 +14184,11 @@ Examples:
         "--source",
         action="store_true",
         help="Launch via `electron .` against apps/desktop/dist instead of the packaged app",
+    )
+    gui_parser.add_argument(
+        "--build-only",
+        action="store_true",
+        help="Build the desktop app but do not launch it (used by the installer's --update flow)",
     )
     gui_parser.add_argument(
         "--fake-boot",

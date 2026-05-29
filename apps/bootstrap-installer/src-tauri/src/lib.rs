@@ -13,9 +13,42 @@ mod events;
 mod install_script;
 mod powershell;
 mod paths;
+mod update;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+/// How the installer was invoked. Resolved once from the process args in
+/// `run()` and exposed to the frontend via `get_mode` so it can route to the
+/// install flow (first-run onboarding) or the update flow (driven by the
+/// desktop app handing off via `Hermes-Setup.exe --update`).
+///
+/// Bare launch (double-click, first-run) => Install.
+/// `--update` (spawned by the desktop's "Update" button) => Update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AppMode {
+    Install,
+    Update,
+}
+
+impl AppMode {
+    /// Resolve the mode from an argument iterator. Anything containing the
+    /// `--update` flag selects Update; otherwise Install. Kept arg-iterator
+    /// generic (not reading `std::env` directly) so it's unit-testable.
+    pub fn from_args<I, S>(args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for a in args {
+            if a.as_ref() == "--update" {
+                return AppMode::Update;
+            }
+        }
+        AppMode::Install
+    }
+}
 
 /// Process-wide install state, shared across Tauri commands.
 ///
@@ -24,14 +57,24 @@ use tokio::sync::Mutex;
 /// without lifetime gymnastics.
 pub struct AppState {
     pub bootstrap: Mutex<Option<bootstrap::BootstrapHandle>>,
+    /// How this process was launched (install vs update). Immutable for the
+    /// lifetime of the process; read by the `get_mode` command.
+    pub mode: AppMode,
 }
 
-impl Default for AppState {
-    fn default() -> Self {
+impl AppState {
+    fn new(mode: AppMode) -> Self {
         Self {
             bootstrap: Mutex::new(None),
+            mode,
         }
     }
+}
+
+/// Frontend → Rust: which flow should the UI render?
+#[tauri::command]
+fn get_mode(state: tauri::State<'_, Arc<AppState>>) -> AppMode {
+    state.mode
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -41,19 +84,24 @@ pub fn run() {
     // debug builds.
     let _guard = paths::init_logging();
 
-    tracing::info!("Hermes Setup starting");
+    let mode = AppMode::from_args(std::env::args().skip(1));
+    tracing::info!(?mode, "Hermes Setup starting");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
-        .manage(Arc::new(AppState::default()))
+        .manage(Arc::new(AppState::new(mode)))
         .invoke_handler(tauri::generate_handler![
+            // Mode (install vs update)
+            get_mode,
             // Bootstrap lifecycle
             bootstrap::start_bootstrap,
             bootstrap::cancel_bootstrap,
             bootstrap::get_bootstrap_status,
+            // Update lifecycle
+            update::start_update,
             // Hand-off
             bootstrap::launch_hermes_desktop,
             // Diagnostics
@@ -63,4 +111,24 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hermes Setup");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppMode;
+
+    #[test]
+    fn bare_args_are_install() {
+        assert_eq!(AppMode::from_args(Vec::<String>::new()), AppMode::Install);
+        assert_eq!(AppMode::from_args(["--foo", "bar"]), AppMode::Install);
+    }
+
+    #[test]
+    fn update_flag_selects_update() {
+        assert_eq!(AppMode::from_args(["--update"]), AppMode::Update);
+        assert_eq!(
+            AppMode::from_args(["--something", "--update", "--else"]),
+            AppMode::Update
+        );
+    }
 }

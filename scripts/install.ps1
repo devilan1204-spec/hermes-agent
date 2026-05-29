@@ -2073,15 +2073,60 @@ function Install-Desktop {
         "$desktopDir\release\win-arm64-unpacked\Hermes.exe"
     )
     $found = $false
+    $desktopExe = $null
     foreach ($cand in $exeCandidates) {
         if (Test-Path $cand) {
             Write-Success "Desktop ready: $cand"
+            $desktopExe = $cand
             $found = $true
             break
         }
     }
     if (-not $found) {
         throw "Desktop build completed but no Hermes.exe was found under $desktopDir\release\*-unpacked\"
+    }
+
+    # 4. Create Start Menu + Desktop shortcuts pointing DIRECTLY at the packed
+    #    Hermes.exe. We deliberately do NOT point them at `hermes desktop`: that
+    #    command rebuilds (npm install + electron-builder) on every launch,
+    #    which would cost minutes each time. The packed exe is the consumer —
+    #    launching it directly is instant, and updates flow through the
+    #    installer's --update path (which rebuilds once, then relaunches).
+    New-DesktopShortcuts -TargetExe $desktopExe
+}
+
+function New-DesktopShortcuts {
+    param([Parameter(Mandatory = $true)][string]$TargetExe)
+
+    # Best-effort: a shortcut failure must never fail an otherwise-good install.
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $workDir = Split-Path -Parent $TargetExe
+
+        $targets = @(
+            (Join-Path ([Environment]::GetFolderPath('Programs')) 'Hermes.lnk'),
+            (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Hermes.lnk')
+        )
+
+        foreach ($lnkPath in $targets) {
+            try {
+                $parent = Split-Path -Parent $lnkPath
+                if (-not (Test-Path $parent)) {
+                    New-Item -ItemType Directory -Force -Path $parent | Out-Null
+                }
+                $sc = $shell.CreateShortcut($lnkPath)
+                $sc.TargetPath = $TargetExe
+                $sc.WorkingDirectory = $workDir
+                $sc.IconLocation = "$TargetExe,0"
+                $sc.Description = 'Hermes Agent'
+                $sc.Save()
+                Write-Success "Shortcut created: $lnkPath"
+            } catch {
+                Write-Warn "Could not create shortcut $lnkPath : $($_.Exception.Message)"
+            }
+        }
+    } catch {
+        Write-Warn "Skipping shortcut creation: $($_.Exception.Message)"
     }
 }
 
