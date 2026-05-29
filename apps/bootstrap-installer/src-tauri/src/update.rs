@@ -99,12 +99,27 @@ async fn run_update(app: AppHandle) -> Result<()> {
     wait_for_venv_free(&install_root, &app).await;
 
     // ---- stage 1: hermes update -----------------------------------------
+    // Pass --branch so `hermes update` targets the branch this installer was
+    // built/pinned against (BUILD_PIN_BRANCH), NOT its built-in default of
+    // `main`. The install was a detached-HEAD checkout of a specific commit;
+    // without --branch, `hermes update` switches the checkout to `main` (a
+    // divergent branch that may not even have the desktop CLI command), then
+    // reports "already up to date" against the wrong branch. The desktop
+    // detected the update against this same branch, so we must update against
+    // it too.
+    let pin_branch = option_env_string("BUILD_PIN_BRANCH");
+    let mut update_args: Vec<&str> = vec!["update", "--yes", "--gateway"];
+    if let Some(b) = pin_branch.as_deref() {
+        update_args.push("--branch");
+        update_args.push(b);
+    }
+
     emit_stage(&app, "update", StageState::Running, None, None);
     let started = Instant::now();
     let update = run_streamed(
         &app,
         &hermes,
-        &["update", "--yes", "--gateway"],
+        &update_args,
         &install_root,
         Some("update"),
     )
@@ -374,6 +389,18 @@ fn stage_info(name: &str, title: &str) -> StageInfo {
         category: "update".to_string(),
         needs_user_input: false,
     }
+}
+
+// option_env! only accepts string literals, so the build-time pins are read
+// by their literal names here. Mirrors bootstrap.rs's helper of the same name
+// (kept local rather than shared because option_env! can't be parameterized).
+fn option_env_string(key: &str) -> Option<String> {
+    let val = match key {
+        "BUILD_PIN_COMMIT" => option_env!("BUILD_PIN_COMMIT"),
+        "BUILD_PIN_BRANCH" => option_env!("BUILD_PIN_BRANCH"),
+        _ => None,
+    };
+    val.map(|s| s.to_string())
 }
 
 fn emit(app: &AppHandle, event: BootstrapEvent) {
