@@ -513,7 +513,7 @@ hermes egress stop && hermes egress start
 hermes egress status                     # current state in one view
 cat ~/.hermes/proxy/proxy.yaml           # the rendered iron-proxy config
 tail -20 ~/.hermes/proxy/iron-proxy.log  # daemon-level diagnostics
-tail -f ~/.hermes/proxy/audit.log | jq   # per-request audit log (line-delimited JSON)
+tail -f ~/.hermes/proxy/iron-proxy.log | jq  # daemon + per-request log (line-delimited JSON; v0.39 combines both streams)
 ```
 
 Common failure modes + recovery are covered in [Egress proxy → Troubleshooting](../user-guide/egress/iron-proxy.md#troubleshooting).

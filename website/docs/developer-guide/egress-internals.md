@@ -169,11 +169,19 @@ Regression: `test_subprocess_env_strips_unrelated_secrets`, `test_subprocess_env
 
 ### Bind policy
 
-`_default_http_listen` returns loopback + (Linux only) the docker bridge IP.  Never `0.0.0.0`, never `:PORT` (INADDR_ANY).
+`_default_http_listen` returns loopback (and, on Linux, the docker bridge IP as a *second list entry the rendered yaml currently discards* — see below).  Never `0.0.0.0`, never `:PORT` (INADDR_ANY).
 
 `_detect_docker_bridge_ip` validates via `ipaddress.IPv4Address` and rejects `is_unspecified` / `is_loopback` / `is_multicast` / `is_reserved` / `is_link_local` / `is_global`.  A hostile `ip` shim on PATH cannot inject `0.0.0.0`.
 
-Regression: `test_default_bind_is_loopback_not_zero_zero`, `test_detect_docker_bridge_ip_rejects_dangerous` (parametrized over 8 attack inputs).
+**v0.39 schema constraint:** the binary's `config.Proxy` struct has only a singular `http_listen` string field — there is no `http_listens` (plural) list, despite earlier comments in this module claiming otherwise.  `build_proxy_config` emits only the first entry of `_default_http_listen`'s result; the second-bind path is dead code today.  When the pinned `_IRON_PROXY_VERSION` is bumped to one that supports the plural form, re-enable the list-emit in `build_proxy_config` and the docker-bridge bind becomes live without further changes.
+
+Regression: `test_default_bind_is_loopback_not_zero_zero` (asserts loopback bind AND that `http_listens` is NOT in the rendered yaml), `test_default_bind_uses_loopback_on_linux`, `test_detect_docker_bridge_ip_rejects_dangerous` (parametrized over 8 attack inputs).
+
+### Metrics port collision
+
+`metrics.listen` defaults to `:9090` in iron-proxy v0.39 — the SAME port as Hermes's default `tunnel_port: 9090`.  `build_proxy_config` MUST explicitly pin `metrics.listen: 127.0.0.1:0` so the metrics binding gets an ephemeral loopback port that can never collide with the proxy listener regardless of operator-chosen `tunnel_port`.
+
+Regression: `test_metrics_listener_pinned_to_loopback_ephemeral`.
 
 ### Default deny CIDRs
 
@@ -185,7 +193,9 @@ Regression: `test_default_deny_cidrs_present_when_unspecified`, `test_default_de
 
 `ensure_audit_log` raises `RuntimeError` on any `OSError`.  Swallowing the failure would let the daemon create the file under the default umask, defeating the privacy promise.  `cmd_setup` catches the RuntimeError and surfaces a clear error to the operator.
 
-Regression: `test_ensure_audit_log_raises_on_immutable_parent`.
+**v0.39 schema constraint:** `log.audit_path` is NOT a field in iron-proxy v0.39's `config.Log` struct, so `build_proxy_config` accepts the `audit_log` kwarg but does NOT emit it into the rendered yaml.  Per-request records on v0.39 land in `iron-proxy.log` alongside daemon-level events.  The `audit.log` file is still pre-created at `0o600` with `O_NOFOLLOW` so the privacy contract holds when the pinned version is bumped to one that supports the separate stream.
+
+Regression: `test_ensure_audit_log_raises_on_immutable_parent`, `test_audit_log_kwarg_does_not_inject_audit_path_v039`.
 
 ### Bitwarden mode fail-loud
 
@@ -268,7 +278,7 @@ The Docker implementation is ~150 lines; expect similar volume for Modal / Dayto
 
 ### Subscribing to per-request audit events
 
-iron-proxy writes line-delimited JSON to `~/.hermes/proxy/audit.log`.  A plugin / external watcher can tail the file and react to allowlist denials, secret swaps, or upstream errors.  The schema is documented at [docs.iron.sh/audit](https://docs.iron.sh/audit) (link).
+iron-proxy writes line-delimited JSON to `~/.hermes/proxy/iron-proxy.log` on the currently pinned v0.39 (daemon + per-request records combined; see "Logging on iron-proxy v0.39" in the user guide).  A plugin / external watcher can tail that file and react to allowlist denials, secret swaps, or upstream errors.  When the pinned version is bumped to one that supports `log.audit_path`, the per-request stream moves to `audit.log` and watchers wired to that path go live without operator action.  The schema is documented at [docs.iron.sh/audit](https://docs.iron.sh/audit) (link).
 
 ## Testing
 

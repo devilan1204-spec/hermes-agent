@@ -140,13 +140,16 @@ To override: set `proxy.upstream_deny_cidrs` to your own list. To opt out entire
 
 ### Bind policy
 
-The proxy binds **loopback only** (`127.0.0.1:<tunnel_port>`), plus the docker bridge gateway IP on Linux (auto-detected via `ip -4 addr show docker0`, typically `172.17.0.1`). It does NOT bind `0.0.0.0`. This means:
+The proxy binds **loopback only** (`127.0.0.1:<tunnel_port>`). It does NOT bind `0.0.0.0`. This means:
 
 - A LAN peer with a leaked proxy token cannot use it — the proxy is unreachable from the network.
-- Containers reach the proxy via `host.docker.internal:9090`, which Docker maps to the bridge gateway via `--add-host=host.docker.internal:host-gateway`.
-- On macOS / Windows Docker Desktop, Desktop manages the gateway itself, so a single loopback bind is enough.
+- Containers reach the proxy via `host.docker.internal:9090`, which Docker maps to the host gateway via `--add-host=host.docker.internal:host-gateway` on Linux. On macOS / Windows Docker Desktop, Desktop manages the gateway itself.
 
-If the `ip` binary returns a suspicious address (anything that isn't a private IPv4 — `0.0.0.0`, public addresses, multicast, link-local, etc.) the bridge bind is skipped with a warning. This defends against a hostile `ip` shim on PATH being able to inject `0.0.0.0` and re-open INADDR_ANY.
+iron-proxy v0.39 only supports a single bind per daemon process — earlier drafts of this integration emitted a plural `http_listens` list with the docker bridge IP appended for direct sandbox-to-bridge connectivity, but v0.39's YAML parser rejects that field. The `host.docker.internal -> host-gateway` mapping that Docker provides is sufficient: containers resolve the hostname to the bridge IP, then connect TO the host's loopback bind through it.
+
+We also pin `metrics.listen: 127.0.0.1:0` so the daemon's built-in metrics server gets an ephemeral loopback port instead of its default `:9090` — otherwise it would fight `tunnel_port: 9090` for the same socket and the daemon would refuse to start with "address already in use".
+
+If a hostile `ip` shim earlier on PATH had been able to inject a non-private IPv4 here (`0.0.0.0`, a public address, multicast, link-local, etc.) the loopback fallback still applies — we never bind anything we couldn't validate via `ipaddress.IPv4Address` + `is_*` checks.
 
 ## Uncovered providers
 
@@ -308,17 +311,24 @@ Everything iron-proxy maintains lives in `~/.hermes/proxy/`:
 | `mappings.json.rotated-*` | `0o600` | Backups created by `--rotate-tokens` |
 | `iron-proxy.pid` | `0o600` | PID of the running daemon |
 | `iron-proxy.nonce` | `0o600` | Per-start nonce for PID-recycle defense |
-| `iron-proxy.log` | `0o600` | Daemon stdout/stderr (startup, bind errors, shutdown) |
-| `audit.log` | `0o600` | Structured per-request JSON log |
+| `iron-proxy.log` | `0o600` | Daemon stdout/stderr — **includes per-request records on v0.39** |
+| `audit.log` | `0o600` | Reserved for the dedicated per-request audit stream on future binary versions; pre-created so the privacy contract holds when upstream wires it in |
 
-The CA private key and the per-request audit log are the most sensitive files; both are created with `0o600` from the first byte (no umask-window TOCTOU) and `O_NOFOLLOW` so a same-uid attacker can't redirect them via a planted symlink. The pidfile and nonce file get the same treatment.
+The CA private key is the most sensitive file. It's created with `0o600` from the first byte (no umask-window TOCTOU) and `O_NOFOLLOW` so a same-uid attacker can't redirect it via a planted symlink. The pidfile, nonce file, daemon log, and audit log get the same treatment.
 
-### Audit log vs daemon log
+### Logging on iron-proxy v0.39
 
-Two separate files, two separate audiences:
+On the currently pinned binary version (**v0.39.0**) iron-proxy writes ALL output — daemon-level diagnostics AND per-request records — to **`~/.hermes/proxy/iron-proxy.log`**. v0.39's `config.Log` struct doesn't have a separate `audit_path` field, so we can't route per-request records to a dedicated stream there.
 
-- `audit.log` is **per-request**. Every CONNECT through the proxy is recorded as a structured JSON entry: timestamp, sandbox source, upstream host, request size, response status, secret-swap fired (yes/no), processing time. Forensics + compliance.
-- `iron-proxy.log` is **daemon-level**. Startup banner, bind errors, shutdown reason, transform errors. Operations + troubleshooting.
+We still pre-create `~/.hermes/proxy/audit.log` at `0o600` with `O_NOFOLLOW` because:
+
+1. It serves as a stable logrotate / fluent-bit / monitoring target — operators can wire downstream tooling to that path today, and when we bump the pinned version to one that supports `log.audit_path`, the records will start flowing without any operator-side reconfiguration.
+2. The 0o600-from-first-byte guarantee defends against the upstream-fix-day where v0.40+ creates the file under its default umask if it doesn't already exist.
+
+Until that version bump lands, treat `iron-proxy.log` as the source of truth for both audiences:
+
+- Daemon-level events (startup banner, bind errors, shutdown reason, transform errors). Operations + troubleshooting.
+- Per-request records (CONNECT to allowlisted upstream, secret swap fired, allowlist denial). Forensics + compliance.
 
 Both files are appended to across restarts. Rotate them with logrotate if you care about disk usage on long-lived hosts.
 
@@ -335,10 +345,10 @@ Both files are appended to across restarts. Rotate them with logrotate if you ca
 │ - HTTPS_PROXY│               │ swaps secret  │                │             │
 └──────────────┘               └──────────────┘                └─────────────┘
                                        │
-                                       │ structured per-request audit log
+                                       │ daemon + per-request log (combined on v0.39)
                                        ▼
-                              ~/.hermes/proxy/audit.log
-                              (daemon stdout/stderr at ~/.hermes/proxy/iron-proxy.log)
+                              ~/.hermes/proxy/iron-proxy.log
+                              (~/.hermes/proxy/audit.log reserved for v0.40+ split stream)
 ```
 
 1. Sandbox makes an HTTPS request, e.g. `POST https://openrouter.ai/v1/chat/completions` with `Authorization: Bearer hermes-proxy-openrouter-…` (the proxy token, not the real key).
@@ -347,9 +357,9 @@ Both files are appended to across restarts. Rotate them with logrotate if you ca
 4. iron-proxy mints a leaf cert signed by our CA for `openrouter.ai`, terminates the TLS connection, inspects the request.
 5. The `secrets` transform matches the proxy-token string in the `Authorization` header and substitutes the real `OPENROUTER_API_KEY` value, sourced from iron-proxy's own environment.
 6. Request is re-encrypted and forwarded to OpenRouter.
-7. Every request is logged as a structured JSON entry to `~/.hermes/proxy/audit.log`.  Daemon-level diagnostics (startup, bind errors, shutdown) go to `~/.hermes/proxy/iron-proxy.log` separately.
+7. The request is logged to `~/.hermes/proxy/iron-proxy.log` on v0.39. When the pinned binary version supports the split stream (v0.40+), per-request records will flow to `~/.hermes/proxy/audit.log` and daemon-level diagnostics will stay in `iron-proxy.log`. See [Logging on iron-proxy v0.39](#logging-on-iron-proxy-v039).
 
-A request to a non-allowlisted host (e.g. `https://attacker.example.com/leak?key=...`) is rejected with HTTP 403 before any bytes leave the host. The denial is recorded in `audit.log` with the upstream host and the source sandbox.
+A request to a non-allowlisted host (e.g. `https://attacker.example.com/leak?key=...`) is rejected with HTTP 403 before any bytes leave the host. The denial is recorded in `iron-proxy.log` with the upstream host and the source sandbox.
 
 ### CA distribution into the sandbox
 
@@ -421,13 +431,13 @@ If the nonce check fails, the code falls back to matching `argv[0]` basename aga
 - Agent dialing cloud metadata endpoints (`169.254.169.254`) — iron-proxy denies these by default via `upstream_deny_cidrs`, including the IPv4-mapped-v6 form `::ffff:169.254.169.254`.
 - DNS rebinding through an allowlisted hostname to a private IP — the deny CIDRs are checked at connect time, not at allowlist time.
 - Same-uid local processes reading the iron-proxy daemon's env to scrape secrets — only the env var names referenced by mappings are forwarded, not the full host env.
-- A LAN peer with a leaked sandbox proxy token spending your API quota — the proxy binds loopback + docker bridge only, not `0.0.0.0`.
+- A LAN peer with a leaked sandbox proxy token spending your API quota — the proxy binds loopback only, never `0.0.0.0` (containers reach it via `host.docker.internal -> host-gateway`).
 
 **What it does NOT protect against:**
 
 - A compromised host process. If the agent process itself is compromised, real keys in the host's `~/.hermes/.env` are exposed regardless. This is a defense-in-depth feature for *sandbox* compromise, not host compromise.
 - Sandbox processes that bypass `HTTPS_PROXY` by using a raw socket. The proxy can't intercept what doesn't route to it. Node.js is partially mitigated via `NODE_OPTIONS=--use-openssl-ca` (see caveat above).
-- Allowlisted-host data exfiltration. If `api.openai.com` is allowed, an agent could embed exfil data in a request body to that host. The audit log captures this but doesn't prevent it.
+- Allowlisted-host data exfiltration. If `api.openai.com` is allowed, an agent could embed exfil data in a request body to that host. The daemon log captures the request happened but doesn't prevent it.
 - Uncovered providers (Anthropic native, AWS Bedrock, Azure OpenAI, Gemini). Their env vars stay in the sandbox; if you enable them, those credentials bypass the proxy entirely. See [Uncovered providers](#uncovered-providers).
 - iron-proxy in-memory secret zeroisation. The Go binary holds swapped-in real credentials in process memory; a core-dump or `/proc/<pid>/mem` read from a same-uid attacker would expose them. Out of scope for this layer.
 
@@ -531,23 +541,19 @@ hermes egress start
 
 ### Inspecting per-request behavior
 
-The audit log is line-delimited JSON. Grep for a specific upstream:
+On the pinned binary version (**v0.39**) both daemon-level events and per-request records land in `~/.hermes/proxy/iron-proxy.log`. The format is line-delimited JSON. Grep for a specific upstream:
 
 ```bash
-grep '"host":"openrouter.ai"' ~/.hermes/proxy/audit.log | tail -20
+grep '"upstream":"openrouter.ai"' ~/.hermes/proxy/iron-proxy.log | tail -20
 ```
 
 Or watch in real-time:
 
 ```bash
-tail -f ~/.hermes/proxy/audit.log | jq
+tail -f ~/.hermes/proxy/iron-proxy.log | jq
 ```
 
-Daemon-level errors (bind failures, transform errors, shutdown reasons) go to `iron-proxy.log`, not `audit.log`:
-
-```bash
-tail -50 ~/.hermes/proxy/iron-proxy.log
-```
+When the pinned version moves to v0.40+ (which adds `log.audit_path`), per-request records will move to `~/.hermes/proxy/audit.log` and `iron-proxy.log` will hold only daemon-level events. The file at `audit.log` is pre-created today at `0o600` so any logrotate / monitoring tooling you wire to that path keeps working through the version bump without operator-side reconfig.
 
 ## Limitations (v1)
 
@@ -557,6 +563,7 @@ tail -50 ~/.hermes/proxy/iron-proxy.log
 - The CA is a 10-year self-signed cert on first generation. Rotation requires `openssl genrsa ...` by hand (or wait for a follow-up that adds `hermes egress rotate-ca`).
 - Token rotation does not auto-restart the daemon; after `--rotate-tokens` you must `hermes egress stop && hermes egress start` and then restart running sandboxes.
 - iron-proxy in-memory secret zeroisation is upstream-controlled. Same-uid attackers with `/proc/<pid>/mem` read access can read swapped-in secrets from the daemon's memory.
+- iron-proxy v0.39 only supports a **single bind per daemon** and combines daemon + per-request records into a single log stream. The integration is designed to upgrade cleanly: the moment upstream adds `proxy.http_listens` (plural) and `log.audit_path`, both wire in automatically without changing operator configs.
 
 ## See also
 
