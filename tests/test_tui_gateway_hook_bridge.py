@@ -35,9 +35,14 @@ def _reset_registry_and_module_cache():
     _reset_default_registry_for_tests()
     # Force the deferred-import cache in the TUI module to re-resolve.
     server._hook_registry = None
+    # Also reset the forwarder-start sentinel so each test's first emit
+    # re-evaluates "is a dashboard reachable?" against the fixture's
+    # state instead of remembering a previous test's outcome.
+    server._forwarder_started = False
     yield
     _reset_default_registry_for_tests()
     server._hook_registry = None
+    server._forwarder_started = False
 
 
 class _StubTransport:

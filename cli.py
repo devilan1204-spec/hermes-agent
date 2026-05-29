@@ -12515,6 +12515,22 @@ class HermesCLI:
 
     def run(self):
         """Run the interactive CLI loop with persistent input at bottom."""
+        # Cross-process hook delivery: start the forwarder if a
+        # dashboard is reachable.  No-op when no dashboard is running
+        # or when ``HERMES_HOOK_FORWARDER=0`` is set.  Currently the
+        # CLI process emits no hooks directly (only the gateway and
+        # TUI do today), but wiring here future-proofs CLI-spawned
+        # agent runs that may emit hooks via tools.  See
+        # gateway/hook_forwarder.py + DESIGN-cross-process-hooks.md.
+        try:
+            from gateway import hook_forwarder
+            from gateway.hooks import get_default_registry
+            hook_forwarder.start_if_dashboard_available(
+                get_default_registry(), src="cli"
+            )
+        except Exception:
+            pass
+
         # Detect light/dark terminal mode now (before pt grabs the tty).
         # Caches the result so subsequent _hex_to_ansi / style calls
         # don't risk re-querying mid-render.

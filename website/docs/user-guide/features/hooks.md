@@ -140,7 +140,41 @@ registry.emit_sync("tui:tool.start", {"session_id": "s1", "payload": {...}})
 
 ### Per-process registries
 
-Each Hermes process (gateway, TUI) has its **own** `HookRegistry`. Hooks dropped into `~/.hermes/hooks/` are discovered independently in each process. A handler registered programmatically in the gateway's registry is **not** visible to the TUI's registry and vice-versa — if you want a single subscriber to observe both surfaces, drop a `HOOK.yaml` so each process picks it up on startup.
+Each Hermes process (gateway, TUI, dashboard, batch-runner, CLI) has its **own** `HookRegistry`. Hooks dropped into `~/.hermes/hooks/` are discovered independently in each process. A handler registered programmatically in the gateway's registry is **not** visible to the TUI's registry and vice-versa.
+
+For programmatic handlers (especially dashboard plugins) that want to observe events from other processes, Hermes ships a built-in **cross-process forwarder** that bridges the gateway/TUI/CLI/batch-runner processes to the dashboard process. See "Cross-process delivery" below.
+
+For file-system hooks (`HOOK.yaml` + `handler.py`), the simplest pattern is still: drop the hook directory, every process picks it up on startup. With cross-process delivery enabled, this means a file-system hook subscribed to e.g. `agent:end` will fire **twice** for each event — once in the gateway process (where the event originates) and once in the dashboard process (where it's republished by the forwarder). Filter on `context.get("_forwarded")` if you only want one or the other.
+
+### Cross-process delivery
+
+In a typical `hermes dashboard` + `hermes start` deployment, the dashboard and the gateway are separate processes. Events fired in the gateway (`agent:*`, `session:*`, `command:*`) and the TUI sidecar (`tui:*`) need to reach dashboard plugins (e.g. the orb visualization) that subscribe via `get_default_registry().register(...)` in the dashboard process.
+
+Hermes handles this automatically. The dashboard writes a discovery file at `~/.hermes/dashboard.json` on startup containing its bound URL and a freshly-generated bearer token (0600 mode, owner-readable only). Non-dashboard processes (gateway, TUI, CLI, batch-runner) read this file on startup, register a built-in forwarder for the canonical namespaces (`tui:*`, `agent:*`, `session:*`, `command:*`, `gateway:*`), and POST every fired event to the dashboard's `POST /api/hooks/ingest` endpoint. The dashboard republishes each forwarded event on its own default registry via `emit_sync`, with `context["_forwarded"] = True` and `context["_forwarded_from"] = "<src>"` added so:
+
+1. Source-side forwarders skip the event if it ever round-trips back (loop prevention).
+2. Handlers can filter on `_forwarded` if they want to dedupe between the source-process firing and the dashboard-republish.
+
+**Behavior:**
+
+- **Zero-config** when both processes are running. No configuration needed; the discovery file appears and disappears with the dashboard.
+- **Bind-address independent.** The forwarder works regardless of whether the dashboard binds loopback (`127.0.0.1`) or a public interface (`--insecure`). The bearer token in `dashboard.json` is the security boundary, not the bind address.
+- **No-op when no dashboard is running.** The forwarder doesn't register handlers; events fire in their source process and stay there.
+- **Best-effort.** A bounded queue (1024 frames per source process) drops oldest on overflow. POSTs use a 2-second timeout. Recency beats history when the dashboard is slow.
+- **Non-blocking.** The forwarder's handler enqueues onto a queue and returns immediately. A daemon thread does the HTTP POSTs. The hot publisher path is never blocked on network I/O.
+
+**Disabling:** set `HERMES_HOOK_FORWARDER=0` (or `false`/`no`/`off`) in the source process's environment. Useful for paranoid security postures or for debugging hook double-fires.
+
+**Failure modes:**
+
+| Scenario | Behavior |
+|---|---|
+| Dashboard not running | `dashboard.json` absent; forwarder no-op until next probe (30s). |
+| Dashboard restarts (new token) | Forwarder's next probe re-reads the file and picks up the new token. |
+| Dashboard up but slow | Forwarder queue overflows and drops oldest. |
+| Forwarder POST timeout | Logged once per minute, not per failure. Queue drains as POSTs return. |
+| `--insecure` mode | Forwarder works identically to loopback mode. Plaintext-over-LAN; same exposure as the rest of `--insecure`. |
+
 
 ### Examples
 

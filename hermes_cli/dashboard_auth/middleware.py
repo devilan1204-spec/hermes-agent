@@ -41,6 +41,12 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/ds-assets/",
     "/fonts/",
     "/fonts-terminal/",
+    # Cross-process hook delivery — bearer-token authenticated independently
+    # of the OAuth gate (see hermes_cli/hook_ingest.py + DESIGN-cross-
+    # process-hooks.md). Forwarders running outside any logged-in browser
+    # session need to reach these endpoints; the bearer token is the
+    # security boundary.
+    "/api/hooks/",
 )
 
 

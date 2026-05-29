@@ -120,6 +120,12 @@ _PUBLIC_API_PATHS: frozenset = frozenset({
     "/api/model/info",
     "/api/dashboard/themes",
     "/api/dashboard/plugins",
+    # Cross-process hook delivery — these have their own auth model
+    # (bearer token from dashboard.json, generated fresh each dashboard
+    # startup). The session-token check below is bypassed; auth is
+    # handled inside the route handlers themselves.
+    "/api/hooks/health",
+    "/api/hooks/ingest",
 })
 
 
@@ -4815,6 +4821,13 @@ def _mount_plugin_api_routes():
 # Mount plugin API routes before the SPA catch-all.
 _mount_plugin_api_routes()
 
+# Mount the cross-process hook ingest router (POST /api/hooks/ingest +
+# GET /api/hooks/health).  These endpoints have their own bearer-token
+# auth (independent of _SESSION_TOKEN / the OAuth gate) — see
+# hermes_cli/hook_ingest.py and DESIGN-cross-process-hooks.md.
+from hermes_cli.hook_ingest import build_hook_router as _build_hook_router  # noqa: E402
+app.include_router(_build_hook_router(), prefix="/api/hooks")
+
 # Mount the dashboard auth routes (/login, /auth/*, /api/auth/*) before the
 # SPA catch-all so /{full_path:path} doesn't swallow them.  These are
 # always mounted — the gate middleware decides whether to enforce auth,
@@ -4909,6 +4922,29 @@ def start_server(
     # PTY child uses to publish events to the dashboard sidebar.
     app.state.bound_host = host
     app.state.bound_port = port
+
+    # Cross-process hook delivery: drop the discovery file so source
+    # processes (gateway, TUI, subagents) can find this dashboard and
+    # authenticate POSTs to /api/hooks/ingest.  The file is removed via
+    # atexit so a clean shutdown stops orphan forwarders from trying to
+    # POST to a port that's now closed.
+    import atexit
+    from hermes_cli.hook_ingest import (
+        remove_dashboard_discovery_file,
+        write_dashboard_discovery_file,
+    )
+    try:
+        write_dashboard_discovery_file(host, port)
+        atexit.register(remove_dashboard_discovery_file)
+    except OSError as exc:
+        # Non-fatal — the dashboard still works without cross-process
+        # hook delivery.  Warn so the operator knows the orb (or any
+        # other event-driven plugin) won't see gateway/TUI events.
+        _log.warning(
+            "Failed to write hook discovery file: %s. Cross-process hook "
+            "delivery to dashboard plugins will be unavailable.",
+            exc,
+        )
 
     if open_browser:
         import webbrowser

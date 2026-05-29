@@ -1218,6 +1218,23 @@ def main(
         # List available distributions
         python batch_runner.py --list_distributions
     """
+    # Cross-process hook delivery: start the forwarder if a dashboard
+    # is reachable.  No-op when no dashboard is running or when
+    # ``HERMES_HOOK_FORWARDER=0`` is set.  Currently the batch runner
+    # emits no hooks directly (only the gateway and TUI do today), but
+    # wiring here future-proofs batch-spawned agent runs that may emit
+    # hooks via tools.  Forwarder workers spawned by ``multiprocessing.Pool``
+    # below would each need their own; that's deferred to a follow-up.
+    # See gateway/hook_forwarder.py + DESIGN-cross-process-hooks.md.
+    try:
+        from gateway import hook_forwarder
+        from gateway.hooks import get_default_registry
+        hook_forwarder.start_if_dashboard_available(
+            get_default_registry(), src="batch"
+        )
+    except Exception:
+        pass
+
     # Handle list distributions
     if list_distributions:
         from toolset_distributions import print_distribution_info

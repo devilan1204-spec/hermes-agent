@@ -1868,6 +1868,17 @@ class GatewayRunner:
         # plugins (and any other component that uses ``get_default_registry()``)
         # share state with file-system-discovered hooks loaded into ``self.hooks``.
         install_as_default(self.hooks)
+        # Cross-process delivery: start the hook forwarder if a
+        # dashboard is reachable.  No-op when the dashboard isn't
+        # running, or when ``HERMES_HOOK_FORWARDER=0`` is set.  See
+        # gateway/hook_forwarder.py + DESIGN-cross-process-hooks.md.
+        try:
+            from gateway import hook_forwarder
+            hook_forwarder.start_if_dashboard_available(self.hooks, src="gateway")
+        except Exception as e:  # pragma: no cover — defensive
+            # Forwarder failure must never break gateway startup.  Log
+            # and move on; dashboard plugins just won't see gateway events.
+            print(f"[gateway] hook forwarder start failed: {e}", flush=True)
 
         # Per-chat voice reply mode: "off" | "voice_only" | "all"
         self._voice_mode: Dict[str, str] = self._load_voice_modes()

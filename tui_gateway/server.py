@@ -402,12 +402,26 @@ def _publish_tui_hook(event: str, sid: str, payload: dict | None) -> None:
 
     The import is deferred to first call to keep TUI cold-start cheap; the
     gateway hook module isn't otherwise needed in the TUI process.
+
+    On first call we also opportunistically start the cross-process hook
+    forwarder so dashboard plugins see TUI events.  No-op when no dashboard
+    is running.
     """
     try:
-        global _hook_registry  # noqa: PLW0603 — module-level cache by design
+        global _hook_registry, _forwarder_started  # noqa: PLW0603
         if _hook_registry is None:
             from gateway.hooks import get_default_registry  # local import
             _hook_registry = get_default_registry()
+            if not _forwarder_started:
+                _forwarder_started = True
+                try:
+                    from gateway import hook_forwarder
+                    hook_forwarder.start_if_dashboard_available(
+                        _hook_registry, src="tui"
+                    )
+                except Exception:
+                    # Forwarder failure must never break TUI dispatch.
+                    pass
         _hook_registry.emit_sync(  # type: ignore[union-attr]
             f"tui:{event}",
             {"session_id": sid, "payload": payload or {}},
@@ -420,6 +434,7 @@ def _publish_tui_hook(event: str, sid: str, payload: dict | None) -> None:
 # Lazily-resolved on first ``_emit`` call. Cached in module scope so the
 # steady-state cost of mirroring is a dict lookup, not an import.
 _hook_registry: "object | None" = None
+_forwarder_started: bool = False
 
 
 def _status_update(sid: str, kind: str, text: str | None = None):
