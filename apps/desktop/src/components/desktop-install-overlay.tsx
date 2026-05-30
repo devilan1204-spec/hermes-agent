@@ -46,6 +46,7 @@ interface StageRowProps {
   descriptor: DesktopBootstrapStageDescriptor
   result: DesktopBootstrapStageResult | undefined
   isCurrent: boolean
+  now: number
 }
 
 const STATE_LABEL: Record<DesktopBootstrapStageState, string> = {
@@ -77,8 +78,18 @@ function formatDuration(ms: number | null | undefined): string {
   return `${m}m ${rs}s`
 }
 
-function StageRow({ descriptor, result, isCurrent }: StageRowProps) {
+// Live elapsed for a running stage, as m:ss (or s for sub-minute).
+function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  return `${m}:${String(s - m * 60).padStart(2, '0')}`
+}
+
+function StageRow({ descriptor, result, isCurrent, now }: StageRowProps) {
   const state: DesktopBootstrapStageState = result?.state || 'pending'
+  const elapsed =
+    state === 'running' && typeof result?.startedAt === 'number' ? formatElapsed(now - result.startedAt) : ''
   const icon = useMemo(() => {
     switch (state) {
       case 'running':
@@ -119,7 +130,7 @@ function StageRow({ descriptor, result, isCurrent }: StageRowProps) {
             {formatStageName(descriptor.name)}
           </span>
           <span className="flex-shrink-0 text-xs tabular-nums text-muted-foreground">
-            {state === 'running' ? STATE_LABEL[state] : null}
+            {state === 'running' ? (elapsed ? `${STATE_LABEL[state]} · ${elapsed}` : STATE_LABEL[state]) : null}
             {state === 'succeeded' || state === 'skipped' ? formatDuration(result?.durationMs) : null}
             {state === 'failed' ? STATE_LABEL[state] : null}
           </span>
@@ -147,7 +158,7 @@ function applyEvent(state: DesktopBootstrapState, ev: DesktopBootstrapEvent): De
   if (ev.type === 'manifest') {
     const stages: Record<string, DesktopBootstrapStageResult> = {}
     for (const stage of ev.stages) {
-      stages[stage.name] = { state: 'pending', durationMs: null, json: null, error: null }
+      stages[stage.name] = { state: 'pending', durationMs: null, startedAt: null, json: null, error: null }
     }
     return {
       ...state,
@@ -159,6 +170,7 @@ function applyEvent(state: DesktopBootstrapState, ev: DesktopBootstrapEvent): De
     }
   }
   if (ev.type === 'stage') {
+    const prev = state.stages[ev.name]
     return {
       ...state,
       stages: {
@@ -166,6 +178,9 @@ function applyEvent(state: DesktopBootstrapState, ev: DesktopBootstrapEvent): De
         [ev.name]: {
           state: ev.state,
           durationMs: ev.durationMs ?? null,
+          // Stamp the start time on the running transition so the UI can show
+          // a live elapsed timer; preserve it across repeated running events.
+          startedAt: ev.state === 'running' ? prev?.startedAt ?? Date.now() : prev?.startedAt ?? null,
           json: ev.json ?? null,
           error: ev.error ?? null
         }
@@ -202,7 +217,16 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   const [state, setState] = useState<DesktopBootstrapState>(EMPTY_STATE)
   const [logOpen, setLogOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
   const logEndRef = useRef<HTMLDivElement | null>(null)
+
+  // Tick once a second while a bootstrap is in flight so running steps show a
+  // live elapsed timer. Stops when nothing is active to avoid idle renders.
+  useEffect(() => {
+    if (!state.active) return
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [state.active])
 
   // Subscribe to bootstrap events + load initial snapshot
   useEffect(() => {
@@ -325,6 +349,8 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   const totalCount = stages.length
   const failed = Boolean(state.error)
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+  const currentStartedAt = currentStage ? state.stages[currentStage]?.startedAt : null
+  const currentElapsed = typeof currentStartedAt === 'number' ? formatElapsed(now - currentStartedAt) : ''
 
   return (
     <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-background/90 backdrop-blur-md p-4">
@@ -350,6 +376,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                 <span>
                   {completedCount} of {totalCount} steps complete
                   {currentStage && ` -- now: ${formatStageName(currentStage)}`}
+                  {currentElapsed && ` (${currentElapsed})`}
                 </span>
                 <span className="tabular-nums">{progressPct}%</span>
               </div>
@@ -390,6 +417,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                   descriptor={stage}
                   result={state.stages[stage.name]}
                   isCurrent={stage.name === currentStage}
+                  now={now}
                 />
               ))}
             </ol>

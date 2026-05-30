@@ -201,6 +201,7 @@ export type DesktopBootstrapStageState =
 export interface DesktopBootstrapStageResult {
   state: DesktopBootstrapStageState
   durationMs: number | null
+  startedAt: number | null
   json: { ok: boolean; skipped?: boolean; reason?: string | null; stage: string } | null
   error: string | null
 }
