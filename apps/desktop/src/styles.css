@@ -962,6 +962,11 @@ canvas {
   width: 0.6em;
   height: 1em;
   margin-left: 0.18em;
+  /* Net-zero the caret's inline advance so it paints at the text end without
+     consuming layout width. Otherwise its ~0.78em footprint can wrap the last
+     line mid-stream, and removing the caret on completion un-wraps it — the
+     visible "layout shift after the cursor goes away". */
+  margin-right: calc(-0.6em - 0.18em);
   vertical-align: middle;
   border-radius: 0.09375rem;
   background: repeating-conic-gradient(currentColor 0% 25%, transparent 0% 50%) 0 0 / 0.125rem 0.125rem;
