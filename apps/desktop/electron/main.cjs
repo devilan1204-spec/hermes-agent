@@ -926,6 +926,35 @@ function getVenvPython(venvRoot) {
   return path.join(venvRoot, IS_WINDOWS ? path.join('Scripts', 'python.exe') : path.join('bin', 'python'))
 }
 
+// resolveGitBinary — locate git.exe on Windows. A fresh installer-driven
+// install only has PortableGit under %LOCALAPPDATA%\hermes\git (never on
+// PATH), so a bare spawn('git') ENOENTs and self-update checks fail with
+// "Couldn't check for updates". Mirror findGitBash: PortableGit first, then
+// standard Git-for-Windows locations, then PATH. Cached after first probe.
+let _gitBinaryCache = null
+function resolveGitBinary() {
+  if (_gitBinaryCache) return _gitBinaryCache
+  if (!IS_WINDOWS) {
+    _gitBinaryCache = findOnPath('git') || 'git'
+    return _gitBinaryCache
+  }
+
+  const localAppData = process.env.LOCALAPPDATA || ''
+  const candidates = []
+  if (localAppData) {
+    candidates.push(path.join(localAppData, 'hermes', 'git', 'cmd', 'git.exe'))
+    candidates.push(path.join(localAppData, 'hermes', 'git', 'bin', 'git.exe'))
+  }
+  candidates.push(path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Git', 'cmd', 'git.exe'))
+  candidates.push(path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'))
+  if (localAppData) {
+    candidates.push(path.join(localAppData, 'Programs', 'Git', 'cmd', 'git.exe'))
+  }
+
+  _gitBinaryCache = candidates.find(fileExists) || findOnPath('git') || 'git'
+  return _gitBinaryCache
+}
+
 function recentHermesLog() {
   return hermesLog.slice(-20).join('\n')
 }
@@ -962,7 +991,7 @@ function resolveUpdateRoot() {
 
 function runGit(args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn('git', IS_WINDOWS ? ['-c', 'windows.appendAtomically=false', ...args] : args, {
+    const child = spawn(resolveGitBinary(), IS_WINDOWS ? ['-c', 'windows.appendAtomically=false', ...args] : args, {
       cwd: options.cwd,
       env: { ...process.env, ...(options.env || {}), GIT_TERMINAL_PROMPT: '0' },
       stdio: ['ignore', 'pipe', 'pipe']
