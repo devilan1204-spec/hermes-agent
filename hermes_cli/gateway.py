@@ -216,9 +216,7 @@ def _request_gateway_self_restart(pid: int) -> bool:
     if not _is_pid_ancestor_of_current_process(pid):
         return False
     try:
-        os.kill(
-            pid, signal.SIGUSR1
-        )  # windows-footgun: ok — POSIX signal, guarded by hasattr(signal, 'SIGUSR1') above
+        os.kill(pid, signal.SIGUSR1)  # windows-footgun: ok — POSIX signal, guarded by hasattr(signal, 'SIGUSR1') above
     except (ProcessLookupError, PermissionError, OSError):
         return False
     return True
@@ -254,9 +252,7 @@ def _graceful_restart_via_sigusr1(pid: int, drain_timeout: float) -> bool:
     if pid <= 0:
         return False
     try:
-        os.kill(
-            pid, signal.SIGUSR1
-        )  # windows-footgun: ok — POSIX signal, guarded by hasattr(signal, 'SIGUSR1') above
+        os.kill(pid, signal.SIGUSR1)  # windows-footgun: ok — POSIX signal, guarded by hasattr(signal, 'SIGUSR1') above
     except ProcessLookupError:
         # Already gone — nothing to drain.
         return True
@@ -1477,17 +1473,13 @@ class SystemScopeRequiresRootError(RuntimeError):
 
 def _user_dbus_socket_path() -> Path:
     """Return the expected per-user D-Bus socket path (regardless of existence)."""
-    xdg = (
-        os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    )  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
+    xdg = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
     return Path(xdg) / "bus"
 
 
 def _user_systemd_private_socket_path() -> Path:
     """Return the per-user systemd private socket path (regardless of existence)."""
-    xdg = (
-        os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    )  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
+    xdg = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
     return Path(xdg) / "systemd" / "private"
 
 
@@ -1513,9 +1505,7 @@ def _ensure_user_systemd_env() -> None:
     We detect the standard socket path and set the vars so all subsequent
     subprocess calls inherit them.
     """
-    uid = (
-        os.getuid()
-    )  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
+    uid = os.getuid()  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
     if "XDG_RUNTIME_DIR" not in os.environ:
         runtime_dir = f"/run/user/{uid}"
         if Path(runtime_dir).exists():
@@ -1855,9 +1845,7 @@ def remove_legacy_hermes_units(
 
     # System-scope removal (needs root)
     if system_units:
-        if (
-            os.geteuid() != 0
-        ):  # windows-footgun: ok — Linux systemd removal path, guarded by `if system == "Linux"` / systemd-only branch
+        if os.geteuid() != 0:  # windows-footgun: ok — Linux systemd removal path, guarded by `if system == "Linux"` / systemd-only branch
             print()
             print_warning("System-scope legacy units require root to remove.")
             print_info("  Re-run with: sudo hermes gateway migrate-legacy")
@@ -1912,9 +1900,7 @@ def print_systemd_scope_conflict_warning() -> None:
 
 
 def _require_root_for_system_service(action: str) -> None:
-    if (
-        os.geteuid() != 0
-    ):  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
+    if os.geteuid() != 0:  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
         raise SystemScopeRequiresRootError(
             f"System gateway {action} requires root. Re-run with sudo.",
             action,
@@ -1994,9 +1980,7 @@ def install_linux_gateway_from_setup(force: bool = False, enable_on_startup: boo
 
     if scope == "system":
         run_as_user = _default_system_service_user()
-        if (
-            os.geteuid() != 0
-        ):  # windows-footgun: ok — Linux systemd install wizard, never invoked on Windows
+        if os.geteuid() != 0:  # windows-footgun: ok — Linux systemd install wizard, never invoked on Windows
             print_warning(
                 "  System service install requires sudo, so Hermes can't create it from this user session."
             )
