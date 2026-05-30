@@ -2049,9 +2049,7 @@ def get_systemd_linger_status() -> tuple[bool | None, str]:
         try:
             import pwd
 
-            username = pwd.getpwuid(
-                os.getuid()
-            ).pw_name  # windows-footgun: ok — POSIX loginctl helper, never invoked on Windows
+            username = pwd.getpwuid(os.getuid()).pw_name  # windows-footgun: ok — POSIX loginctl helper, never invoked on Windows
         except Exception:
             return None, "could not determine current user"
 
@@ -2102,9 +2100,7 @@ def _launchd_user_home() -> Path:
     """
     import pwd
 
-    return Path(
-        pwd.getpwuid(os.getuid()).pw_dir
-    )  # windows-footgun: ok — POSIX launchd (macOS) helper, never invoked on Windows
+    return Path(pwd.getpwuid(os.getuid()).pw_dir)  # windows-footgun: ok — POSIX launchd (macOS) helper, never invoked on Windows
 
 
 def get_launchd_plist_path() -> Path:
@@ -2601,9 +2597,7 @@ def _system_scope_wizard_would_need_root(system: bool = False) -> bool:
     ``SystemScopeRequiresRootError`` propagate out and leave the user
     staring at a bare shell.
     """
-    if (
-        os.geteuid() == 0
-    ):  # windows-footgun: ok — systemd scope wizard decision, never invoked on Windows
+    if os.geteuid() == 0:  # windows-footgun: ok — systemd scope wizard decision, never invoked on Windows
         return False
     return _select_systemd_scope(system=system)
 
