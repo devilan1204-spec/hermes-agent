@@ -1212,4 +1212,39 @@ describe('createGatewayEventHandler', () => {
     expect(ctx.system.sys).not.toHaveBeenCalledWith(expect.stringContaining('timed out'))
     expect(getOverlayState().clarify).toMatchObject({ requestId: 'rid-live' })
   })
+
+  it('surfaces the timeout system line when a matching expiry clears the overlay', () => {
+    // Positive counterpart to the no-op test above: a prompt.expire that
+    // actually clears a mounted overlay MUST surface the user-visible
+    // "prompt timed out — <kind> request cancelled" line, naming the kind.
+    // Without this, a regression that dropped the sys(...) call would still
+    // pass the negative (stale-expire) test.
+    const cases: Array<{ kind: string; request: any; rid: string }> = [
+      {
+        kind: 'clarify',
+        rid: 'rid-line-clarify',
+        request: { payload: { choices: ['a'], question: 'q?', request_id: 'rid-line-clarify' }, type: 'clarify.request' }
+      },
+      { kind: 'sudo', rid: 'rid-line-sudo', request: { payload: { request_id: 'rid-line-sudo' }, type: 'sudo.request' } },
+      {
+        kind: 'secret',
+        rid: 'rid-line-secret',
+        request: {
+          payload: { env_var: 'OPENAI_API_KEY', prompt: 'enter key', request_id: 'rid-line-secret' },
+          type: 'secret.request'
+        }
+      }
+    ]
+
+    for (const { kind, rid, request } of cases) {
+      const appended: Msg[] = []
+      const ctx = buildCtx(appended)
+      const onEvent = createGatewayEventHandler(ctx)
+
+      onEvent(request as any)
+      onEvent({ payload: { kind, request_id: rid }, type: 'prompt.expire' } as any)
+
+      expect(ctx.system.sys).toHaveBeenCalledWith(`prompt timed out — ${kind} request cancelled`)
+    }
+  })
 })
