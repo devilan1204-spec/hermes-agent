@@ -67,6 +67,39 @@ export const wrappedLines = (text: string, width: number, maxLines: number = MAX
   return n
 }
 
+// Strip ANSI from only as much of the raw text as wrappedLines could possibly
+// need to saturate its row cap, so a multi-megabyte ANSI-heavy message doesn't
+// re-introduce the O(text) cost the wrappedLines byte-budget exists to avoid.
+//
+// wrappedLines stops counting once it reaches `maxLines` rows; the most
+// VISIBLE characters it can consume before that is `maxLines * width + maxLines`
+// (one cell per column per row, plus a per-line slack). ANSI escape sequences
+// add non-visible bytes interspersed with that visible content, so we slice a
+// multiple of the visible budget before stripping — the ANSI_OVERHEAD factor is
+// the assumed worst-case ratio of total bytes to visible bytes. The densest
+// realistic SGR (per-word truecolor `\x1b[38;2;r;g;bm…\x1b[39m`, ~20 bytes
+// wrapping a short token) measures ~5.5× overhead; 8× leaves headroom so the
+// bounded estimate still reaches the row cap on such input. Even if a
+// pathological message exceeds it, the only consequence is the estimate
+// clipping below the true height past row 800 — already the documented
+// MAX_ESTIMATE_LINES behavior, and post-mount Yoga measurement converges
+// anyway. Slicing BEFORE stripping is safe because stripAnsi only removes
+// characters, so the stripped slice still contains at least as many visible
+// chars as wrappedLines needs.
+const ANSI_OVERHEAD = 8
+
+const strippedForEstimate = (raw: string, width: number) => {
+  if (!hasAnsi(raw)) {
+    return raw
+  }
+
+  const w = Math.max(1, width)
+  const visibleBudget = MAX_ESTIMATE_LINES * w + MAX_ESTIMATE_LINES
+  const sliceBudget = visibleBudget * ANSI_OVERHEAD
+
+  return stripAnsi(raw.length > sliceBudget ? raw.slice(0, sliceBudget) : raw)
+}
+
 export const estimatedMsgHeight = (
   msg: Msg,
   cols: number,
@@ -113,8 +146,10 @@ export const estimatedMsgHeight = (
   // shows up as blank gaps and — once the wrong rows mount into the
   // viewport — overlapping/jumbled text. Strip first so the estimate
   // tracks what actually renders. (/compress masks the bug by replacing
-  // ANSI-laden history with clean summary text.)
-  const text = hasAnsi(msg.text) ? stripAnsi(msg.text) : msg.text
+  // ANSI-laden history with clean summary text.) strippedForEstimate bounds
+  // the strip to the wrap budget so huge ANSI messages stay O(budget), not
+  // O(text) — see its comment.
+  const text = strippedForEstimate(msg.text, bodyWidth)
   let h = wrappedLines(text || ' ', bodyWidth)
 
   if (!compact && msg.role === 'assistant' && !hasAnsi(msg.text)) {
