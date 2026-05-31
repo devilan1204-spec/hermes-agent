@@ -2,6 +2,7 @@ import { TERMUX_TUI_MODE } from '../config/env.js'
 import type { Msg } from '../types.js'
 
 import { transcriptBodyWidth } from './inputMetrics.js'
+import { hasAnsi, stripAnsi } from './text.js'
 
 const hashText = (text: string) => {
   let h = 5381
@@ -102,7 +103,18 @@ export const estimatedMsgHeight = (
   }
 
   const bodyWidth = transcriptBodyWidth(cols, msg.role, userPrompt, TERMUX_TUI_MODE)
-  const text = msg.text
+  // Parity with MessageLine: any message carrying ANSI is rendered through
+  // <Ansi>/sanitizeAnsiForRender (role !== 'user') or laid out by the
+  // terminal on its VISIBLE width — the escape bytes never occupy columns.
+  // Measuring the raw string makes wrappedLines count escape bytes as
+  // width, inflating the estimate ~3-6x for SGR-heavy history (cli-highlight
+  // tool output, Rich markup). On long resumed sessions that drift desyncs
+  // the virtual list's offsets from the post-mount Yoga heights, which
+  // shows up as blank gaps and — once the wrong rows mount into the
+  // viewport — overlapping/jumbled text. Strip first so the estimate
+  // tracks what actually renders. (/compress masks the bug by replacing
+  // ANSI-laden history with clean summary text.)
+  const text = hasAnsi(msg.text) ? stripAnsi(msg.text) : msg.text
   let h = wrappedLines(text || ' ', bodyWidth)
 
   if (!compact && msg.role === 'assistant') {
