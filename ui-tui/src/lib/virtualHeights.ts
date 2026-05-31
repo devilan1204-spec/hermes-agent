@@ -117,11 +117,21 @@ export const estimatedMsgHeight = (
   const text = hasAnsi(msg.text) ? stripAnsi(msg.text) : msg.text
   let h = wrappedLines(text || ' ', bodyWidth)
 
-  if (!compact && msg.role === 'assistant') {
-    // Paragraph gaps add up to 6 extra rows of breathing room. Slice
-    // first so the regex never walks more than the first ~16k chars of
-    // a giant assistant message — post-mount Yoga measurement converges
-    // to the real height regardless of how the estimate undercounts.
+  if (!compact && msg.role === 'assistant' && !hasAnsi(msg.text)) {
+    // Paragraph gaps add up to 6 extra rows of breathing room — but ONLY
+    // when the message renders through <Md> (markdown), which inserts blank
+    // rows between blocks. ANSI-bearing assistant messages render through
+    // <Ansi> instead (see messageLine.tsx role!=='user' && hasAnsi branch),
+    // which emits the text's own newlines 1:1 with no extra breathing room.
+    // wrappedLines already counted those literal blank lines, so adding the
+    // gap bonus here double-counts and overshoots ~6 rows on colored code
+    // echoes — re-introducing virtual-list drift on resumed sessions full
+    // of highlighted tool output. Gate the bonus on !hasAnsi to match what
+    // actually renders.
+    //
+    // Slice first so the regex never walks more than the first ~16k chars of
+    // a giant assistant message — post-mount Yoga measurement converges to
+    // the real height regardless of how the estimate undercounts.
     const scan = text.length > 16_000 ? text.slice(0, 16_000) : text
     h += Math.min(6, (scan.match(/\n\s*\n/g) ?? []).length)
   }
