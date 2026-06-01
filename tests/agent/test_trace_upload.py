@@ -157,6 +157,7 @@ def test_upload_empty_transcript(monkeypatch):
 
 def test_upload_happy_path_mocked(monkeypatch):
     """Full upload path with a mocked HfApi — verifies repo id / path / content."""
+    pytest.importorskip("huggingface_hub")  # optional dep; runtime degrades gracefully
     monkeypatch.setenv("HF_TOKEN", "hf_test")
     messages = _sample_messages()
 
@@ -193,6 +194,7 @@ def test_upload_happy_path_mocked(monkeypatch):
 
 
 def test_upload_public_flag(monkeypatch):
+    pytest.importorskip("huggingface_hub")  # optional dep
     monkeypatch.setenv("HF_TOKEN", "hf_test")
     fake_api = MagicMock()
     fake_api.whoami.return_value = {"name": "bob"}
@@ -205,6 +207,7 @@ def test_upload_public_flag(monkeypatch):
 
 
 def test_upload_whoami_failure(monkeypatch):
+    pytest.importorskip("huggingface_hub")  # optional dep
     monkeypatch.setenv("HF_TOKEN", "hf_bad")
     fake_api = MagicMock()
     fake_api.whoami.side_effect = Exception("401 unauthorized")
@@ -217,6 +220,9 @@ def test_upload_whoami_failure(monkeypatch):
 
 def test_do_upload_missing_huggingface_hub(monkeypatch):
     """If huggingface_hub import fails, return a clear install hint."""
+    # Disable lazy-install so the import path deterministically fails here
+    # instead of attempting a real pip install in CI.
+    monkeypatch.setenv("HERMES_DISABLE_LAZY_INSTALLS", "1")
     import builtins
     real_import = builtins.__import__
 
