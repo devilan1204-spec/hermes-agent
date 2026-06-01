@@ -74,6 +74,35 @@ class TestMcpEndpoints:
         r = self.client.post("/api/mcp/servers", json={"name": "bad"})
         assert r.status_code == 400
 
+    def test_enable_disable_toggle(self):
+        self.client.post("/api/mcp/servers", json={"name": "tog", "url": "u"})
+        r = self.client.put("/api/mcp/servers/tog/enabled", json={"enabled": False})
+        assert r.status_code == 200 and r.json()["enabled"] is False
+        srv = [
+            s for s in self.client.get("/api/mcp/servers").json()["servers"]
+            if s["name"] == "tog"
+        ][0]
+        assert srv["enabled"] is False
+        # Toggling a missing server is a 404.
+        assert self.client.put(
+            "/api/mcp/servers/nope/enabled", json={"enabled": True}
+        ).status_code == 404
+
+    def test_catalog_lists_entries(self):
+        r = self.client.get("/api/mcp/catalog")
+        assert r.status_code == 200
+        body = r.json()
+        assert "entries" in body and "diagnostics" in body
+        # The shipped optional-mcps/ catalog has at least one entry; each must
+        # carry the install/enabled status fields the UI relies on.
+        for e in body["entries"]:
+            assert {"name", "transport", "installed", "enabled", "needs_install"} <= set(e)
+
+    def test_catalog_install_unknown_404(self):
+        r = self.client.post("/api/mcp/catalog/install", json={"name": "no-such-mcp-xyz"})
+        assert r.status_code == 404
+
+
 
 class TestCredentialPoolEndpoints:
     @pytest.fixture(autouse=True)
@@ -190,6 +219,40 @@ class TestOpsEndpoints:
         save_config(cfg)
         data = self.client.get("/api/ops/hooks").json()
         assert data["hooks"][0]["command"] == "/bin/echo hi"
+        assert "valid_events" in data and len(data["valid_events"]) >= 1
+
+    def test_hook_create_and_delete(self):
+        # Create with consent approval.
+        r = self.client.post(
+            "/api/ops/hooks",
+            json={
+                "event": "pre_tool_call",
+                "command": "/bin/echo created",
+                "matcher": "terminal",
+                "timeout": 7,
+                "approve": True,
+            },
+        )
+        assert r.status_code == 200 and r.json()["approved"] is True
+
+        hooks = self.client.get("/api/ops/hooks").json()["hooks"]
+        created = [h for h in hooks if h["command"] == "/bin/echo created"]
+        assert created and created[0]["allowed"] is True
+
+        # Unknown event rejected.
+        assert self.client.post(
+            "/api/ops/hooks", json={"event": "no_such_event", "command": "/x"}
+        ).status_code == 400
+
+        # Delete it.
+        r = self.client.request(
+            "DELETE",
+            "/api/ops/hooks",
+            json={"event": "pre_tool_call", "command": "/bin/echo created"},
+        )
+        assert r.status_code == 200
+        hooks2 = self.client.get("/api/ops/hooks").json()["hooks"]
+        assert not [h for h in hooks2 if h["command"] == "/bin/echo created"]
 
     def test_checkpoints_list_empty(self):
         data = self.client.get("/api/ops/checkpoints").json()
@@ -198,6 +261,51 @@ class TestOpsEndpoints:
     def test_import_missing_archive_404(self):
         r = self.client.post("/api/ops/import", json={"archive": "/no/such.zip"})
         assert r.status_code == 404
+
+
+class TestSystemStatsEndpoint:
+    @pytest.fixture(autouse=True)
+    def _setup(self, _isolate_hermes_home):
+        self.client, _ = _client()
+
+    def test_stats_shape(self):
+        r = self.client.get("/api/system/stats")
+        assert r.status_code == 200
+        s = r.json()
+        # Identity fields always present (stdlib-sourced).
+        for key in ("os", "arch", "hostname", "python_version", "hermes_version"):
+            assert key in s and s[key]
+        # psutil flag tells the UI whether the richer metrics are populated.
+        assert "psutil" in s
+
+
+class TestWebhookToggleEndpoint:
+    @pytest.fixture(autouse=True)
+    def _setup(self, _isolate_hermes_home):
+        self.client, _ = _client()
+        # Enable the webhook platform so a subscription can be created.
+        from hermes_cli.config import load_config, save_config
+
+        cfg = load_config()
+        cfg.setdefault("platforms", {})["webhook"] = {
+            "enabled": True,
+            "extra": {"host": "0.0.0.0", "port": 8644},
+        }
+        save_config(cfg)
+
+    def test_create_toggle_disable(self):
+        r = self.client.post(
+            "/api/webhooks", json={"name": "hook1", "deliver": "log", "events": ["push"]}
+        )
+        assert r.status_code == 200 and r.json()["enabled"] is True
+        r = self.client.put("/api/webhooks/hook1/enabled", json={"enabled": False})
+        assert r.status_code == 200 and r.json()["enabled"] is False
+        subs = self.client.get("/api/webhooks").json()["subscriptions"]
+        assert subs[0]["enabled"] is False
+        assert self.client.put(
+            "/api/webhooks/nope/enabled", json={"enabled": True}
+        ).status_code == 404
+
 
 
 class TestAdminEndpointsAuthGate:
