@@ -3211,18 +3211,22 @@ def _run_blank_slate_setup(config: dict, hermes_home, is_existing: bool):
     """Blank Slate setup — start with everything off except the bare minimum.
 
     Forces only the essentials to run an agent (provider + model, the file and
-    terminal toolsets), turns every other tool/skill/plugin/MCP/config feature
-    OFF, then walks the user through opting each capability back in. The
-    complete-package, maximally-minimal install: a long but thorough setup where
-    nothing is enabled that the user did not explicitly choose.
+    terminal toolsets) and turns every other tool/skill/plugin/MCP/config
+    feature OFF. After applying that minimal baseline, the user chooses one of
+    two paths:
+
+      1. Start with everything disabled — finish now with the minimal agent.
+      2. Walk through every configuration — opt each capability back in.
+
+    Either way nothing is enabled that the user did not explicitly choose.
     """
     from hermes_cli.config import load_config
 
     print()
     print_header("Blank Slate Setup")
-    print_info("Everything starts OFF. We'll force-enable only what's required")
-    print_info("to run an agent, then walk through every capability so you opt in")
-    print_info("to exactly what you want — nothing more.")
+    print_info("Everything starts OFF. First we force-enable only what's required")
+    print_info("to run an agent, then you choose whether to stop there or walk")
+    print_info("through enabling more — opting in to exactly what you want.")
     print_info("")
     print_info("Forced on: Provider & Model, File Operations, Terminal.")
     print_info("Everything else (web, browser, code exec, vision, memory,")
@@ -3247,9 +3251,50 @@ def _run_blank_slate_setup(config: dict, hermes_home, is_existing: bool):
     print_info("  Toolsets: file, terminal (everything else off)")
     print_info("  Compression, memory, checkpoints, smart routing: off")
 
-    # ── Step 4: Bundled skills — default to NONE, offer to seed all ──
+    # ── The fork: stop here, or walk through enabling things ──
     print()
-    print_header("Step 3 — Bundled Skills")
+    print_header("How far do you want to go?")
+    path = prompt_choice(
+        "Your minimal agent is ready. What next?",
+        [
+            "Start with everything disabled — finish now (most minimal)",
+            "Walk through all configurations — opt in to tools, skills, plugins, MCP",
+        ],
+        0,
+    )
+
+    if path == 0:
+        save_config(config)
+        # Blank Slate means no bundled skills; record the opt-out so future
+        # `hermes update` runs don't re-inject them.
+        try:
+            from tools.skills_sync import set_bundled_skills_opt_out
+            set_bundled_skills_opt_out(True)
+        except Exception as exc:
+            logger.debug("blank-slate skill opt-out error: %s", exc)
+        print()
+        print_success("Blank Slate setup complete — minimal agent ready.")
+        print_info("Enable anything later, on demand:")
+        print_info("  Enable tools:        hermes tools")
+        print_info("  Seed skills:         hermes skills opt-in --sync")
+        print_info("  Add MCP servers:     hermes mcp add")
+        print_info("  Enable plugins:      hermes plugins")
+        print_info("  Tune agent settings: hermes setup agent")
+        print()
+        _print_setup_summary(config, hermes_home)
+        return
+
+    # ── Walkthrough path — opt in to each capability ──
+    _blank_slate_walkthrough(config, hermes_home)
+
+
+def _blank_slate_walkthrough(config: dict, hermes_home):
+    """Opt-in walkthrough for Blank Slate: skills, tools, plugins, MCP, gateway."""
+    from hermes_cli.config import load_config
+
+    # ── Bundled skills — default to NONE, offer to seed all ──
+    print()
+    print_header("Bundled Skills")
     print_info("Blank Slate ships with NO bundled skills by default.")
     seed_skills = prompt_yes_no(
         "Seed the full bundled skill catalog? (No = start with zero skills)",
@@ -3272,9 +3317,9 @@ def _run_blank_slate_setup(config: dict, hermes_home, is_existing: bool):
         logger.debug("blank-slate skill handling error: %s", exc)
         print_warning(f"Skill setup step encountered an error: {exc}")
 
-    # ── Step 5: Walk through enabling additional tools ──
+    # ── Walk through enabling additional tools ──
     print()
-    print_header("Step 4 — Tools")
+    print_header("Tools")
     print_info("Pick exactly which additional toolsets to turn on.")
     print_info("(file and terminal are already on; leave the rest off if you want")
     print_info(" the most minimal agent.)")
@@ -3292,23 +3337,23 @@ def _run_blank_slate_setup(config: dict, hermes_home, is_existing: bool):
     else:
         print_info("Keeping the minimal toolset. Add tools later with `hermes tools`.")
 
-    # ── Step 6: Built-in plugins (off unless chosen) ──
+    # ── Built-in plugins (off unless chosen) ──
     print()
-    print_header("Step 5 — Plugins")
+    print_header("Plugins")
     if prompt_yes_no("Review and enable built-in plugins now?", default=False):
         print_info("Manage plugins with `hermes plugins list` / `hermes plugins install`.")
     else:
         print_info("No plugins enabled. Add later with `hermes plugins`.")
 
-    # ── Step 7: MCP servers (off unless chosen) ──
+    # ── MCP servers (off unless chosen) ──
     print()
-    print_header("Step 6 — MCP Servers")
+    print_header("MCP Servers")
     if prompt_yes_no("Add an MCP server now?", default=False):
         print_info("Add servers with `hermes mcp add <name> --url ... | --command ...`.")
     else:
         print_info("No MCP servers configured. Add later with `hermes mcp add`.")
 
-    # ── Step 8: Optional messaging gateway ──
+    # ── Optional messaging gateway ──
     print()
     if prompt_yes_no("Connect a messaging platform (Telegram, Discord, …)?", default=False):
         setup_gateway(config)

@@ -77,3 +77,55 @@ class TestBlankSlateMinimizeConfig:
         # Model config is untouched by the minimizer.
         assert cfg["model"]["provider"] == "openrouter"
         assert cfg["model"]["default"] == "x/y"
+
+
+class TestBlankSlateFork:
+    """The post-baseline fork: finish now vs walk through configurations."""
+
+    def _patch_common(self, monkeypatch):
+        import hermes_cli.setup as s
+        # Neutralize side-effecting setup steps and I/O.
+        monkeypatch.setattr(s, "setup_model_provider", lambda cfg, **k: None)
+        monkeypatch.setattr(s, "setup_terminal_backend", lambda cfg, **k: None)
+        monkeypatch.setattr(s, "save_config", lambda cfg: None)
+        monkeypatch.setattr(s, "_print_setup_summary", lambda cfg, home: None)
+        monkeypatch.setattr(s, "print_header", lambda *a, **k: None)
+        monkeypatch.setattr(s, "print_info", lambda *a, **k: None)
+        monkeypatch.setattr(s, "print_success", lambda *a, **k: None)
+        monkeypatch.setattr(s, "print_warning", lambda *a, **k: None)
+
+    def test_finish_now_skips_walkthrough(self, monkeypatch, tmp_path):
+        import hermes_cli.setup as s
+        self._patch_common(monkeypatch)
+        # Fork prompt returns 0 = finish now.
+        monkeypatch.setattr(s, "prompt_choice", lambda *a, **k: 0)
+        walked = {"called": False}
+        monkeypatch.setattr(s, "_blank_slate_walkthrough",
+                            lambda cfg, home: walked.__setitem__("called", True))
+        opted_out = {"value": None}
+        monkeypatch.setattr("tools.skills_sync.set_bundled_skills_opt_out",
+                            lambda enabled: opted_out.__setitem__("value", enabled))
+
+        cfg = {}
+        s._run_blank_slate_setup(cfg, tmp_path, is_existing=False)
+
+        # Minimal baseline was applied, walkthrough was NOT run.
+        assert cfg["platform_toolsets"]["cli"] == ["file", "terminal"]
+        assert walked["called"] is False
+        # Finish-now path records the skill opt-out (no bundled skills).
+        assert opted_out["value"] is True
+
+    def test_walkthrough_path_invokes_walkthrough(self, monkeypatch, tmp_path):
+        import hermes_cli.setup as s
+        self._patch_common(monkeypatch)
+        # Fork prompt returns 1 = walk through.
+        monkeypatch.setattr(s, "prompt_choice", lambda *a, **k: 1)
+        walked = {"called": False}
+        monkeypatch.setattr(s, "_blank_slate_walkthrough",
+                            lambda cfg, home: walked.__setitem__("called", True))
+
+        cfg = {}
+        s._run_blank_slate_setup(cfg, tmp_path, is_existing=False)
+
+        assert cfg["platform_toolsets"]["cli"] == ["file", "terminal"]
+        assert walked["called"] is True
