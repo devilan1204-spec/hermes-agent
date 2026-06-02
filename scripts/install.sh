@@ -473,8 +473,13 @@ detect_os() {
 # dependency installs. Treat such a uv as untrusted so resolution falls back to
 # a standalone uv. Mirrors hermes_cli/managed_uv.py's trust ordering.
 uv_path_is_trusted() {
-    case "$1" in
-        *conda*|*anaconda*|*miniconda*|*miniforge*|*mambaforge*) return 1 ;;
+    # Normalize to lowercase first (bash-3.2-safe via tr, no ${var,,}) so
+    # capitalized install dirs like "Miniconda3" / "Anaconda3" / "Miniforge3"
+    # don't slip past the guard and reintroduce the PATH hijack.
+    local _uv_lc
+    _uv_lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    case "$_uv_lc" in
+        *conda*|*miniforge*|*mambaforge*) return 1 ;;
         *) return 0 ;;
     esac
 }
@@ -510,6 +515,7 @@ install_uv() {
 
     # Fall back to a PATH uv only when it isn't conda/Anaconda-managed.
     if command -v uv &> /dev/null; then
+        local _path_uv
         _path_uv="$(command -v uv)"
         if uv_path_is_trusted "$_path_uv"; then
             UV_CMD="uv"
