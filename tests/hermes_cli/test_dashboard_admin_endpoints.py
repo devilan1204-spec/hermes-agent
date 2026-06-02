@@ -310,6 +310,54 @@ class TestPortalEndpoint:
         assert isinstance(body["features"], list)
 
 
+class TestSessionManagementEndpoints:
+    @pytest.fixture(autouse=True)
+    def _setup(self, _isolate_hermes_home):
+        self.client, _ = _client()
+        from hermes_state import SessionDB
+
+        db = SessionDB()
+        db.create_session(session_id="sess-x", source="cli")
+        db.close()
+
+    def test_stats_not_shadowed_by_session_id_route(self):
+        # /api/sessions/stats must resolve to the stats handler, not be captured
+        # as {session_id}="stats" by the parameterized route registered after it.
+        r = self.client.get("/api/sessions/stats")
+        assert r.status_code == 200
+        body = r.json()
+        assert {"total", "active_store", "archived", "messages", "by_source"} <= set(body)
+        assert body["total"] >= 1
+
+    def test_rename(self):
+        r = self.client.patch("/api/sessions/sess-x", json={"title": "Renamed"})
+        assert r.status_code == 200 and r.json()["title"] == "Renamed"
+
+    def test_export(self):
+        r = self.client.get("/api/sessions/sess-x/export")
+        assert r.status_code == 200 and "messages" in r.json()
+        assert self.client.get("/api/sessions/nope/export").status_code == 404
+
+    def test_prune_validation(self):
+        r = self.client.post("/api/sessions/prune", json={"older_than_days": 9999})
+        assert r.status_code == 200 and "removed" in r.json()
+        assert self.client.post(
+            "/api/sessions/prune", json={"older_than_days": 0}
+        ).status_code == 400
+
+
+class TestSkillsHubSearchEndpoint:
+    @pytest.fixture(autouse=True)
+    def _setup(self, _isolate_hermes_home):
+        self.client, _ = _client()
+
+    def test_empty_query_returns_empty(self):
+        # Empty query short-circuits (no network) and returns no results.
+        r = self.client.get("/api/skills/hub/search?q=")
+        assert r.status_code == 200 and r.json() == {"results": []}
+
+
+
 
 class TestWebhookToggleEndpoint:
     @pytest.fixture(autouse=True)
