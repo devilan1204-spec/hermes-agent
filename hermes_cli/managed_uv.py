@@ -136,8 +136,9 @@ def update_managed_uv() -> Optional[str]:
     """Run ``uv self update`` on the managed uv binary.
 
     Call this during ``hermes update`` so the managed copy stays current.
-    Returns the managed path on success, ``None`` if uv isn't available or
-    the self-update fails (non-fatal — the old version still works).
+    Returns the managed path if a managed uv is present (always — even when
+    ``uv self update`` fails, the old binary still works).  Returns ``None``
+    only when no managed uv exists yet (``ensure_uv()`` handles that case).
     """
     existing = resolve_uv()
     if not existing:

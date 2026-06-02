@@ -453,8 +453,7 @@ class SessionDB:
         logger.warning(
             "SQLite FTS5 unavailable for %s; full-text session search "
             "disabled. Run `hermes update` to rebuild the venv with a "
-            "current Python (managed uv guarantees FTS5). "
-            "(underlying error: %s)",
+            "current Python. (underlying error: %s)",
             self.db_path,
             exc,
         )

@@ -7489,7 +7489,9 @@ def _update_via_zip(args):
     # may point to a Python without FTS5.  Rebuild it so the new managed
     # uv provides a fresh interpreter with FTS5 guaranteed.
     if fresh_bootstrap and uv_bin:
-        rebuild_venv(uv_bin, PROJECT_ROOT / "venv")
+        if not rebuild_venv(uv_bin, PROJECT_ROOT / "venv"):
+            print("✗ Failed to rebuild venv with managed uv. Re-run `hermes update` or install manually.")
+            sys.exit(1)
 
     pip_cmd = [sys.executable, "-m", "pip"]
     if not uv_bin:
@@ -9688,7 +9690,9 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # may point to a Python without FTS5.  Rebuild it so the new managed
         # uv provides a fresh interpreter with FTS5 guaranteed.
         if fresh_bootstrap and uv_bin:
-            rebuild_venv(uv_bin, PROJECT_ROOT / "venv")
+            if not rebuild_venv(uv_bin, PROJECT_ROOT / "venv"):
+                print("✗ Failed to rebuild venv with managed uv. Re-run `hermes update` or install manually.")
+                sys.exit(1)
 
         pip_cmd = [sys.executable, "-m", "pip"]
         if not uv_bin:

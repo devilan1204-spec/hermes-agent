@@ -308,11 +308,19 @@ function Install-Uv {
     # UV_INSTALL_DIR tells the astral installer to place the binary
     # directly into $HermesHome\bin instead of ~/.local/bin.
     $prevEAP = $ErrorActionPreference
+    $prevUVInstallDir = $env:UV_INSTALL_DIR
     try {
         $ErrorActionPreference = "Continue"
         $env:UV_INSTALL_DIR = Join-Path $HermesHome "bin"
         powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex" 2>&1 | Out-Null
         $ErrorActionPreference = $prevEAP
+
+        # Restore UV_INSTALL_DIR — don't leak it into subsequent stages.
+        if ($null -eq $prevUVInstallDir) {
+            Remove-Item Env:UV_INSTALL_DIR -ErrorAction SilentlyContinue
+        } else {
+            $env:UV_INSTALL_DIR = $prevUVInstallDir
+        }
 
         if (Test-Path $managedUv) {
             $script:UvCmd = $managedUv
@@ -326,6 +334,12 @@ function Install-Uv {
         return $false
     } catch {
         if ($prevEAP) { $ErrorActionPreference = $prevEAP }
+        # Restore UV_INSTALL_DIR on error too.
+        if ($null -eq $prevUVInstallDir) {
+            Remove-Item Env:UV_INSTALL_DIR -ErrorAction SilentlyContinue
+        } else {
+            $env:UV_INSTALL_DIR = $prevUVInstallDir
+        }
         Write-Err "Failed to install uv: $_"
         Write-Info "Install manually: https://docs.astral.sh/uv/getting-started/installation/"
         return $false

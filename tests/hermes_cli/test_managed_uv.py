@@ -187,7 +187,8 @@ class TestUpdateManagedUv:
 class TestInstallUvInternals:
     def test_posix_sets_uv_unmanaged_install(self, tmp_path):
         target = tmp_path / "bin" / "uv"
-        with patch("hermes_cli.managed_uv._install_uv_posix") as mock_posix:
+        with patch("hermes_cli.managed_uv.platform.system", return_value="Linux"), \
+             patch("hermes_cli.managed_uv._install_uv_posix") as mock_posix:
             from hermes_cli.managed_uv import _install_uv
             _install_uv(target)
             mock_posix.assert_called_once()
