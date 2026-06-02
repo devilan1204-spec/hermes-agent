@@ -238,6 +238,24 @@ export const api = {
     fetchJSON<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
+  renameSession: (id: string, title: string) =>
+    fetchJSON<{ ok: boolean; title: string }>(
+      `/api/sessions/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      },
+    ),
+  getSessionStats: () => fetchJSON<SessionStoreStats>("/api/sessions/stats"),
+  exportSessionUrl: (id: string) =>
+    `/api/sessions/${encodeURIComponent(id)}/export`,
+  pruneSessions: (older_than_days: number, source?: string) =>
+    fetchJSON<{ ok: boolean; removed: number }>("/api/sessions/prune", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ older_than_days, source }),
+    }),
   getLogs: (params: { file?: string; lines?: number; level?: string; component?: string }) => {
     const qs = new URLSearchParams();
     if (params.file) qs.set("file", params.file);
@@ -311,6 +329,19 @@ export const api = {
     }),
   pauseCronJob: (id: string, profile = "default") =>
     fetchJSON<CronJob>(`/api/cron/jobs/${encodeURIComponent(id)}/pause?profile=${encodeURIComponent(profile)}`, { method: "POST" }),
+  updateCronJob: (
+    id: string,
+    updates: { prompt?: string; schedule?: string; name?: string; deliver?: string },
+    profile = "default",
+  ) =>
+    fetchJSON<CronJob>(
+      `/api/cron/jobs/${encodeURIComponent(id)}?profile=${encodeURIComponent(profile)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates }),
+      },
+    ),
   resumeCronJob: (id: string, profile = "default") =>
     fetchJSON<CronJob>(`/api/cron/jobs/${encodeURIComponent(id)}/resume?profile=${encodeURIComponent(profile)}`, { method: "POST" }),
   triggerCronJob: (id: string, profile = "default") =>
@@ -709,6 +740,10 @@ export const api = {
     }),
   updateSkillsFromHub: () =>
     fetchJSON<ActionResponse>("/api/skills/hub/update", { method: "POST" }),
+  searchSkillsHub: (q: string, source = "all", limit = 20) =>
+    fetchJSON<{ results: SkillHubResult[] }>(
+      `/api/skills/hub/search?q=${encodeURIComponent(q)}&source=${encodeURIComponent(source)}&limit=${limit}`,
+    ),
 };
 
 /** Identity payload returned by ``GET /api/auth/me`` (Phase 7).
@@ -735,6 +770,24 @@ export interface ActionResponse {
   error?: string;
   message?: string;
   update_command?: string;
+}
+
+export interface SessionStoreStats {
+  total: number;
+  active_store: number;
+  archived: number;
+  messages: number;
+  by_source: Record<string, number>;
+}
+
+export interface SkillHubResult {
+  name: string;
+  description: string;
+  source: string;
+  identifier: string;
+  trust_level: string;
+  repo: string | null;
+  tags: string[];
 }
 
 // ── Admin types ───────────────────────────────────────────────────────
