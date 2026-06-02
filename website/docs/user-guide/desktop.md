@@ -38,6 +38,8 @@ hermes desktop
 
 That uses your current config, keys, sessions, and skills. On first launch the app walks you through picking a provider and model; there's nothing else to configure.
 
+This is the source-checkout path: `hermes desktop` builds a local unpacked Electron app with `npm run pack`. It does not download or run the release installers.
+
 ### Prebuilt installers
 
 When a release ships desktop installers they're attached to the [releases page](https://github.com/NousResearch/hermes-agent/releases/latest):
@@ -107,7 +109,7 @@ hermes update
 
 ## CLI reference: `hermes desktop`
 
-The canonical command is `hermes desktop` (the older `hermes gui` is kept as a deprecated alias). By default it installs workspace Node dependencies, builds the current OS's unpacked Electron app, then launches that packaged artifact.
+The canonical command is `hermes desktop` (the older `hermes gui` is kept as a deprecated alias). By default it installs workspace Node dependencies, builds the current OS's unpacked Electron app with `electron-builder --dir`, then launches that local artifact. It does not download or run the release installers.
 
 | Flag | Description |
 |------|-------------|

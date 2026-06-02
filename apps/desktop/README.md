@@ -38,6 +38,8 @@ hermes desktop
 
 It builds and launches the GUI against your existing install — same config, keys, sessions, and skills. On first launch Hermes walks you through picking a provider and model; nothing else to configure.
 
+This is the source-checkout path: `hermes desktop` builds a local unpacked Electron app with `npm run pack`. It does not download or run the release installers.
+
 ### Prebuilt installers
 
 When a release ships desktop installers they're attached to its [releases page](https://github.com/NousResearch/hermes-agent/releases) — `.dmg` (macOS), `.exe` / `.msi` (Windows), `.AppImage` / `.deb` / `.rpm` (Linux). These are published manually, so the install-with-Hermes path above is the most reliable way to get the latest.
