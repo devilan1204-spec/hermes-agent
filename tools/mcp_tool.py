@@ -430,6 +430,11 @@ def _resolve_stdio_command(command: str, env: dict) -> tuple[str, dict]:
                 # Hermes-bundled Node first so the desktop app's pinned
                 # runtime wins over a system Node that may be incompatible.
                 os.path.join(hermes_home, "node", "bin", resolved_command),
+                # Managed uv: Hermes owns its own uv/uvx at
+                # $HERMES_HOME/bin/ (see hermes_cli/managed_uv.py).
+                # Always prefer this over PATH/brew/pip installs so MCP
+                # servers use the same uv as the CLI update path.
+                os.path.join(hermes_home, "bin", resolved_command),
                 # uv's official macOS/Linux installer drops uv/uvx here.
                 # This is the dominant install location for developers
                 # on Apple Silicon and Ubuntu. The ``uv`` user installer

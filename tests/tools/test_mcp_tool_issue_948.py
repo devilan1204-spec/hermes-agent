@@ -181,3 +181,29 @@ def test_resolve_stdio_command_skips_unknown_commands():
         command, _env = _resolve_stdio_command("foo", {"PATH": "/usr/bin:/bin"})
 
     assert command == "foo"
+
+
+def test_resolve_stdio_command_prefers_managed_uv(tmp_path):
+    """Managed uv at $HERMES_HOME/bin/uv should be preferred over
+    ~/.local/bin, /opt/homebrew/bin, and /usr/local/bin — MCP servers
+    must use the same uv as the CLI update path (managed_uv.py)."""
+    hermes_bin = tmp_path / "bin"
+    hermes_bin.mkdir()
+    uv_path = hermes_bin / "uv"
+    uv_path.write_text("#!/bin/sh\necho uv 0.1.2\n", encoding="utf-8")
+    uv_path.chmod(0o755)
+
+    # Also create a stale uv at ~/.local/bin to verify ordering.
+    local_bin = tmp_path / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    stale_uv = local_bin / "uv"
+    stale_uv.write_text("#!/bin/sh\necho stale\n", encoding="utf-8")
+    stale_uv.chmod(0o755)
+
+    with patch("tools.mcp_tool.shutil.which", return_value=None), \
+         patch("os.path.expanduser", lambda p: p.replace("~", str(tmp_path)) if p.startswith("~") else p), \
+         patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+        command, env = _resolve_stdio_command("uv", {"PATH": "/usr/bin:/bin"})
+
+    assert command == str(uv_path)
+    assert env["PATH"].split(os.pathsep)[0] == str(hermes_bin)
