@@ -1,22 +1,22 @@
 ---
-title: "Shop App — Shop"
-sidebar_label: "Shop App"
-description: "Shop"
+title: "Shop"
+sidebar_label: "Shop"
+description: "购物助手 — 跨店铺搜索和购买商品、比价、查找相似商品、追踪订单、处理退货、重新下单（由 Shop.app 提供支持）。"
 ---
 
 {/* This page is auto-generated from the skill's SKILL.md by website/scripts/generate-skill-docs.py. Edit the source SKILL.md, not this page. */}
 
-# Shop App
+# Shop
 
-Shop.app：商品搜索、订单追踪、退货、重新下单。
+购物助手 — 跨店铺搜索和购买商品、比价、查找相似商品、追踪订单、处理退货、重新下单（由 Shop.app 提供支持）。
 
 ## Skill 元数据
 
 | | |
 |---|---|
-| 来源 | 可选 — 使用 `hermes skills install official/productivity/shop-app` 安装 |
-| 路径 | `optional-skills/productivity/shop-app` |
-| 版本 | `0.0.28` |
+| 来源 | 可选 — 使用 `hermes skills install official/productivity/shop` 安装 |
+| 路径 | `optional-skills/productivity/shop` |
+| 版本 | `0.0.29` |
 | 作者 | community |
 | 许可证 | MIT |
 | 平台 | linux, macos, windows |

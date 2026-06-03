@@ -1,22 +1,22 @@
 ---
-title: "Shop App — Shop"
-sidebar_label: "Shop App"
-description: "Shop"
+title: "Shop"
+sidebar_label: "Shop"
+description: "Shopping assistant — search and buy products across stores, compare prices, find similar items, track orders, manage returns, and re-order past purchases (po..."
 ---
 
 {/* This page is auto-generated from the skill's SKILL.md by website/scripts/generate-skill-docs.py. Edit the source SKILL.md, not this page. */}
 
-# Shop App
+# Shop
 
-Shop.app: product search, order tracking, returns, reorder.
+Shopping assistant — search and buy products across stores, compare prices, find similar items, track orders, manage returns, and re-order past purchases (powered by Shop.app).
 
 ## Skill metadata
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/productivity/shop-app` |
-| Path | `optional-skills/productivity/shop-app` |
-| Version | `0.0.28` |
+| Source | Optional — install with `hermes skills install official/productivity/shop` |
+| Path | `optional-skills/productivity/shop` |
+| Version | `0.0.29` |
 | Author | community |
 | License | MIT |
 | Platforms | linux, macos, windows |

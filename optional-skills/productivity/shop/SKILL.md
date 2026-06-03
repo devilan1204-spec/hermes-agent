@@ -1,7 +1,7 @@
 ---
-name: shop-app
-description: "Shop.app: product search, order tracking, returns, reorder."
-version: 0.0.28
+name: shop
+description: "Shopping assistant — search and buy products across stores, compare prices, find similar items, track orders, manage returns, and re-order past purchases (powered by Shop.app)."
+version: 0.0.29
 author: community
 license: MIT
 platforms: [linux, macos, windows]
