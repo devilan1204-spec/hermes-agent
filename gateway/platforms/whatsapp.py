@@ -672,9 +672,32 @@ class WhatsAppAdapter(BasePlatformAdapter):
             if self._reply_prefix is not None:
                 bridge_env["WHATSAPP_REPLY_PREFIX"] = self._reply_prefix
 
+            # Resolve node with bundled fallback and ensure the bundled node bin
+            # dir is on the bridge's PATH.  The requirement check and `npm install`
+            # above already use find_node_executable, so on a bundled-but-off-PATH
+            # install (root FHS w/ missing symlink, #38889) they pass — but a bare
+            # "node" argv0 here would still raise FileNotFoundError, and the bridge
+            # itself shells out to node tooling, so it needs the dir on PATH too.
+            node_bin = "node"
+            try:
+                from hermes_constants import (
+                    find_node_executable,
+                    bundled_node_bin_dir,
+                )
+
+                node_bin = find_node_executable("node") or "node"
+                _node_dir = str(bundled_node_bin_dir())
+                _path = bridge_env.get("PATH", "")
+                if _node_dir not in _path.split(os.pathsep):
+                    bridge_env["PATH"] = (
+                        _node_dir + os.pathsep + _path if _path else _node_dir
+                    )
+            except Exception:
+                node_bin = shutil.which("node") or "node"
+
             self._bridge_process = subprocess.Popen(
                 [
-                    "node",
+                    node_bin,
                     str(bridge_path),
                     "--port", str(self._bridge_port),
                     "--session", str(self._session_path),

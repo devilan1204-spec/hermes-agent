@@ -771,10 +771,15 @@ link_bundled_node() {
             [ -L "$stale_dir/$name" ] || continue
             target="$(readlink "$stale_dir/$name" 2>/dev/null || true)"
             case "$target" in
-                "$HERMES_HOME/node/"*) rm -f "$stale_dir/$name" ;;
+                # `|| true`: pruning a shadow link is best-effort. A failing
+                # rm (read-only parent dir, uid mismatch) must NOT abort the
+                # whole installer via `set -e` (line 16). See #38889.
+                "$HERMES_HOME/node/"*) rm -f "$stale_dir/$name" 2>/dev/null || true ;;
             esac
         done
     done
+    # Never let this best-effort helper be the failing last command under set -e.
+    return 0
 }
 
 install_node() {
@@ -2205,6 +2210,12 @@ ensure_browser() {
 
 ensure_mode() {
     detect_os
+    # Resolve the install layout so $ROOT_FHS_LAYOUT is set before check_node →
+    # install_node → get_command_link_dir() decides where to symlink node/npm/npx.
+    # Without this, a root FHS box reached via `install.sh --ensure node`
+    # (hermes_cli/dep_ensure.py, acp_adapter, TUI fallback) leaves ROOT_FHS_LAYOUT
+    # false and links node into ~/.local/bin (off-PATH) — the #38889 regression.
+    resolve_install_layout
 
     IFS=',' read -ra DEPS <<< "$ENSURE_DEPS"
     for dep in "${DEPS[@]}"; do
@@ -2243,6 +2254,9 @@ ensure_mode() {
 postinstall_mode() {
     print_banner
     detect_os
+    # Set $ROOT_FHS_LAYOUT before check_node/install_node so node/npm/npx are
+    # symlinked into the same dir as the hermes command on a root FHS box. (#38889)
+    resolve_install_layout
 
     log_info "Post-install mode: setting up Hermes for pip install"
 

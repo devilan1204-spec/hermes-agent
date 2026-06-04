@@ -240,7 +240,10 @@ def _resolve_node_for_doctor(issues: list) -> str | None:
             is_root = False
         if is_root and sys.platform == "linux":
             fhs_link = Path("/usr/local/bin/node")
-            if not fhs_link.exists():
+            # Use lexists()/is_symlink(), not exists(): exists() follows the
+            # symlink, so a *dangling* link (target removed) would otherwise be
+            # misreported as "missing" and skip the stale-target diagnostic.
+            if not os.path.lexists(fhs_link):
                 check_info(
                     "Root FHS install: node should be linked into /usr/local/bin."
                 )
@@ -251,10 +254,12 @@ def _resolve_node_for_doctor(issues: list) -> str | None:
                     f"ln -sf {bundled} /usr/local/bin/node "
                     "(repeat for npm, npx), or re-run the installer"
                 )
-            elif fhs_link.resolve() != bundled.resolve():
+            elif not fhs_link.exists() or fhs_link.resolve() != bundled.resolve():
+                # Present but dangling (target gone) or pointing at the wrong node.
+                _actual = os.readlink(fhs_link) if fhs_link.is_symlink() else fhs_link
                 check_warn(
                     "/usr/local/bin/node points to the wrong target",
-                    f"(→ {fhs_link.resolve()}, expected {bundled})",
+                    f"(→ {_actual}, expected {bundled})",
                 )
                 issues.append(
                     f"Fix stale node symlink: ln -sf {bundled} /usr/local/bin/node"

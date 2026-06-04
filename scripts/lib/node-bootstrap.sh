@@ -49,23 +49,32 @@ _nb_is_termux() {
 # Termux → $PREFIX/bin, otherwise ~/.local/bin.
 #
 # Parity note (#38889): install.sh keys off $ROOT_FHS_LAYOUT, which
-# resolve_install_layout() sets to FALSE for a root user who has a LEGACY
-# install at $HERMES_HOME/hermes-agent/.git (those keep ~/.local/bin).  We
-# mirror that here so the bootstrap path (hermes update) can't diverge from the
-# installer and link node into a different dir than the hermes command.
+# resolve_install_layout() leaves FALSE (→ ~/.local/bin) for a root user with
+# EITHER a legacy git install at $HERMES_HOME/hermes-agent/.git OR an explicit
+# --dir/$HERMES_INSTALL_DIR install (INSTALL_DIR_EXPLICIT).  The bootstrap can't
+# see those flags, so it can't recompute the layout — instead it puts node where
+# the `hermes` command actually landed.  That keeps node and the command in the
+# same dir no matter how the box was installed, which is the only invariant that
+# matters here and avoids re-deriving (and diverging from) the installer's logic.
 _nb_get_link_dir() {
     if _nb_is_termux && [ -n "${PREFIX:-}" ]; then
         echo "$PREFIX/bin"
         return
     fi
     if [ "$(id -u)" = 0 ] && [ "$(uname -s)" = "Linux" ]; then
-        # Root on Linux: FHS layout UNLESS a legacy git install exists, matching
-        # resolve_install_layout() in install.sh.
+        # Legacy git install keeps ~/.local/bin (matches resolve_install_layout).
         if [ -d "${HERMES_HOME:-$HOME/.hermes}/hermes-agent/.git" ]; then
             echo "$HOME/.local/bin"
-        else
-            echo "/usr/local/bin"
+            return
         fi
+        # Explicit --dir root installs keep the command in ~/.local/bin; detect
+        # that from where `hermes` actually is rather than re-deriving the flag.
+        if [ -e "$HOME/.local/bin/hermes" ] && [ ! -e "/usr/local/bin/hermes" ]; then
+            echo "$HOME/.local/bin"
+            return
+        fi
+        # Fresh/standard root FHS install.
+        echo "/usr/local/bin"
         return
     fi
     echo "$HOME/.local/bin"
@@ -95,10 +104,13 @@ _nb_link_bundled_node() {
             [ -L "$stale_dir/$name" ] || continue
             target="$(readlink "$stale_dir/$name" 2>/dev/null || true)"
             case "$target" in
-                "$HERMES_HOME/node/"*) rm -f "$stale_dir/$name" ;;
+                # `|| true`: best-effort prune must never fail a caller that
+                # runs under `set -e` (install.sh sources/mirrors this). #38889
+                "$HERMES_HOME/node/"*) rm -f "$stale_dir/$name" 2>/dev/null || true ;;
             esac
         done
     done
+    return 0
 }
 
 _nb_node_major() {

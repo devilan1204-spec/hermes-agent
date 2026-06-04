@@ -429,13 +429,19 @@ def get_env_path() -> Path:
 def _is_root_fhs_layout() -> bool:
     """Return True when this is a root install using the Linux FHS layout.
 
-    Mirrors ``resolve_install_layout()`` in ``scripts/install.sh``: root (uid 0)
-    on Linux uses ``/usr/local/lib/hermes-agent`` for code and ``/usr/local/bin``
-    for the command link.  We detect it the same way the installer's own runtime
-    guard does (``_ensure_fhs_path_guard`` in main.py): Linux + uid 0 + a command
-    link present at ``/usr/local/bin/hermes`` OR code at
-    ``/usr/local/lib/hermes-agent``.  Falling back to the uid check alone keeps
-    this correct *during* an install before the symlink exists.
+    Heuristic (not a strict line-by-line mirror) for ``resolve_install_layout()``
+    in ``scripts/install.sh``: root (uid 0) on Linux normally uses
+    ``/usr/local/lib/hermes-agent`` for code and ``/usr/local/bin`` for the
+    command link.  We can't see the installer's ``--dir``/``$HERMES_INSTALL_DIR``
+    or legacy-install flags from here, so we infer the layout from on-disk
+    evidence instead, preferring it over the bare uid check:
+
+    * legacy git install at ``<HERMES_HOME>/hermes-agent`` → not FHS
+      (``resolve_install_layout`` keeps ``~/.local/bin`` for it);
+    * ``/usr/local`` markers present (command link or code dir) → FHS;
+    * a ``~/.local/bin/hermes`` command present (e.g. an explicit ``--dir`` root
+      install, which ``resolve_install_layout`` does NOT flip to FHS) → not FHS;
+    * no evidence at all (e.g. mid-install) → assume FHS, the root default.
     """
     if sys.platform != "linux":
         return False
@@ -444,17 +450,22 @@ def _is_root_fhs_layout() -> bool:
             return False
     except OSError:
         return False
-    # Confirm it's actually the FHS layout (not a root user who installed into
-    # ~/.local/bin anyway).  A legacy git install at <HERMES_HOME>/hermes-agent
-    # means resolve_install_layout() kept the ~/.local/bin layout — mirror that.
+    # A legacy git install at <HERMES_HOME>/hermes-agent means
+    # resolve_install_layout() kept the ~/.local/bin layout — mirror that.
     if (get_hermes_home() / "hermes-agent" / ".git").exists():
         return False
     if Path("/usr/local/bin/hermes").exists():
         return True
     if Path("/usr/local/lib/hermes-agent").exists():
         return True
-    # No markers yet (e.g. mid-install): for a Linux root user the installer
-    # defaults to the FHS layout, so assume FHS.
+    # No /usr/local markers: a root user who installed into ~/.local/bin (e.g.
+    # via --dir/$HERMES_INSTALL_DIR, where resolve_install_layout() does not flip
+    # to FHS) keeps the command there.  Honor that evidence before assuming FHS,
+    # so command_link_dir() doesn't point at /usr/local/bin for such a box.
+    if (Path.home() / ".local" / "bin" / "hermes").exists():
+        return False
+    # No markers at all (e.g. mid-install): the installer defaults a fresh root
+    # Linux box to the FHS layout, so assume FHS.
     return True
 
 

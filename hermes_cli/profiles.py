@@ -371,13 +371,16 @@ def check_alias_collision(name: str) -> Optional[str]:
 
 
 def _is_wrapper_dir_in_path() -> bool:
-    """Check if ~/.local/bin is in PATH."""
+    """Check if the layout-aware wrapper dir (see ``_get_wrapper_dir``) is in PATH."""
     wrapper_dir = str(_get_wrapper_dir())
     return wrapper_dir in os.environ.get("PATH", "").split(os.pathsep)
 
 
 def create_wrapper_script(name: str, target: Optional[str] = None) -> Optional[Path]:
-    """Create a shell wrapper script at ~/.local/bin/<name>.
+    """Create a shell wrapper script at ``<wrapper_dir>/<name>``.
+
+    ``<wrapper_dir>`` is layout-aware (``_get_wrapper_dir``): ``/usr/local/bin``
+    for a root FHS install, ``$PREFIX/bin`` on Termux, else ``~/.local/bin``.
 
     The wrapper file is named after ``name`` (the alias). The profile it
     activates is ``target`` if given, otherwise ``name`` — this lets a custom
