@@ -12,7 +12,58 @@ import subprocess
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from hermes_cli.main import cmd_update
+
+
+# ---------------------------------------------------------------------------
+# Managed-uv compatibility for tests that patch shutil.which
+# ---------------------------------------------------------------------------
+# The production code now uses ``ensure_uv()`` / ``update_managed_uv()``
+# instead of ``shutil.which("uv")``.  These autouse fixtures make the
+# managed_uv functions delegate to the patched ``shutil.which`` so the
+# existing test setup keeps working without per-test changes.
+@pytest.fixture(autouse=True)
+def _patch_managed_uv(request):
+    """Make managed_uv helpers follow shutil.which mocking in tests."""
+    import shutil
+
+    def _fake_resolve_uv():
+        return shutil.which("uv")
+
+    def _fake_ensure_uv():
+        path = shutil.which("uv")
+        return path  # Optional[str] — no more tuple
+
+    def _fake_update_managed_uv():
+        return None  # never actually self-update in tests
+
+    with patch("hermes_cli.managed_uv.resolve_uv", side_effect=_fake_resolve_uv), \
+         patch("hermes_cli.managed_uv.ensure_uv", side_effect=_fake_ensure_uv), \
+         patch("hermes_cli.managed_uv.update_managed_uv", side_effect=_fake_update_managed_uv):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _inline_post_pull():
+    """Run post-pull in-process instead of re-execing a fresh interpreter.
+
+    cmd_update() is now a two-phase flow: phase 1 downloads code, then
+    _reexec_for_post_pull() replaces the process (os.execvp on POSIX) to run
+    phase 2 under the freshly-downloaded code. That hard process replacement
+    would nuke the pytest process mid-test. Patch the re-exec to call
+    _cmd_update_post_pull() directly so the whole flow stays in-process —
+    preserving the old "one cmd_update() call exercises everything" behavior
+    these tests rely on (config migration, skill sync, etc.).
+    """
+    from hermes_cli import main as hm
+
+    def _inline(args, gateway_mode):
+        hm._cmd_update_post_pull(args, gateway_mode=gateway_mode)
+
+    with patch.object(hm, "_reexec_for_post_pull", side_effect=_inline):
+        yield
 
 
 def _make_run_side_effect(
