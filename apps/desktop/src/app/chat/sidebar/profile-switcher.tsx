@@ -25,6 +25,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { triggerHaptic } from '@/lib/haptics'
@@ -51,6 +52,8 @@ import { CreateProfileDialog } from '../../profiles/create-profile-dialog'
 import { DeleteProfileDialog } from '../../profiles/delete-profile-dialog'
 import { RenameProfileDialog } from '../../profiles/rename-profile-dialog'
 import { PROFILES_ROUTE } from '../../routes'
+
+import { SendToAllDialog } from './send-to-all-dialog'
 
 const RAIL_GAP = 4 // px — matches gap-1 between squares.
 
@@ -92,6 +95,7 @@ export function ProfileRail() {
   const navigate = useNavigate()
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [sendAllOpen, setSendAllOpen] = useState(false)
   const [pendingRename, setPendingRename] = useState<null | ProfileInfo>(null)
   const [pendingDelete, setPendingDelete] = useState<null | ProfileInfo>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -245,8 +249,37 @@ export function ProfileRail() {
         </Tip>
       </div>
 
+      {/* The "…" overflow: broadcast a prompt to every profile, or jump to the
+          profiles settings page (its old single-tap destination). */}
       {multiProfile && (
-        <ProfilePill active={false} glyph="ellipsis" label="Manage profiles…" onSelect={() => navigate(PROFILES_ROUTE)} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              aria-label="More profile actions"
+              className="bg-transparent text-(--ui-text-tertiary) hover:bg-(--ui-control-hover-background) hover:text-foreground"
+              size="icon-xs"
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="ellipsis" size="0.875rem" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-44"
+            collisionPadding={{ bottom: 44, left: 8, right: 8, top: 8 }}
+            sideOffset={6}
+          >
+            <DropdownMenuItem onSelect={() => setSendAllOpen(true)}>
+              <Codicon name="send" size="0.875rem" />
+              <span>Send to all</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate(PROFILES_ROUTE)}>
+              <Codicon name="settings-gear" size="0.875rem" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       {/* Land in the new profile on a fresh chat (selectProfile triggers the
@@ -273,6 +306,8 @@ export function ProfileRail() {
         open={pendingDelete !== null}
         profile={pendingDelete}
       />
+
+      <SendToAllDialog onOpenChange={setSendAllOpen} open={sendAllOpen} />
     </div>
   )
 }

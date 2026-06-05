@@ -215,6 +215,37 @@ export async function ensureGatewayForProfile(profile: string): Promise<void> {
   setActive(key)
 }
 
+// Run one RPC against a specific profile's gateway WITHOUT moving the active
+// pointer — opening (and keeping) its background socket if needed. Used by
+// "send to all", which fires a prompt into every profile's backend while the
+// user stays on their current session. The primary is the fast path.
+export async function requestGatewayForProfile<T>(
+  profile: string,
+  method: string,
+  params: Record<string, unknown> = {}
+): Promise<T> {
+  const key = normKey(profile)
+
+  if (key === primaryProfile) {
+    if (!primaryGateway) {
+      throw new Error('Hermes gateway unavailable')
+    }
+
+    return primaryGateway.request<T>(method, params)
+  }
+
+  const entry = secondaries.get(key) ?? createSecondary(key)
+  entry.wantOpen = true
+
+  if (!isOpen(entry.gateway)) {
+    clearTimer(entry)
+    entry.reconnectAttempt = 0
+    await openSecondary(entry)
+  }
+
+  return entry.gateway.request<T>(method, params)
+}
+
 // Reconnect the active gateway after a transient request failure. Primary
 // reconnects are owned by use-gateway-boot, so we only drive secondaries here.
 export async function ensureActiveGatewayOpen(): Promise<HermesGateway | null> {
