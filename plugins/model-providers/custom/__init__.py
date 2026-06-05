@@ -63,6 +63,7 @@ custom = CustomProfile(
     ),
     env_vars=(),  # No fixed key — custom endpoint
     base_url="",  # User-configured
+    default_max_tokens=4096,
 )
 
 register_provider(custom)
