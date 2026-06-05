@@ -86,7 +86,11 @@ const stepThroughCells: Modifier = ({ containerNodeRect, draggingNodeRect, trans
 // The active profile pops in its own color — the "where am I" cue. Single-
 // profile users see only the "+" (create their first profile); everything else
 // appears once a second profile exists.
-export function ProfileRail() {
+interface ProfileRailProps {
+  onSendToAll: (text: string) => Promise<number> | void
+}
+
+export function ProfileRail({ onSendToAll }: ProfileRailProps) {
   const profiles = useStore($profiles)
   const scope = useStore($profileScope)
   const gatewayProfile = useStore($activeGatewayProfile)
@@ -275,8 +279,8 @@ export function ProfileRail() {
               <span>Send to all</span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => navigate(PROFILES_ROUTE)}>
-              <Codicon name="settings-gear" size="0.875rem" />
-              <span>Settings</span>
+              <Codicon name="account" size="0.875rem" />
+              <span>Manage</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -307,7 +311,7 @@ export function ProfileRail() {
         profile={pendingDelete}
       />
 
-      <SendToAllDialog onOpenChange={setSendAllOpen} open={sendAllOpen} />
+      <SendToAllDialog onOpenChange={setSendAllOpen} onSend={onSendToAll} open={sendAllOpen} />
     </div>
   )
 }

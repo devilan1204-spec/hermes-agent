@@ -439,6 +439,7 @@ export function DesktopController() {
     removeSession,
     resumeSession,
     selectSidebarItem,
+    sendToAllProfiles,
     startFreshSessionDraft
   } = useSessionActions({
     activeSessionId,
@@ -629,6 +630,7 @@ export function DesktopController() {
       onNavigate={selectSidebarItem}
       onNewSessionInWorkspace={startSessionInWorkspace}
       onResumeSession={sessionId => navigate(sessionRoute(sessionId))}
+      onSendToAll={sendToAllProfiles}
     />
   )
 

@@ -9,10 +9,17 @@ import { embeddedImageUrls, textWithoutEmbeddedImages } from '@/lib/embedded-ima
 import { setSessionYolo } from '@/lib/yolo-session'
 import { clearComposerAttachments, clearComposerDraft } from '@/store/composer'
 import { clearQueuedPrompts } from '@/store/composer-queue'
+import { requestGatewayForProfile } from '@/store/gateway'
 import { $pinnedSessionIds } from '@/store/layout'
 import { clearNotifications, notify, notifyError } from '@/store/notifications'
 import { requestDesktopOnboarding } from '@/store/onboarding'
-import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile, normalizeProfileKey } from '@/store/profile'
+import {
+  $activeGatewayProfile,
+  $newChatProfile,
+  $profiles,
+  ensureGatewayProfile,
+  normalizeProfileKey
+} from '@/store/profile'
 import {
   $currentCwd,
   $messages,
@@ -171,13 +178,16 @@ function upsertOptimisticSession(
   created: SessionCreateResponse,
   id: string,
   title: string | null = null,
-  preview: string | null = null
+  preview: string | null = null,
+  profile?: string
 ) {
   const now = Date.now() / 1000
-  // Stamp the profile the session was just created on (= the live gateway's
-  // profile) so the scoped sidebar shows the new row immediately instead of
-  // filtering it out as "default" until the aggregator re-fetches.
-  const profileKey = normalizeProfileKey($activeGatewayProfile.get())
+  // Stamp the profile the session was just created on so the scoped sidebar
+  // shows the new row immediately instead of filtering it out as "default"
+  // until the aggregator re-fetches. Defaults to the live gateway's profile;
+  // "send to all" passes each target profile explicitly (it creates sessions
+  // off other profiles' sockets, not the active one).
+  const profileKey = normalizeProfileKey(profile ?? $activeGatewayProfile.get())
 
   const session: SessionInfo = {
     cwd: created.info?.cwd ?? null,
@@ -391,6 +401,64 @@ export function useSessionActions({
       selectedStoredSessionIdRef,
       updateSessionState
     ]
+  )
+
+  // Fan one prompt into EVERY profile at once. For each profile we open (or
+  // reuse) its background gateway, create a fresh session there, register it
+  // exactly like a foreground send (runtime↔stored mapping + optimistic row +
+  // busy flag) so it streams, survives sidebar merges, and clears on completion,
+  // then submit the text — all without touching the user's current session.
+  //
+  // Profiles are walked SEQUENTIALLY: a cold profile lazily boots its own Hermes
+  // backend, and the Electron port picker races if several boot at once (they
+  // grab the same free port and all but one dies). Serial is correct and gentle
+  // on the machine; the turns still run concurrently server-side.
+  const sendToAllProfiles = useCallback(
+    async (text: string): Promise<number> => {
+      const body = text.trim()
+
+      if (!body) {
+        return 0
+      }
+
+      let sent = 0
+      let failed = 0
+
+      for (const profile of $profiles.get()) {
+        const key = normalizeProfileKey(profile.name)
+
+        try {
+          const created = await requestGatewayForProfile<SessionCreateResponse>(key, 'session.create', { cols: 96 })
+          const stored = created.stored_session_id ?? null
+          ensureSessionState(created.session_id, stored)
+
+          if (stored) {
+            upsertOptimisticSession(created, stored, null, body, key)
+          }
+
+          updateSessionState(
+            created.session_id,
+            state => ({ ...state, awaitingResponse: true, busy: true }),
+            stored
+          )
+          await requestGatewayForProfile(key, 'prompt.submit', { session_id: created.session_id, text: body })
+          sent += 1
+        } catch {
+          failed += 1
+        }
+      }
+
+      if (sent) {
+        notify({ durationMs: 2_500, kind: 'success', message: `Sent to ${sent} profile${sent === 1 ? '' : 's'}` })
+      }
+
+      if (failed) {
+        notify({ durationMs: 4_000, kind: 'error', message: `${failed} profile${failed === 1 ? '' : 's'} failed` })
+      }
+
+      return sent
+    },
+    [ensureSessionState, updateSessionState]
   )
 
   const selectSidebarItem = useCallback(
@@ -847,6 +915,7 @@ export function useSessionActions({
     removeSession,
     resumeSession,
     selectSidebarItem,
+    sendToAllProfiles,
     startFreshSessionDraft
   }
 }

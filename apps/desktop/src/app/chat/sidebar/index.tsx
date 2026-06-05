@@ -221,6 +221,7 @@ interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onDeleteSession: (sessionId: string) => void
   onArchiveSession: (sessionId: string) => void
   onNewSessionInWorkspace: (path: null | string) => void
+  onSendToAll: (text: string) => Promise<number> | void
 }
 
 export function ChatSidebar({
@@ -231,7 +232,8 @@ export function ChatSidebar({
   onResumeSession,
   onDeleteSession,
   onArchiveSession,
-  onNewSessionInWorkspace
+  onNewSessionInWorkspace,
+  onSendToAll
 }: ChatSidebarProps) {
   const sidebarOpen = useStore($sidebarOpen)
   const panesFlipped = useStore($panesFlipped)
@@ -746,7 +748,7 @@ export function ChatSidebar({
 
         {sidebarOpen && (
           <div className="shrink-0 px-0.5 pb-1 pt-0.5">
-            <ProfileRail />
+            <ProfileRail onSendToAll={onSendToAll} />
           </div>
         )}
       </SidebarContent>
