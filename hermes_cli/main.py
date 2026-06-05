@@ -10131,6 +10131,57 @@ def _cmd_update_pip(args):
     print("✓ Update complete! Restart hermes to use the new version.")
 
 
+def _should_reexec_after_pull(finalize_only: bool) -> bool:
+    """Whether to re-exec into the freshly-pulled code to finish the update.
+
+    Returns False (finish in-process) when:
+      - this IS already the finalize re-exec (avoid an infinite loop),
+      - on Windows, where ``os.exec*`` spawns a *new* PID and would break the
+        desktop installer's exit-code wait on the original process,
+      - under pytest, so the test runner's interpreter is never replaced
+        mid-suite,
+      - the ``HERMES_UPDATE_NO_REEXEC`` escape hatch is set.
+    """
+    if finalize_only or os.environ.get("HERMES_UPDATE_FINALIZE") == "1":
+        return False
+    if os.environ.get("HERMES_UPDATE_NO_REEXEC") == "1":
+        return False
+    if sys.platform == "win32":
+        return False
+    if "pytest" in sys.modules:
+        return False
+    return True
+
+
+def _reexec_into_updated_code() -> None:
+    """Replace this process with a fresh ``hermes update`` running new code.
+
+    Called after a successful git pull + dependency install. POSIX ``execve``
+    keeps the same PID and file descriptors, so a parent streaming our
+    stdout/stderr and waiting on our exit code (the desktop installer's
+    ``run_streamed``, or the gateway's bash exit-code wrapper) is unaffected.
+    The replacement run sees ``HERMES_UPDATE_FINALIZE=1`` and runs only the
+    post-pull finalize steps.
+
+    Returns (without re-execing) if ``execve`` raises, so the caller can fall
+    back to finishing the update in-process — the historical behavior.
+    """
+    try:
+        env = dict(os.environ)
+        env["HERMES_UPDATE_FINALIZE"] = "1"
+        argv = [sys.executable, "-m", "hermes_cli.main", *sys.argv[1:]]
+        print("→ Re-launching updater with refreshed code...")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execve(sys.executable, argv, env)
+    except Exception as exc:  # pragma: no cover - execve almost never fails
+        logger.warning(
+            "update: could not re-exec into refreshed code (%s); "
+            "finishing in-process",
+            exc,
+        )
+
+
 def _cmd_update_impl(args, gateway_mode: bool):
     """Body of ``cmd_update`` — kept separate so the wrapper can always
     restore stdio even on ``sys.exit``."""
@@ -10142,7 +10193,18 @@ def _cmd_update_impl(args, gateway_mode: bool):
     )
     assume_yes = bool(getattr(args, "yes", False))
 
-    print("⚕ Updating Hermes Agent...")
+    # Self-update hand-off marker. ``hermes update`` runs from the *old*
+    # install, so its post-pull steps (dep install, config migration, gateway
+    # restart) would otherwise execute stale in-memory code even though the new
+    # source is already on disk. After a successful pull we re-exec into the
+    # refreshed code with HERMES_UPDATE_FINALIZE=1; ``finalize_only`` is True on
+    # that second pass and makes us skip the fetch/pull work and the re-exec.
+    finalize_only = os.environ.get("HERMES_UPDATE_FINALIZE") == "1"
+
+    if finalize_only:
+        print("⚕ Finalizing update with refreshed code...")
+    else:
+        print("⚕ Updating Hermes Agent...")
     print()
 
     # On Windows, abort early if another hermes.exe is holding the venv shim
@@ -10158,8 +10220,10 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 sys.exit(2)
 
     # Pre-update backup — runs before any git/file mutation so users can
-    # always roll back to the exact state they had before this update.
-    _run_pre_update_backup(args)
+    # always roll back to the exact state they had before this update. Skipped
+    # on the finalize re-exec (the original pass already took it).
+    if not finalize_only:
+        _run_pre_update_backup(args)
 
     # Try git-based update first, fall back to ZIP download on Windows
     # when git file I/O is broken (antivirus, NTFS filter drivers, etc.)
@@ -10363,7 +10427,11 @@ def _cmd_update_impl(args, gateway_mode: bool):
         )
         commit_count = int(result.stdout.strip())
 
-        if commit_count == 0:
+        # On the finalize re-exec the pull already happened in the original
+        # pass, so origin is level with HEAD (count == 0). Don't take the
+        # "Already up to date" early return — fall through and run the
+        # post-pull steps (now with refreshed code).
+        if commit_count == 0 and not finalize_only:
             _invalidate_update_cache()
 
             # Even if origin is up to date, the fork may be behind upstream
@@ -10390,24 +10458,30 @@ def _cmd_update_impl(args, gateway_mode: bool):
             print("✓ Already up to date!")
             return
 
-        print(f"→ Found {commit_count} new commit(s)")
-
-        # Snapshot critical state (state.db, config, pairing JSONs, etc.)
-        # before pulling so a user can recover if something goes wrong.
-        # Issue #15733 reported missing pairing data after an update; even
-        # though `git pull` can't touch $HERMES_HOME, this is cheap
-        # belt-and-suspenders insurance and gives the user something to
-        # restore from via `/snapshot list` / `/snapshot restore <id>`.
+        # The "found N commits" notice and pre-update snapshot belong to the
+        # original pass only — the finalize re-exec sees count == 0 and the
+        # snapshot was already taken before the pull.
         pre_update_snapshot_id = None
-        try:
-            from hermes_cli.backup import create_quick_snapshot
+        if not finalize_only:
+            print(f"→ Found {commit_count} new commit(s)")
 
-            pre_update_snapshot_id = create_quick_snapshot(label="pre-update", keep=1)
-            if pre_update_snapshot_id:
-                print(f"  ✓ Pre-update snapshot: {pre_update_snapshot_id}")
-        except Exception as exc:
-            # Never let a snapshot failure block an update.
-            logger.debug("Pre-update snapshot failed: %s", exc)
+            # Snapshot critical state (state.db, config, pairing JSONs, etc.)
+            # before pulling so a user can recover if something goes wrong.
+            # Issue #15733 reported missing pairing data after an update; even
+            # though `git pull` can't touch $HERMES_HOME, this is cheap
+            # belt-and-suspenders insurance and gives the user something to
+            # restore from via `/snapshot list` / `/snapshot restore <id>`.
+            try:
+                from hermes_cli.backup import create_quick_snapshot
+
+                pre_update_snapshot_id = create_quick_snapshot(
+                    label="pre-update", keep=1
+                )
+                if pre_update_snapshot_id:
+                    print(f"  ✓ Pre-update snapshot: {pre_update_snapshot_id}")
+            except Exception as exc:
+                # Never let a snapshot failure block an update.
+                logger.debug("Pre-update snapshot failed: %s", exc)
 
         print("→ Pulling updates...")
         update_succeeded = False
@@ -10578,6 +10652,19 @@ def _cmd_update_impl(args, gateway_mode: bool):
             _install_python_dependencies_with_optional_fallback(pip_cmd, group=install_group)
 
         _refresh_active_lazy_features()
+
+        # Hand off the remaining post-pull work (node deps, web/desktop build,
+        # config migration, skills sync, gateway restart) to the freshly-pulled
+        # code. These are the most frequently-changed and historically most
+        # fragile update steps, yet they used to run from the modules this
+        # process imported at startup — so a bug fixed in the pulled version
+        # still crashed here, forcing users to run ``hermes update`` twice. The
+        # git pull AND dependency install are done, so the new source and its
+        # deps are on disk; re-exec now finishes the update with new code. On
+        # the finalize pass (or Windows / under pytest / opt-out) we skip the
+        # re-exec and finish in-process — see _should_reexec_after_pull.
+        if _should_reexec_after_pull(finalize_only):
+            _reexec_into_updated_code()
 
         _update_node_dependencies()
         _build_web_ui(PROJECT_ROOT / "web")
