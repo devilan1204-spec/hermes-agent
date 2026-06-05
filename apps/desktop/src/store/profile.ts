@@ -285,11 +285,17 @@ export function newSessionInProfile(name: string): void {
   void ensureGatewayProfile(target)
 }
 
-// Fire one prompt into EVERY profile at once: open (or reuse) each profile's
-// background gateway, create a fresh session there, and submit the text — all
-// without moving the user off their current profile/session. Turns run
-// concurrently server-side and stream into the background sockets; the new
-// sessions surface in the sidebar (All profiles view) as they persist.
+// Fire one prompt into EVERY profile: open (or reuse) each profile's background
+// gateway, create a fresh session there, and submit the text — all without
+// moving the user off their current profile/session. Turns run concurrently
+// server-side and stream into the background sockets; the new sessions surface
+// in the sidebar (All profiles view) as they persist.
+//
+// Profiles are walked SEQUENTIALLY on purpose: a cold profile lazily boots its
+// own Hermes backend, and the Electron port picker races if several boot at
+// once (they grab the same free port and all but one dies). Once a socket is
+// open the create+submit is quick, so serial is correct without being slow, and
+// it avoids stampeding the machine with N backends at once.
 export async function sendToAllProfiles(text: string): Promise<number> {
   const body = text.trim()
 
@@ -297,16 +303,20 @@ export async function sendToAllProfiles(text: string): Promise<number> {
     return 0
   }
 
-  const results = await Promise.allSettled(
-    $profiles.get().map(async (profile: ProfileInfo) => {
-      const key = normalizeProfileKey(profile.name)
+  let sent = 0
+  let failed = 0
+
+  for (const profile of $profiles.get()) {
+    const key = normalizeProfileKey(profile.name)
+
+    try {
       const created = await requestGatewayForProfile<SessionCreateResponse>(key, 'session.create', { cols: 96 })
       await requestGatewayForProfile(key, 'prompt.submit', { session_id: created.session_id, text: body })
-    })
-  )
-
-  const sent = results.filter(result => result.status === 'fulfilled').length
-  const failed = results.length - sent
+      sent += 1
+    } catch {
+      failed += 1
+    }
+  }
 
   if (sent) {
     notify({ durationMs: 2_500, kind: 'success', message: `Sent to ${sent} profile${sent === 1 ? '' : 's'}` })

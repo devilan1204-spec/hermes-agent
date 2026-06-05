@@ -23,7 +23,6 @@ interface SendToAllDialogProps {
 // background, so there's no point holding the user on N backends.
 export function SendToAllDialog({ onOpenChange, open }: SendToAllDialogProps) {
   const [text, setText] = useState('')
-  const [sending, setSending] = useState(false)
 
   const close = (next: boolean) => {
     if (!next) {
@@ -33,22 +32,19 @@ export function SendToAllDialog({ onOpenChange, open }: SendToAllDialogProps) {
     onOpenChange(next)
   }
 
-  const send = async () => {
+  // Fire-and-forget: the broadcast boots each profile's backend sequentially
+  // (can take a few seconds across many profiles), so dispatch and close right
+  // away — progress comes back as toasts rather than a blocking spinner.
+  const send = () => {
     const body = text.trim()
 
-    if (!body || sending) {
+    if (!body) {
       return
     }
 
-    setSending(true)
     triggerHaptic('success')
-
-    try {
-      await sendToAllProfiles(body)
-      close(false)
-    } finally {
-      setSending(false)
-    }
+    void sendToAllProfiles(body)
+    close(false)
   }
 
   return (
@@ -60,12 +56,11 @@ export function SendToAllDialog({ onOpenChange, open }: SendToAllDialogProps) {
         </DialogHeader>
         <Textarea
           autoFocus
-          disabled={sending}
           onChange={event => setText(event.target.value)}
           onKeyDown={event => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
               event.preventDefault()
-              void send()
+              send()
             } else if (event.key === 'Escape') {
               close(false)
             }
@@ -75,11 +70,11 @@ export function SendToAllDialog({ onOpenChange, open }: SendToAllDialogProps) {
           value={text}
         />
         <DialogFooter>
-          <Button disabled={sending} onClick={() => close(false)} type="button" variant="ghost">
+          <Button onClick={() => close(false)} type="button" variant="ghost">
             Cancel
           </Button>
-          <Button disabled={!text.trim() || sending} onClick={() => void send()} type="button">
-            {sending ? 'Sending…' : 'Send to all'}
+          <Button disabled={!text.trim()} onClick={send} type="button">
+            Send to all
           </Button>
         </DialogFooter>
       </DialogContent>
