@@ -10,6 +10,7 @@ import {
 } from '../store'
 import { Check, X, ChevronRight, FileText } from 'lucide-react'
 import clsx from 'clsx'
+import { BrandMark } from '../components/brand-mark'
 import { Loader } from '../components/loader'
 
 interface ProgressProps {
@@ -33,37 +34,45 @@ export default function ProgressScreen({ bootstrap }: ProgressProps) {
     }
   }, [bootstrap.logs.length, showLogs])
 
-  // Fixed action label — the per-stage detail lives in the list below, so the
-  // header must not echo the current stage (that read as the same thing twice).
-  const heading =
-    bootstrap.status === 'completed' ? 'Done' : mode === 'update' ? 'Updating' : 'Installing'
+  const isUpdate = mode === 'update'
+  const title = bootstrap.status === 'completed' ? 'Done' : isUpdate ? 'Updating Hermes' : 'Setting up Hermes Agent'
+  const description = isUpdate
+    ? 'Hermes is updating to the latest version — this only takes a moment.'
+    : 'This is a one-time setup. The Hermes installer is downloading dependencies and configuring your machine. Subsequent launches will skip this step.'
+  const pct = Math.round(progress.fraction * 100)
 
   return (
     <div className="hermes-fade-in flex h-full flex-col">
-      <div className="border-b border-(--stroke-nous) px-6 py-4">
-        <div className="mb-3 flex items-center justify-between text-xs">
-          <span className={clsx(bootstrap.status === 'running' ? 'shimmer text-foreground/60' : 'text-foreground')}>
-            {heading}
-          </span>
-          <div className="tabular-nums text-muted-foreground">
-            {progress.done} of {progress.total} steps
-          </div>
-        </div>
-        {/* Top progress bar — plain HTML, derived from --primary so it
-            tracks the theme accent. */}
-        <div className="h-1 w-full overflow-hidden rounded-full bg-(--ui-bg-tertiary)">
-          <div
-            className="h-full bg-primary transition-all duration-300 ease-out"
-            style={{ width: `${Math.max(2, progress.fraction * 100)}%` }}
-          />
+      {/* Header: brand + title + description, matching the desktop install overlay. */}
+      <div className="flex flex-shrink-0 items-start gap-4 px-6 pt-6 pb-4">
+        <BrandMark className="size-11" />
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
         </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Flat stage list: only the running step is opaque; the rest read as
-            muted. Running spinner overhangs left so labels stay aligned; the
-            terminal check/cross sits right of the label. */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 pb-4">
+          {/* Progress line + bar; the count shimmers while the install runs. */}
+          <div className="mb-4">
+            <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span className={clsx(bootstrap.status === 'running' && 'shimmer')}>
+                {progress.done} of {progress.total} steps complete
+              </span>
+              <span className="tabular-nums">{pct}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-(--ui-bg-tertiary)">
+              <div
+                className="h-full bg-primary transition-all duration-300 ease-out"
+                style={{ width: `${Math.max(2, progress.fraction * 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Flat stage list: only the running step is opaque; the rest read as
+              muted. Running loader overhangs left so labels stay aligned; the
+              terminal check/cross sits right of the label. */}
           <ol className="space-y-0.5">
             {bootstrap.stageOrder.map((name) => {
               const rec = bootstrap.stages[name]
