@@ -6,15 +6,18 @@ import type {
   MouseEvent as ReactMouseEvent,
   ReactNode
 } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import ShikiHighlighter from 'react-shiki'
 import { Streamdown } from 'streamdown'
 
 import { HERMES_PATHS_MIME } from '@/app/chat/hooks/use-composer-actions'
 import { PageLoader } from '@/components/page-loader'
-import { translateNow, useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { PreviewTarget } from '@/store/preview'
+
+const MermaidDiagram = lazy(() =>
+  import('@/components/chat/mermaid-block').then(m => ({ default: m.MermaidBlock }))
+)
 
 const SHIKI_THEME = { dark: 'github-dark-default', light: 'github-light-default' } as const
 const TEXT_PREVIEW_MAX_BYTES = 512 * 1024
@@ -144,7 +147,7 @@ function filePathForTarget(target: PreviewTarget) {
 
 function formatBytes(bytes: number | undefined) {
   if (!bytes) {
-    return translateNow('preview.unknownSize')
+    return 'unknown size'
   }
 
   const units = ['B', 'KB', 'MB', 'GB']
@@ -257,6 +260,16 @@ function MarkdownCode({ className, children, ...props }: ComponentProps<'code'>)
     )
   }
 
+  if (language === 'mermaid') {
+    return (
+      <Suspense
+        fallback={<div className="my-3 text-xs text-muted-foreground">Loading diagram…</div>}
+      >
+        <MermaidDiagram chart={String(children).replace(/\n$/, '')} />
+      </Suspense>
+    )
+  }
+
   return (
     <ShikiHighlighter
       addDefaultStyles={false}
@@ -297,8 +310,6 @@ function MarkdownPreview({ text }: { text: string }) {
 }
 
 function PreviewToggle({ asSource, onToggle }: { asSource: boolean; onToggle: () => void }) {
-  const { t } = useI18n()
-
   return (
     <div className="sticky top-0 z-10 flex justify-end border-b border-border/40 bg-transparent px-3 py-1 backdrop-blur">
       <button
@@ -306,7 +317,7 @@ function PreviewToggle({ asSource, onToggle }: { asSource: boolean; onToggle: ()
         onClick={onToggle}
         type="button"
       >
-        {asSource ? t.preview.renderedPreview : t.preview.source}
+        {asSource ? 'PREVIEW' : 'SOURCE'}
       </button>
     </div>
   )
@@ -333,7 +344,6 @@ function startLineDrag(event: ReactDragEvent<HTMLElement>, filePath: string, { e
 }
 
 function SourceView({ filePath, language, text }: { filePath: string; language: string; text: string }) {
-  const { t } = useI18n()
   const lineCount = useMemo(() => Math.max(1, text.split('\n').length), [text])
   const [selection, setSelection] = useState<LineSelection | null>(null)
   const inSelection = (line: number) => selection != null && line >= selection.start && line <= selection.end
@@ -377,7 +387,7 @@ function SourceView({ filePath, language, text }: { filePath: string; language: 
               key={line}
               onClick={event => handleLineClick(event, line)}
               onDragStart={event => handleDragStart(event, line)}
-              title={t.preview.sourceLineTitle}
+              title="Click to select · shift-click to extend · drag to composer"
             >
               {line}
             </div>
@@ -412,7 +422,6 @@ function SourceView({ filePath, language, text }: { filePath: string; language: 
 }
 
 export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; target: PreviewTarget }) {
-  const { t } = useI18n()
   const [state, setState] = useState<LocalPreviewState>({ loading: true })
   const [forcePreview, setForcePreview] = useState(false)
   const [renderMarkdownAsSource, setRenderMarkdownAsSource] = useState(false)
@@ -487,11 +496,11 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
   }, [blockedByTarget, filePath, forcePreview, isImage, isText, reloadKey, target.language])
 
   if (state.loading) {
-    return <PageLoader label={t.preview.loading} />
+    return <PageLoader label="Loading preview" />
   }
 
   if (state.error) {
-    return <PreviewEmptyState body={state.error} title={t.preview.unavailable} />
+    return <PreviewEmptyState body={state.error} title="Preview unavailable" />
   }
 
   if (
@@ -506,11 +515,11 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
       <PreviewEmptyState
         body={
           binary
-            ? t.preview.binaryBody(target.label)
-            : t.preview.largeBody(target.label, formatBytes(size))
+            ? `Previewing ${target.label} may show unreadable text.`
+            : `${target.label} is ${formatBytes(size)}. Hermes will only show the first 512 KB.`
         }
-        primaryAction={{ label: t.preview.previewAnyway, onClick: () => setForcePreview(true) }}
-        title={binary ? t.preview.binaryTitle : t.preview.largeTitle}
+        primaryAction={{ label: 'Preview anyway', onClick: () => setForcePreview(true) }}
+        title={binary ? 'This looks like a binary file' : 'This file is large'}
         tone="warning"
       />
     )
@@ -537,7 +546,7 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
       <div className="h-full overflow-auto bg-transparent">
         {state.truncated && (
           <div className="border-b border-border/60 bg-muted/35 px-3 py-1.5 text-[0.68rem] text-muted-foreground">
-            {t.preview.truncated}
+            Showing first 512 KB.
           </div>
         )}
         {isMarkdown && <PreviewToggle asSource={!showRendered} onToggle={() => setRenderMarkdownAsSource(s => !s)} />}
@@ -552,8 +561,8 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
 
   return (
     <PreviewEmptyState
-      body={t.preview.noInlineBody(target.mimeType || '')}
-      title={t.preview.noInlineTitle}
+      body={`${target.mimeType || 'This file type'} can still be attached as context.`}
+      title="No inline preview"
     />
   )
 }
