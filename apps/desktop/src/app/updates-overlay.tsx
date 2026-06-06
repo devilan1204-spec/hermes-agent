@@ -182,7 +182,7 @@ function IdleView({
         </DialogDescription>
       </div>
 
-      <div className="grid gap-3 border-t border-(--ui-stroke-tertiary) pt-4">
+      <div className="grid gap-3">
         {groups.map(group => (
           <div key={group.id}>
             <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
