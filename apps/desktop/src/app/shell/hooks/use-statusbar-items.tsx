@@ -425,8 +425,8 @@ export function useStatusbarItems({
               variant: 'action' as const
             })
       },
-      ...(backendVersionItem ? [backendVersionItem] : []),
-      clientVersionItem
+      clientVersionItem,
+      ...(backendVersionItem ? [backendVersionItem] : [])
     ],
     [
       busy,
