@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { HermesConnection } from '@/global'
 import type * as HermesModule from '@/hermes'
+import { startRemoteUpdate } from '@/store/remote-update'
 import { $sessions, setConnection, setSessions } from '@/store/session'
 import { openUpdatesWindow } from '@/store/updates'
 import type { SessionInfo } from '@/types/hermes'
@@ -24,6 +25,10 @@ vi.mock('@/hermes', async importOriginal => {
 
 vi.mock('@/store/updates', () => ({
   openUpdatesWindow: vi.fn()
+}))
+
+vi.mock('@/store/remote-update', () => ({
+  startRemoteUpdate: vi.fn()
 }))
 
 // The active id the desktop holds is the *runtime* session id from
@@ -192,6 +197,7 @@ describe('usePromptActions /update', () => {
     cleanup()
     vi.restoreAllMocks()
     vi.mocked(openUpdatesWindow).mockClear()
+    vi.mocked(startRemoteUpdate).mockClear()
     setConnection(() => null)
   })
 
@@ -206,10 +212,11 @@ describe('usePromptActions /update', () => {
     await handle!.submitText('/update')
 
     expect(openUpdatesWindow).toHaveBeenCalledTimes(1)
+    expect(startRemoteUpdate).not.toHaveBeenCalled()
     expect(requestGateway).not.toHaveBeenCalledWith('slash.exec', expect.anything())
   })
 
-  it('does not open the overlay for a remote backend (cannot self-update the host)', async () => {
+  it('triggers a remote self-update (not the local overlay) for a remote backend', async () => {
     setConnection(() => ({ mode: 'remote' }) as HermesConnection)
     const refreshSessions = vi.fn(async () => undefined)
     const requestGateway = vi.fn(async () => ({}) as never)
@@ -219,6 +226,7 @@ describe('usePromptActions /update', () => {
 
     await handle!.submitText('/update')
 
+    expect(startRemoteUpdate).toHaveBeenCalledTimes(1)
     expect(openUpdatesWindow).not.toHaveBeenCalled()
     expect(requestGateway).not.toHaveBeenCalledWith('slash.exec', expect.anything())
   })

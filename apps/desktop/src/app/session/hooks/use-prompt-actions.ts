@@ -31,6 +31,7 @@ import {
 import { clearNotifications, notify, notifyError } from '@/store/notifications'
 import { requestDesktopOnboarding } from '@/store/onboarding'
 import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile, normalizeProfileKey } from '@/store/profile'
+import { startRemoteUpdate } from '@/store/remote-update'
 import {
   $busy,
   $connection,
@@ -446,19 +447,15 @@ export function usePromptActions({
           return
         }
 
-        // /update opens the desktop's native updater overlay rather than the
-        // CLI's interactive modal (which can't run headless in the slash
-        // worker). The Electron updater patches the LOCAL checkout, so it only
-        // applies when this window drives a local backend — a remote gateway
-        // updates on its own host, which the desktop can't trigger yet.
+        // /update has two rails. Local backend: the desktop's native (Electron)
+        // updater overlay, which patches the local checkout. Remote backend: the
+        // gateway can't be reached by the local updater, so tell it to update
+        // itself (update.start) and track it with a status pill that survives the
+        // restart/reconnect. Either way we avoid the CLI's interactive modal,
+        // which can't run headless in the slash worker.
         if (normalizedName === 'update') {
           if ($connection.get()?.mode === 'remote') {
-            notify({
-              kind: 'info',
-              title: 'Update',
-              message:
-                'Updating a remote gateway from the desktop app isn’t supported yet — run `hermes update` on the host machine.'
-            })
+            void startRemoteUpdate(requestGateway)
 
             return
           }

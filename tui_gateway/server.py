@@ -8398,3 +8398,154 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5002, "command timed out (30s)")
     except Exception as e:
         return _err(rid, 5003, str(e))
+
+
+# ── Methods: update.start / update.status ────────────────────────────
+# Self-update for a REMOTE backend. The desktop app's native (Electron) updater
+# can only patch the LOCAL checkout, so when a desktop window drives a backend
+# on another host the only way to update THAT box is to have the gateway run
+# `hermes update` on itself — mirroring the messaging gateway's /update. We
+# spawn it detached (setsid) so it survives any restart, and the desktop polls
+# update.status across the disconnect/reconnect. Markers are namespaced
+# (.desktop_update_*) so a co-running messaging gateway's update watcher/cleanup
+# never collides with ours.
+_DESKTOP_UPDATE_PENDING = _hermes_home / ".desktop_update_pending.json"
+_DESKTOP_UPDATE_OUTPUT = _hermes_home / ".desktop_update_output.txt"
+_DESKTOP_UPDATE_EXIT_CODE = _hermes_home / ".desktop_update_exit_code"
+
+
+def _resolve_update_hermes_bin() -> "list[str] | None":
+    """Resolve `hermes` as argv parts: PATH shim first, module fallback."""
+    import shutil
+
+    hermes_bin = shutil.which("hermes")
+    if hermes_bin:
+        return [hermes_bin]
+    try:
+        import importlib.util
+
+        if importlib.util.find_spec("hermes_cli") is not None:
+            return [sys.executable, "-m", "hermes_cli.main"]
+    except Exception:
+        pass
+    return None
+
+
+@method("update.start")
+def _(rid, params: dict) -> dict:
+    import json as _json
+    import shlex as _shlex
+    import shutil as _shutil
+    from datetime import datetime
+
+    try:
+        from hermes_cli.config import is_managed
+
+        if is_managed():
+            return _err(rid, 4030, "This managed install can't self-update.")
+    except Exception:
+        pass
+
+    project_root = Path(__file__).resolve().parent.parent
+    if not (project_root / ".git").exists():
+        return _err(rid, 4031, "Backend is not a git checkout; can't self-update.")
+
+    hermes_cmd = _resolve_update_hermes_bin()
+    if not hermes_cmd:
+        return _err(rid, 4032, "Could not locate the hermes command on the backend.")
+
+    # An update already in flight (pending written, no exit code yet): don't
+    # spawn a second updater — just let the caller poll the existing one.
+    if _DESKTOP_UPDATE_PENDING.exists() and not _DESKTOP_UPDATE_EXIT_CODE.exists():
+        return _ok(rid, {"started": True, "already_running": True})
+
+    _DESKTOP_UPDATE_EXIT_CODE.unlink(missing_ok=True)
+    _DESKTOP_UPDATE_OUTPUT.unlink(missing_ok=True)
+    _tmp = _DESKTOP_UPDATE_PENDING.with_suffix(".tmp")
+    _tmp.write_text(_json.dumps({"source": "desktop", "timestamp": datetime.now().isoformat()}))
+    _tmp.replace(_DESKTOP_UPDATE_PENDING)
+
+    # Plain `hermes update` (no --gateway): with no TTY it takes the
+    # non-interactive path (safe config migrations auto-applied, local changes
+    # handled per `updates.non_interactive_local_changes`). --gateway would wait
+    # on file-IPC prompts that nothing in the tui_gateway answers, so it'd hang.
+    try:
+        if sys.platform == "win32":
+            import textwrap
+            from hermes_cli._subprocess_compat import windows_detach_popen_kwargs
+
+            helper = textwrap.dedent(
+                """
+                import os, subprocess, sys
+                output_path = sys.argv[1]
+                exit_code_path = sys.argv[2]
+                cmd = sys.argv[3:]
+                env = dict(os.environ)
+                env["PYTHONUNBUFFERED"] = "1"
+                with open(output_path, "wb") as f:
+                    proc = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT, env=env)
+                    rc = proc.wait()
+                with open(exit_code_path, "w") as f:
+                    f.write(str(rc))
+                """
+            ).strip()
+            subprocess.Popen(
+                [
+                    sys.executable, "-c", helper,
+                    str(_DESKTOP_UPDATE_OUTPUT), str(_DESKTOP_UPDATE_EXIT_CODE),
+                    *hermes_cmd, "update",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                **windows_detach_popen_kwargs(),
+            )
+        else:
+            hermes_cmd_str = " ".join(_shlex.quote(part) for part in hermes_cmd)
+            update_cmd = (
+                f"PYTHONUNBUFFERED=1 {hermes_cmd_str} update"
+                f" > {_shlex.quote(str(_DESKTOP_UPDATE_OUTPUT))} 2>&1; "
+                f"rc=$?; printf '%s' \"$rc\" > {_shlex.quote(str(_DESKTOP_UPDATE_EXIT_CODE))}"
+            )
+            setsid_bin = _shutil.which("setsid")
+            argv = ([setsid_bin] if setsid_bin else []) + ["bash", "-c", update_cmd]
+            subprocess.Popen(
+                argv,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+    except Exception as e:
+        _DESKTOP_UPDATE_PENDING.unlink(missing_ok=True)
+        _DESKTOP_UPDATE_EXIT_CODE.unlink(missing_ok=True)
+        return _err(rid, 5030, f"Failed to start update: {e}")
+
+    return _ok(rid, {"started": True})
+
+
+@method("update.status")
+def _(rid, params: dict) -> dict:
+    output = ""
+    try:
+        if _DESKTOP_UPDATE_OUTPUT.exists():
+            output = _DESKTOP_UPDATE_OUTPUT.read_text(errors="replace")[-4000:]
+    except Exception:
+        output = ""
+
+    finished = _DESKTOP_UPDATE_EXIT_CODE.exists()
+    exit_code = None
+    if finished:
+        try:
+            raw = _DESKTOP_UPDATE_EXIT_CODE.read_text().strip()
+            exit_code = int(raw) if raw else None
+        except Exception:
+            exit_code = None
+
+    return _ok(
+        rid,
+        {
+            "running": _DESKTOP_UPDATE_PENDING.exists() and not finished,
+            "finished": finished,
+            "exit_code": exit_code,
+            "output": output,
+        },
+    )
