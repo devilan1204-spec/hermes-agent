@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ErrorIcon } from '@/components/ui/error-state'
@@ -50,7 +51,6 @@ interface DesktopInstallOverlayProps {
 interface StageRowProps {
   descriptor: DesktopBootstrapStageDescriptor
   result: DesktopBootstrapStageResult | undefined
-  isCurrent: boolean
   now: number
 }
 
@@ -100,7 +100,7 @@ function formatElapsed(ms: number): string {
   return `${m}:${String(s - m * 60).padStart(2, '0')}`
 }
 
-function StageRow({ descriptor, result, isCurrent, now }: StageRowProps) {
+function StageRow({ descriptor, result, now }: StageRowProps) {
   const { t } = useI18n()
   const copy = t.install
   const state: DesktopBootstrapStageState = result?.state || 'pending'
@@ -111,13 +111,12 @@ function StageRow({ descriptor, result, isCurrent, now }: StageRowProps) {
   const icon = useMemo(() => {
     switch (state) {
       case 'running':
-        return <Loader className="size-4" type="lemniscate-bloom" />
+        return <Loader className="size-6" type="fourier-flow" />
 
       case 'succeeded':
-        return <Codicon className="text-(--ui-text-secondary)" name="check" size="1rem" />
 
       case 'skipped':
-        return <Codicon className="text-(--ui-text-tertiary)" name="check" size="1rem" />
+        return <Codicon className="text-muted-foreground" name="check" size="0.8125rem" />
 
       case 'failed':
         return <ErrorIcon size="1rem" />
@@ -132,30 +131,28 @@ function StageRow({ descriptor, result, isCurrent, now }: StageRowProps) {
   const reason = result?.json?.reason || result?.error || null
 
   return (
-    <li
-      className={cn(
-        'flex items-start gap-3 rounded-md px-3 py-2 transition-colors',
-        isCurrent && 'bg-(--ui-control-hover-background)'
+    <li className="flex items-center gap-3 px-3 py-1">
+      {state === 'running' && (
+        <div className="-mr-2 -ml-4 flex size-6 flex-shrink-0 items-center justify-center">{icon}</div>
       )}
-    >
-      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">{icon}</div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className={cn('truncate text-sm font-medium', state === 'pending' && 'text-muted-foreground')}>
+        <div className="flex items-center gap-1.5">
+          <span className={cn('truncate text-sm', state === 'running' ? 'font-medium' : 'text-muted-foreground')}>
             {formatStageName(descriptor.name)}
           </span>
-          <span className="flex-shrink-0 text-xs tabular-nums text-muted-foreground">
-            {state === 'running'
-              ? elapsed
-                ? `${copy.stageStates[state]} · ${elapsed}`
-                : copy.stageStates[state]
-              : null}
-            {state === 'succeeded' || state === 'skipped' ? formatDuration(result?.durationMs) : null}
-            {state === 'failed' ? copy.stageStates[state] : null}
-          </span>
+          {state !== 'running' && <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>}
         </div>
         {reason && state !== 'pending' && <p className="mt-0.5 truncate text-xs text-muted-foreground">{reason}</p>}
       </div>
+      <span className="flex-shrink-0 text-xs tabular-nums text-muted-foreground">
+        {state === 'running'
+          ? elapsed
+            ? `${copy.stageStates[state]} · ${elapsed}`
+            : copy.stageStates[state]
+          : null}
+        {state === 'succeeded' || state === 'skipped' ? formatDuration(result?.durationMs) : null}
+        {state === 'failed' ? copy.stageStates[state] : null}
+      </span>
     </li>
   )
 }
@@ -246,6 +243,7 @@ function applyEvent(state: DesktopBootstrapState, ev: DesktopBootstrapEvent): De
 export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayProps) {
   const { t } = useI18n()
   const copy = t.install
+
   const [state, setState] = useState<DesktopBootstrapState>(EMPTY_STATE)
   const [logOpen, setLogOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -416,13 +414,14 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-background/90 backdrop-blur-md p-4">
       <div className="flex w-full max-w-2xl max-h-[90vh] flex-col rounded-xl border border-(--stroke-nous) bg-card shadow-nous">
         {/* Header -- always visible, never scrolls */}
-        <div className="flex-shrink-0 p-8 pb-4">
-          <h2 className="text-xl font-semibold tracking-tight">
-            {failed ? copy.failedTitle : state.active ? copy.settingUpTitle : copy.finishingTitle}
-          </h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            {failed ? copy.failedDesc : copy.activeDesc}
-          </p>
+        <div className="flex flex-shrink-0 items-start gap-4 p-8 pb-4">
+          {!failed && <BrandMark className="size-11 shrink-0" />}
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold tracking-tight">
+              {failed ? copy.failedTitle : state.active ? copy.settingUpTitle : copy.finishingTitle}
+            </h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">{failed ? copy.failedDesc : copy.activeDesc}</p>
+          </div>
         </div>
 
         {/* Scrollable middle: progress, stages, error block, log */}
@@ -448,7 +447,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
 
           {totalCount === 0 && state.active && (
             <div className="mb-4 flex items-center gap-2.5 text-sm text-muted-foreground">
-              <Loader className="size-5" type="lemniscate-bloom" />
+              <Loader className="size-5" type="fourier-flow" />
               <span>{copy.fetchingManifest}</span>
             </div>
           )}
@@ -464,15 +463,9 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           )}
 
           {stages.length > 0 && (
-            <ol className="mb-4 space-y-1">
+            <ol className="mb-4 space-y-0.5">
               {stages.map(stage => (
-                <StageRow
-                  descriptor={stage}
-                  isCurrent={stage.name === currentStage}
-                  key={stage.name}
-                  now={now}
-                  result={state.stages[stage.name]}
-                />
+                <StageRow descriptor={stage} key={stage.name} now={now} result={state.stages[stage.name]} />
               ))}
             </ol>
           )}
@@ -530,7 +523,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                 size="sm"
                 variant="ghost"
               >
-                {cancelling ? <Loader className="size-4" type="lemniscate-bloom" /> : null}
+                {cancelling ? <Loader className="size-4" type="fourier-flow" /> : null}
                 {cancelling ? copy.cancelling : copy.cancelInstall}
               </Button>
             </div>
