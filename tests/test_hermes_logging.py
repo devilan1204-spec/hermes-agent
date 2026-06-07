@@ -591,10 +591,16 @@ class TestComponentPrefixes:
 
     def test_gateway_prefix(self):
         assert "gateway" in hermes_logging.COMPONENT_PREFIXES
-        # The gateway component captures both core gateway logs and the
-        # hermes_plugins facility (plugin-installed gateway adapters log
-        # under that prefix).
-        assert ("gateway", "hermes_plugins") == hermes_logging.COMPONENT_PREFIXES["gateway"]
+        # The gateway component captures core gateway logs, the hermes_plugins
+        # facility, and plugins.platforms (messaging-platform adapters that
+        # migrated out of gateway/platforms/ into bundled plugins, #41112).
+        # Assert the required members as an invariant rather than an exact
+        # tuple snapshot so adding future gateway-component prefixes doesn't
+        # break this test.
+        gateway_prefixes = hermes_logging.COMPONENT_PREFIXES["gateway"]
+        assert "gateway" in gateway_prefixes
+        assert "hermes_plugins" in gateway_prefixes
+        assert "plugins.platforms" in gateway_prefixes
 
     def test_agent_prefix(self):
         prefixes = hermes_logging.COMPONENT_PREFIXES["agent"]
