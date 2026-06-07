@@ -777,7 +777,12 @@ def run_conversation(
     # present are surfaced in an advisory footer so the model cannot
     # over-claim success while the file is actually unchanged on disk.
     agent._turn_failed_file_mutations: Dict[str, Dict[str, Any]] = {}
-    
+
+    # Clear any verifier footer from a previous turn.  The footer is
+    # stored separately from final_response (see #40772 fix) and must
+    # not leak across turns.
+    agent._file_mutation_verifier_footer = None
+
     # Record the execution thread so interrupt()/clear_interrupt() can
     # scope the tool-level interrupt signal to THIS agent's thread only.
     # Must be set before any thread-scoped interrupt syncing.
@@ -4740,7 +4745,12 @@ def run_conversation(
             if _failed and agent._file_mutation_verifier_enabled():
                 footer = agent._format_file_mutation_failure_footer(_failed)
                 if footer:
-                    final_response = final_response.rstrip() + "\n\n" + footer
+                    # Store the footer separately instead of mutating
+                    # final_response.  This prevents TTS, the
+                    # transform_llm_output plugin hook, and other
+                    # downstream consumers from treating the advisory as
+                    # part of the model's response text.  (#40772)
+                    agent._file_mutation_verifier_footer = footer
         except Exception as _ver_err:
             logger.debug("file-mutation verifier footer failed: %s", _ver_err)
 
@@ -4856,6 +4866,7 @@ def run_conversation(
             break
 
     # Build result with interrupt info if applicable
+    _verifier_footer = getattr(agent, "_file_mutation_verifier_footer", None) or None
     result = {
         "final_response": final_response,
         "last_reasoning": last_reasoning,
@@ -4884,6 +4895,7 @@ def run_conversation(
         "cost_status": agent.session_cost_status,
         "cost_source": agent.session_cost_source,
         "session_id": agent.session_id,
+        "file_mutation_verifier_footer": _verifier_footer,
     }
     if agent._tool_guardrail_halt_decision is not None:
         result["guardrail"] = agent._tool_guardrail_halt_decision.to_metadata()

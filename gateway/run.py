@@ -9566,6 +9566,14 @@ class GatewayRunner:
 
             response = agent_result.get("final_response") or ""
 
+            # Append file-mutation verifier footer to the response text
+            # sent to messaging platforms.  The footer is stored separately
+            # from final_response (to keep TTS/plugin hooks clean) but
+            # users on all platforms should still see it.  (#40772)
+            _vf_footer = agent_result.get("file_mutation_verifier_footer") or ""
+            if _vf_footer:
+                response = (response + "\n\n" + _vf_footer).strip()
+
             # Convert the agent's internal "(empty)" sentinel into a
             # user-friendly message.  "(empty)" means the model failed to
             # produce visible content after exhausting all retries (nudge,

@@ -12772,6 +12772,14 @@ class HermesCLI:
                         width=self._scrollback_box_width(),
                     ))
 
+            # Display file-mutation verifier footer separately from the
+            # response panel so it's visible to the user but not included
+            # in TTS or plugin hooks.  (#40772)
+            if result:
+                _vf_footer = result.get("file_mutation_verifier_footer")
+                if _vf_footer:
+                    _cprint(f"\n{_DIM}{_vf_footer}{_RST}")
+
 
             # Play terminal bell when agent finishes (if enabled).
             # Works over SSH — the bell propagates to the user's terminal.
@@ -12791,9 +12799,12 @@ class HermesCLI:
                     )
 
             # Speak response aloud if voice TTS is enabled
-            # Skip batch TTS when streaming TTS already handled it
-            if self._voice_tts and response and not use_streaming_tts:
-                self._voice_speak_response_async(response)
+            # Skip batch TTS when streaming TTS already handled it.
+            # Use clean response text (without verifier footer) so TTS
+            # doesn't speak internal advisory text aloud.  (#40772)
+            _voice_response = response
+            if self._voice_tts and _voice_response and not use_streaming_tts:
+                self._voice_speak_response_async(_voice_response)
 
 
             # Re-queue the interrupt message (and any that arrived while we were
