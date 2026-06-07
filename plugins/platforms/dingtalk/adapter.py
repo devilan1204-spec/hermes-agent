@@ -42,7 +42,7 @@ try:
     from dingtalk_stream.frames import CallbackMessage, AckMessage
 
     DINGTALK_STREAM_AVAILABLE = True
-except ImportError:
+except Exception:  # noqa: BLE001 — broad: optional SDK's transitive deps (cryptography) may raise non-ImportError; degrade gracefully (#41112)
     DINGTALK_STREAM_AVAILABLE = False
     dingtalk_stream = None  # type: ignore[assignment]
     ChatbotMessage = None  # type: ignore[assignment]
@@ -64,7 +64,14 @@ except ImportError:
     HTTPX_AVAILABLE = False
     httpx = None  # type: ignore[assignment]
 
-# Card SDK for AI Cards (following QwenPaw pattern)
+# Card SDK for AI Cards (following QwenPaw pattern).
+# Catch broad Exception, not just ImportError: the alibabacloud_dingtalk SDK
+# transitively imports cryptography and can raise AttributeError (not
+# ImportError) when the installed cryptography version skews from what the SDK
+# expects (e.g. `cryptography.utils.DeprecatedIn46` missing on older
+# cryptography). An optional SDK with a broken dependency chain must degrade
+# gracefully — same as a missing one — rather than crash the whole adapter
+# (and therefore the whole plugin) import. #41112.
 try:
     from alibabacloud_dingtalk.card_1_0 import (
         client as dingtalk_card_client,
@@ -78,7 +85,7 @@ try:
     from alibabacloud_tea_util import models as tea_util_models
 
     CARD_SDK_AVAILABLE = True
-except ImportError:
+except Exception:
     CARD_SDK_AVAILABLE = False
     dingtalk_card_client = None
     dingtalk_card_models = None
@@ -129,7 +136,7 @@ def check_dingtalk_requirements() -> bool:
             from dingtalk_stream import ChatbotMessage as _CM
             from dingtalk_stream.frames import CallbackMessage as _CBM, AckMessage as _AM
             import httpx as _httpx
-        except ImportError:
+        except Exception:
             return False
         dingtalk_stream = _ds
         ChatbotMessage = _CM
