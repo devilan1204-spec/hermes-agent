@@ -51,8 +51,13 @@ def test_dispatch_returns_immediately_without_blocking():
 
     assert res["status"] == "dispatched"
     assert res["delegation_id"].startswith("deleg_")
-    assert elapsed < 0.5, f"dispatch blocked {elapsed:.2f}s"
+    # Non-blocking invariant: dispatch returned while the runner is still
+    # gated (active), so it cannot have waited on the gate. The active_count
+    # check is the environment-independent proof; the generous wall-clock
+    # bound is a loose sanity backstop, not the primary assertion (a loaded
+    # CI runner can be slow but never anywhere near the runner's 5s gate).
     assert ad.active_count() == 1
+    assert elapsed < 4.0, f"dispatch blocked {elapsed:.2f}s (gate is 5s)"
     gate.set()
 
 
@@ -221,21 +226,23 @@ def test_delegate_task_background_routes_async_and_does_not_block(monkeypatch):
     with patch.object(dt, "_build_child_agent", return_value=fake_child), \
          patch.object(dt, "_run_single_child", side_effect=slow_child), \
          patch.object(dt, "_resolve_delegation_credentials", return_value=creds):
-        t0 = time.monotonic()
         out = dt.delegate_task(
             goal="the real task", context="ctx", toolsets=["web"],
             background=True, parent_agent=parent,
         )
-        elapsed = time.monotonic() - t0
 
     import json
     parsed = json.loads(out)
     assert parsed["status"] == "dispatched"
     assert parsed["mode"] == "background"
     assert parsed["delegation_id"].startswith("deleg_")
-    # child still blocked on the closed gate; delegate_task already returned
-    assert elapsed < 1.0, f"delegate_task blocked {elapsed:.2f}s while child gated"
+    # The real non-blocking invariant (environment-independent — no wall-clock
+    # threshold that flakes on a loaded CI runner): delegate_task returned
+    # while the child is STILL blocked on the closed gate, so no completion
+    # event exists yet. A synchronous impl could not have returned here — it
+    # would still be inside slow_child waiting on the gate.
     assert process_registry.completion_queue.empty()
+    assert ad.active_count() == 1  # child running in background, not finished
 
     gate.set()
     evt = _drain_one()
