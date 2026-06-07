@@ -771,19 +771,30 @@ class TestSendToPlatformChunking:
             doc_path.unlink(missing_ok=True)
 
     def test_matrix_text_only_uses_lightweight_path(self):
-        """Text-only Matrix sends should NOT go through the heavy adapter path."""
+        """Text-only Matrix sends should NOT go through the heavy adapter path.
+
+        Post-#41112 the lightweight text path flows through the matrix plugin's
+        registry standalone_sender_fn (not the via-adapter media path)."""
+        from hermes_cli.plugins import discover_plugins
+        from gateway.platform_registry import platform_registry
+        discover_plugins()
         helper = AsyncMock()
         lightweight = AsyncMock(return_value={"success": True, "platform": "matrix", "chat_id": "!room:ex.com", "message_id": "$txt"})
-        with patch("tools.send_message_tool._send_matrix_via_adapter", helper), \
-             patch("tools.send_message_tool._send_matrix", lightweight):
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.MATRIX,
-                    SimpleNamespace(enabled=True, token="tok", extra={"homeserver": "https://matrix.example.com"}),
-                    "!room:ex.com",
-                    "just text, no files",
+        matrix_entry = platform_registry.get("matrix")
+        original_sender = matrix_entry.standalone_sender_fn
+        matrix_entry.standalone_sender_fn = lightweight
+        try:
+            with patch("tools.send_message_tool._send_matrix_via_adapter", helper):
+                result = asyncio.run(
+                    _send_to_platform(
+                        Platform.MATRIX,
+                        SimpleNamespace(enabled=True, token="tok", extra={"homeserver": "https://matrix.example.com"}),
+                        "!room:ex.com",
+                        "just text, no files",
+                    )
                 )
-            )
+        finally:
+            matrix_entry.standalone_sender_fn = original_sender
 
         assert result["success"] is True
         helper.assert_not_awaited()
@@ -848,10 +859,19 @@ class TestSendToPlatformChunking:
 
 class TestSendToPlatformWhatsapp:
     def test_whatsapp_routes_via_local_bridge_sender(self):
+        """WhatsApp delivery routes through the plugin's registry
+        standalone_sender_fn (was tools.send_message_tool._send_whatsapp
+        before the #41112 plugin migration)."""
+        from hermes_cli.plugins import discover_plugins
+        from gateway.platform_registry import platform_registry
+        discover_plugins()
         chat_id = "test-user@lid"
         async_mock = AsyncMock(return_value={"success": True, "platform": "whatsapp", "chat_id": chat_id, "message_id": "abc123"})
 
-        with patch("tools.send_message_tool._send_whatsapp", async_mock):
+        wa_entry = platform_registry.get("whatsapp")
+        original_sender = wa_entry.standalone_sender_fn
+        wa_entry.standalone_sender_fn = async_mock
+        try:
             result = asyncio.run(
                 _send_to_platform(
                     Platform.WHATSAPP,
@@ -860,9 +880,15 @@ class TestSendToPlatformWhatsapp:
                     "hello from hermes",
                 )
             )
+        finally:
+            wa_entry.standalone_sender_fn = original_sender
 
         assert result["success"] is True
-        async_mock.assert_awaited_once_with({"bridge_port": 3000}, chat_id, "hello from hermes")
+        # _registry_standalone_send passes (pconfig, chat_id, message, thread_id=None)
+        async_mock.assert_awaited_once()
+        _call = async_mock.await_args
+        assert _call.args[1] == chat_id
+        assert _call.args[2] == "hello from hermes"
 
 
 class TestSendTelegramHtmlDetection:
@@ -1638,7 +1664,8 @@ class TestSendToPlatformDiscordMedia:
 
 
 class TestSendMatrixUrlEncoding:
-    """_send_matrix URL-encodes Matrix room IDs in the API path."""
+    """The matrix plugin's _standalone_send URL-encodes Matrix room IDs in the
+    API path (was tools.send_message_tool._send_matrix before #41112)."""
 
     def test_room_id_is_percent_encoded_in_url(self):
         """Matrix room IDs with ! and : are percent-encoded in the PUT URL."""
@@ -1655,11 +1682,10 @@ class TestSendMatrixUrlEncoding:
         mock_session.__aexit__ = AsyncMock(return_value=None)
 
         with patch("aiohttp.ClientSession", return_value=mock_session):
-            from tools.send_message_tool import _send_matrix
+            from plugins.platforms.matrix.adapter import _standalone_send
             result = asyncio.get_event_loop().run_until_complete(
-                _send_matrix(
-                    "test_token",
-                    {"homeserver": "https://matrix.example.org"},
+                _standalone_send(
+                    SimpleNamespace(token="test_token", extra={"homeserver": "https://matrix.example.org"}),
                     "!HLOQwxYGgFPMPJUSNR:matrix.org",
                     "hello",
                 )
