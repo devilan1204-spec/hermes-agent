@@ -3797,39 +3797,9 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False):
 # Per-platform config: each entry defines the env vars, setup instructions,
 # and prompts needed to configure a messaging platform.
 _PLATFORMS = [
-    {
-        "key": "telegram",
-        "label": "Telegram",
-        "emoji": "📱",
-        "token_var": "TELEGRAM_BOT_TOKEN",
-        "setup_instructions": [
-            "1. Open Telegram and message @BotFather",
-            "2. Send /newbot and follow the prompts to create your bot",
-            "3. Copy the bot token BotFather gives you",
-            "4. To find your user ID: message @userinfobot — it replies with your numeric ID",
-        ],
-        "vars": [
-            {
-                "name": "TELEGRAM_BOT_TOKEN",
-                "prompt": "Bot token",
-                "password": True,
-                "help": "Paste the token from @BotFather (step 3 above).",
-            },
-            {
-                "name": "TELEGRAM_ALLOWED_USERS",
-                "prompt": "Allowed user IDs (comma-separated)",
-                "password": False,
-                "is_allowlist": True,
-                "help": "Paste your user ID from step 4 above.",
-            },
-            {
-                "name": "TELEGRAM_HOME_CHANNEL",
-                "prompt": "Home channel ID (for cron/notification delivery, or empty to set later with /set-home)",
-                "password": False,
-                "help": "For DMs, this is your user ID. You can set it later by typing /set-home in chat.",
-            },
-        ],
-    },
+    # Telegram moved to plugins/platforms/telegram/ — setup metadata discovered
+    # dynamically via the platform registry entry registered by
+    # plugins/platforms/telegram/adapter.py::register(). #41112.
     # Discord moved to plugins/platforms/discord/ — its setup metadata is
     # discovered dynamically via _all_platforms() from the platform registry
     # entry registered by plugins/platforms/discord/adapter.py::register().
@@ -5227,7 +5197,8 @@ def _builtin_setup_fn(key: str):
     from hermes_cli import setup as _s
 
     return {
-        "telegram": _s._setup_telegram,
+        # telegram moved into the plugin: setup_fn registered by
+        # plugins/platforms/telegram/adapter.py::register(). #41112.
         # discord moved into the plugin: setup_fn is registered by
         # plugins/platforms/discord/adapter.py::register() and dispatched
         # via the plugin path in _configure_platform().

@@ -6864,36 +6864,7 @@ class GatewayRunner:
             logger.debug("Platform registry lookup for '%s' failed: %s", platform.value, e)
         # Fall through to built-in adapters below
 
-        if platform == Platform.TELEGRAM:
-            from gateway.platforms.telegram import TelegramAdapter, check_telegram_requirements
-            if not check_telegram_requirements():
-                logger.warning("Telegram: python-telegram-bot not installed")
-                return None
-            adapter = TelegramAdapter(config)
-            # Apply Telegram notification mode from config.  Controls whether
-            # intermediate messages (tool progress, streaming, status) trigger
-            # push notifications.  Supports ENV override for quick testing.
-            _notify_mode = os.getenv("HERMES_TELEGRAM_NOTIFICATIONS", "")
-            if not _notify_mode:
-                try:
-                    _gw_cfg = _load_gateway_config()
-                    _raw = cfg_get(_gw_cfg, "display", "platforms", "telegram", "notifications")
-                    if _raw not in {None, ""}:
-                        _notify_mode = str(_raw).strip().lower()
-                except Exception:
-                    pass
-            _notify_mode = _notify_mode or "important"
-            if _notify_mode not in {"all", "important"}:
-                logger.warning(
-                    "Unknown telegram notifications mode '%s', "
-                    "defaulting to 'important' (valid: all, important)",
-                    _notify_mode,
-                )
-                _notify_mode = "important"
-            adapter._notifications_mode = _notify_mode
-            return adapter
-        
-        elif platform == Platform.SLACK:
+        if platform == Platform.SLACK:
             from gateway.platforms.slack import SlackAdapter, check_slack_requirements
             if not check_slack_requirements():
                 logger.warning("Slack: slack-bolt not installed. Run: pip install 'hermes-agent[slack]'")
