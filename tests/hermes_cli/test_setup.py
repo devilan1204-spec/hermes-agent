@@ -164,6 +164,12 @@ def test_setup_gateway_skips_service_install_when_systemctl_missing(monkeypatch,
     monkeypatch.setattr(setup_mod, "get_env_value", lambda key: env.get(key, ""))
     monkeypatch.setattr(gateway_mod, "get_env_value", lambda key: env.get(key, ""))
     monkeypatch.setattr(setup_mod, "prompt_yes_no", lambda *args, **kwargs: False)
+    # Keep the checklist pre-selection (so matrix stays "configured" and the
+    # post-config service guidance runs), but stub the migrated plugins'
+    # interactive_setup so their wizards don't read real stdin. #41112.
+    monkeypatch.setattr(setup_mod, "prompt_checklist", lambda _q, _items, pre=(), **k: list(pre))
+    import hermes_cli.gateway as _gw_mod
+    monkeypatch.setattr(_gw_mod, "_configure_platform", lambda *a, **k: None)
     monkeypatch.setattr("platform.system", lambda: "Linux")
 
     monkeypatch.setattr(gateway_mod, "supports_systemd_services", lambda: False)
@@ -203,6 +209,12 @@ def test_setup_gateway_in_container_shows_docker_guidance(monkeypatch, capsys):
     monkeypatch.setattr(setup_mod, "get_env_value", lambda key: env.get(key, ""))
     monkeypatch.setattr(gateway_mod, "get_env_value", lambda key: env.get(key, ""))
     monkeypatch.setattr(setup_mod, "prompt_yes_no", lambda *args, **kwargs: False)
+    # Keep the checklist pre-selection (so matrix stays "configured" and the
+    # post-config service guidance runs), but stub the migrated plugins'
+    # interactive_setup so their wizards don't read real stdin. #41112.
+    monkeypatch.setattr(setup_mod, "prompt_checklist", lambda _q, _items, pre=(), **k: list(pre))
+    import hermes_cli.gateway as _gw_mod
+    monkeypatch.setattr(_gw_mod, "_configure_platform", lambda *a, **k: None)
     monkeypatch.setattr("platform.system", lambda: "Linux")
 
     monkeypatch.setattr(gateway_mod, "supports_systemd_services", lambda: False)

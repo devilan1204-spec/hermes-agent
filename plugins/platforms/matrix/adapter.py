@@ -3186,6 +3186,27 @@ def _apply_yaml_config(yaml_cfg: dict, matrix_cfg: dict) -> dict | None:
     return None
 
 
+def _is_connected(config) -> bool:
+    """Matrix is connected when a homeserver + access token (or password) are
+    configured. Read via hermes_cli.gateway.get_env_value so setup-status
+    callers that patch get_env_value observe the same value, and PlatformConfig
+    extras (homeserver) are honored too. As a built-in, Matrix used the generic
+    token check; as a plugin it needs an explicit is_connected so
+    _platform_status / get_connected_platforms reflect real configuration
+    rather than mere SDK presence. #41112.
+    """
+    extra = getattr(config, "extra", {}) or {}
+    import hermes_cli.gateway as gateway_mod
+    homeserver = extra.get("homeserver") or gateway_mod.get_env_value("MATRIX_HOMESERVER") or ""
+    token = (
+        getattr(config, "token", None)
+        or gateway_mod.get_env_value("MATRIX_ACCESS_TOKEN")
+        or gateway_mod.get_env_value("MATRIX_PASSWORD")
+        or ""
+    )
+    return bool(str(homeserver).strip() and str(token).strip())
+
+
 def _build_adapter(config):
     """Factory wrapper that constructs MatrixAdapter from a PlatformConfig."""
     return MatrixAdapter(config)
@@ -3198,6 +3219,7 @@ def register(ctx) -> None:
         label="Matrix",
         adapter_factory=_build_adapter,
         check_fn=check_matrix_requirements,
+        is_connected=_is_connected,
         required_env=["MATRIX_HOMESERVER", "MATRIX_ACCESS_TOKEN"],
         install_hint="pip install 'mautrix[encryption]'",
         setup_fn=interactive_setup,

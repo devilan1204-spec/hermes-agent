@@ -4270,6 +4270,11 @@ def _all_platforms() -> list[dict]:
     for entry in platform_registry.all_entries():
         if entry.name in by_key:
             continue  # built-in already covers it
+        # Drop platforms that can't function on this host. Matrix is hidden on
+        # Windows (python-olm has no Windows wheel) — applies whether matrix is
+        # a built-in or, post-#41112, a registry-discovered plugin.
+        if sys.platform == "win32" and entry.name == "matrix":
+            continue
         platforms.append(
             {
                 "key": entry.name,

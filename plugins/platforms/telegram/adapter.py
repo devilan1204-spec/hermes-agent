@@ -6143,7 +6143,10 @@ def _is_connected(config) -> bool:
     token (env or PlatformConfig.token), matching the generic token check
     Telegram had as a built-in.
     """
-    token = getattr(config, "token", None) or os.getenv("TELEGRAM_BOT_TOKEN", "")
+    token = getattr(config, "token", None)
+    if not token:
+        import hermes_cli.gateway as gateway_mod
+        token = gateway_mod.get_env_value("TELEGRAM_BOT_TOKEN") or ""
     return bool(str(token).strip())
 
 

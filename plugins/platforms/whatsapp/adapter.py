@@ -1524,10 +1524,27 @@ def _apply_yaml_config(yaml_cfg: dict, whatsapp_cfg: dict) -> dict | None:
 
 
 def _is_connected(config) -> bool:
-    """WhatsApp auth is handled by the Node.js bridge — always considered
-    connected when configured. Mirrors the legacy
-    _PLATFORM_CONNECTED_CHECKERS[Platform.WHATSAPP] = lambda cfg: True entry."""
-    return True
+    """WhatsApp is considered connected when the user has explicitly enabled it
+    via ``WHATSAPP_ENABLED`` (or the YAML-bridged equivalent on the config).
+
+    Auth itself is handled by the external Node.js bridge — we can't verify the
+    bridge token here — so the opt-in flag is the connection signal. The legacy
+    built-in path keyed off ``WHATSAPP_ENABLED`` in both the connected-platforms
+    check and the setup-status display; returning an unconditional True here
+    would make WhatsApp always show as "configured" in ``hermes setup`` even
+    when the user never enabled it. #41112.
+    """
+    extra = getattr(config, "extra", {}) or {}
+    if config is not None and getattr(config, "enabled", False) and extra:
+        # An explicitly-enabled PlatformConfig with seeded extras (e.g. from
+        # YAML) counts as configured.
+        return True
+    # Read via hermes_cli.gateway.get_env_value (not os.getenv) so setup-status
+    # callers that patch get_env_value — and the gateway connected-platforms
+    # check — observe the same value. Matches the discord/slack plugin pattern.
+    import hermes_cli.gateway as gateway_mod
+    val = (gateway_mod.get_env_value("WHATSAPP_ENABLED") or "").strip().lower()
+    return val in {"true", "1", "yes"}
 
 
 def _build_adapter(config):
