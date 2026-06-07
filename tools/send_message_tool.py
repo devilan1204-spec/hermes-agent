@@ -779,7 +779,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
         if platform == Platform.SLACK:
             result = await _send_slack(pconfig.token, chat_id, chunk, thread_ts=thread_id)
         elif platform == Platform.WHATSAPP:
-            result = await _send_whatsapp(pconfig.extra, chat_id, chunk)
+            result = await _registry_standalone_send("whatsapp", pconfig, chat_id, chunk, thread_id)
         elif platform == Platform.SIGNAL:
             result = await _send_signal(pconfig.extra, chat_id, chunk)
         elif platform == Platform.EMAIL:
@@ -789,7 +789,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
         elif platform == Platform.MATRIX:
             result = await _send_matrix(pconfig.token, pconfig.extra, chat_id, chunk)
         elif platform == Platform.DINGTALK:
-            result = await _send_dingtalk(pconfig.extra, chat_id, chunk)
+            result = await _registry_standalone_send("dingtalk", pconfig, chat_id, chunk, thread_id)
         elif platform == Platform.FEISHU:
             result = await _send_feishu(pconfig, chat_id, chunk, thread_id=thread_id)
         elif platform == Platform.WECOM:
@@ -1082,32 +1082,24 @@ async def _send_slack(token, chat_id, message, thread_ts=None):
         return _error(f"Slack send failed: {e}")
 
 
-async def _send_whatsapp(extra, chat_id, message):
-    """Send via the local WhatsApp bridge HTTP API."""
-    try:
-        import aiohttp
-    except ImportError:
-        return {"error": "aiohttp not installed. Run: pip install aiohttp"}
-    try:
-        bridge_port = extra.get("bridge_port", 3000)
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"http://localhost:{bridge_port}/send",
-                json={"chatId": chat_id, "message": message},
-                timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return {
-                        "success": True,
-                        "platform": "whatsapp",
-                        "chat_id": chat_id,
-                        "message_id": data.get("messageId"),
-                    }
-                body = await resp.text()
-                return _error(f"WhatsApp bridge error ({resp.status}): {body}")
-    except Exception as e:
-        return _error(f"WhatsApp send failed: {e}")
+async def _registry_standalone_send(platform_name, pconfig, chat_id, message, thread_id=None):
+    """Dispatch a one-shot send through a migrated platform plugin's
+    standalone_sender_fn (registry hook).  Used for platforms whose adapter
+    moved out of gateway/platforms/ into plugins/platforms/<name>/ (#41112):
+    the legacy inline ``_send_<platform>`` helper now lives in the plugin as
+    ``_standalone_send`` and is reached via the platform registry.
+    """
+    from gateway.platform_registry import platform_registry
+    from hermes_cli.plugins import discover_plugins
+    discover_plugins()  # idempotent — ensure the entry is registered
+    entry = platform_registry.get(platform_name)
+    if entry is None or entry.standalone_sender_fn is None:
+        return {"error": f"{platform_name} plugin not registered or missing standalone_sender_fn"}
+    return await entry.standalone_sender_fn(pconfig, chat_id, message, thread_id=thread_id)
+
+
+# _send_whatsapp moved to plugins/platforms/whatsapp/adapter.py::_standalone_send,
+# wired via standalone_sender_fn and reached through _registry_standalone_send. #41112.
 
 
 async def _send_signal(extra, chat_id, message, media_files=None):
@@ -1484,35 +1476,8 @@ async def _send_matrix_via_adapter(pconfig, chat_id, message, media_files=None, 
             pass
 
 
-async def _send_dingtalk(extra, chat_id, message):
-    """Send via DingTalk robot webhook.
-
-    Note: The gateway's DingTalk adapter uses per-session webhook URLs from
-    incoming messages (dingtalk-stream SDK).  For cross-platform send_message
-    delivery we use a static robot webhook URL instead, which must be
-    configured via ``DINGTALK_WEBHOOK_URL`` env var or ``webhook_url`` in the
-    platform's extra config.
-    """
-    try:
-        import httpx
-    except ImportError:
-        return {"error": "httpx not installed"}
-    try:
-        webhook_url = extra.get("webhook_url") or os.getenv("DINGTALK_WEBHOOK_URL", "")
-        if not webhook_url:
-            return {"error": "DingTalk not configured. Set DINGTALK_WEBHOOK_URL env var or webhook_url in dingtalk platform extra config."}
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                webhook_url,
-                json={"msgtype": "text", "text": {"content": message}},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("errcode", 0) != 0:
-                return _error(f"DingTalk API error: {data.get('errmsg', 'unknown')}")
-        return {"success": True, "platform": "dingtalk", "chat_id": chat_id}
-    except Exception as e:
-        return _error(f"DingTalk send failed: {e}")
+# _send_dingtalk moved to plugins/platforms/dingtalk/adapter.py::_standalone_send,
+# wired via standalone_sender_fn and reached through _registry_standalone_send. #41112.
 
 
 async def _send_wecom(extra, chat_id, message):

@@ -1501,3 +1501,192 @@ class _IncomingHandler(
             logger.exception(
                 "[%s] Error processing incoming message", self._adapter.name
             )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Plugin migration glue (#41112 / #3823)
+#
+# Added when the DingTalk adapter moved from gateway/platforms/dingtalk.py into
+# this bundled plugin. Mirrors the Discord (#24356) / Slack migrations: a
+# register(ctx) entry point plus hook implementations that replace the
+# per-platform core touchpoints (the Platform.DINGTALK elif in gateway/run.py,
+# the dingtalk_cfg YAML→env block + _PLATFORM_CONNECTED_CHECKERS entry in
+# gateway/config.py, the _setup_dingtalk wizard + _PLATFORMS["dingtalk"] static
+# dict in hermes_cli/gateway.py, and the _send_dingtalk dispatch in
+# tools/send_message_tool.py).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+async def _standalone_send(
+    pconfig,
+    chat_id,
+    message,
+    *,
+    thread_id=None,
+    media_files=None,
+    force_document=False,
+):
+    """Out-of-process DingTalk delivery via a static robot webhook URL.
+
+    Implements the standalone_sender_fn contract so deliver=dingtalk cron jobs
+    succeed when cron runs separately from the gateway. The live adapter uses
+    per-session webhook URLs from incoming messages, which aren't available
+    out-of-process; this path uses the static DINGTALK_WEBHOOK_URL / extra
+    webhook_url instead. Replaces the legacy _send_dingtalk helper.
+    """
+    extra = getattr(pconfig, "extra", {}) or {}
+    try:
+        import httpx
+    except ImportError:
+        return {"error": "httpx not installed"}
+    try:
+        webhook_url = extra.get("webhook_url") or os.getenv("DINGTALK_WEBHOOK_URL", "")
+        if not webhook_url:
+            return {"error": "DingTalk not configured. Set DINGTALK_WEBHOOK_URL env var or webhook_url in dingtalk platform extra config."}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                webhook_url,
+                json={"msgtype": "text", "text": {"content": message}},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("errcode", 0) != 0:
+                return {"error": f"DingTalk API error: {data.get('errmsg', 'unknown')}"}
+        return {"success": True, "platform": "dingtalk", "chat_id": chat_id}
+    except Exception as e:
+        return {"error": f"DingTalk send failed: {e}"}
+
+
+def interactive_setup() -> None:
+    """Configure DingTalk — QR scan (recommended) or manual credential entry.
+
+    Replaces hermes_cli/setup.py-era _setup_dingtalk + the static
+    _PLATFORMS["dingtalk"] dict in hermes_cli/gateway.py. CLI helpers are
+    lazy-imported so the plugin's module-load surface stays minimal.
+    """
+    from hermes_cli.config import get_env_value, save_env_value
+    from hermes_cli.cli_output import (
+        prompt,
+        prompt_choice,
+        prompt_yes_no,
+        print_header,
+        print_success,
+        print_warning,
+    )
+
+    print_header("DingTalk")
+    existing = get_env_value("DINGTALK_CLIENT_ID")
+    if existing:
+        print_success(f"DingTalk is already configured (Client ID: {existing}).")
+        if not prompt_yes_no("Reconfigure DingTalk?", False):
+            return
+
+    method = prompt_choice(
+        "Choose setup method",
+        [
+            "QR Code Scan (Recommended, auto-obtain Client ID and Client Secret)",
+            "Manual Input (Client ID and Client Secret)",
+        ],
+        default=0,
+    )
+
+    if method == 0:
+        try:
+            from hermes_cli.dingtalk_auth import dingtalk_qr_auth
+        except ImportError as exc:
+            print_warning(f"QR auth module failed to load ({exc}), falling back to manual input.")
+            _manual_credential_entry(prompt, save_env_value, print_success)
+            return
+        result = dingtalk_qr_auth()
+        if result is None:
+            print_warning("QR auth incomplete, falling back to manual input.")
+            _manual_credential_entry(prompt, save_env_value, print_success)
+            return
+        client_id, client_secret = result
+        save_env_value("DINGTALK_CLIENT_ID", client_id)
+        save_env_value("DINGTALK_CLIENT_SECRET", client_secret)
+        print_success("DingTalk configured via QR scan!")
+    else:
+        _manual_credential_entry(prompt, save_env_value, print_success)
+
+
+def _manual_credential_entry(prompt, save_env_value, print_success) -> None:
+    client_id = prompt("DingTalk Client ID (app key)")
+    if not client_id:
+        return
+    save_env_value("DINGTALK_CLIENT_ID", client_id)
+    client_secret = prompt("DingTalk Client Secret", password=True)
+    if client_secret:
+        save_env_value("DINGTALK_CLIENT_SECRET", client_secret)
+    print_success("DingTalk credentials saved")
+
+
+def _apply_yaml_config(yaml_cfg: dict, dingtalk_cfg: dict) -> dict | None:
+    """Translate config.yaml dingtalk: keys into DINGTALK_* env vars.
+
+    Implements the apply_yaml_config_fn contract (#24849). Mirrors the legacy
+    dingtalk_cfg block from gateway/config.py::load_gateway_config(). Env vars
+    take precedence over YAML (each assignment guarded by not os.getenv(...)).
+    Returns None — everything flows through env.
+    """
+    import json as _json
+    if "require_mention" in dingtalk_cfg and not os.getenv("DINGTALK_REQUIRE_MENTION"):
+        os.environ["DINGTALK_REQUIRE_MENTION"] = str(dingtalk_cfg["require_mention"]).lower()
+    if "mention_patterns" in dingtalk_cfg and not os.getenv("DINGTALK_MENTION_PATTERNS"):
+        os.environ["DINGTALK_MENTION_PATTERNS"] = _json.dumps(dingtalk_cfg["mention_patterns"])
+    frc = dingtalk_cfg.get("free_response_chats")
+    if frc is not None and not os.getenv("DINGTALK_FREE_RESPONSE_CHATS"):
+        if isinstance(frc, list):
+            frc = ",".join(str(v) for v in frc)
+        os.environ["DINGTALK_FREE_RESPONSE_CHATS"] = str(frc)
+    ac = dingtalk_cfg.get("allowed_chats")
+    if ac is not None and not os.getenv("DINGTALK_ALLOWED_CHATS"):
+        if isinstance(ac, list):
+            ac = ",".join(str(v) for v in ac)
+        os.environ["DINGTALK_ALLOWED_CHATS"] = str(ac)
+    allowed = dingtalk_cfg.get("allowed_users")
+    if allowed is not None and not os.getenv("DINGTALK_ALLOWED_USERS"):
+        if isinstance(allowed, list):
+            allowed = ",".join(str(v) for v in allowed)
+        os.environ["DINGTALK_ALLOWED_USERS"] = str(allowed)
+    return None
+
+
+def _is_connected(config) -> bool:
+    """DingTalk is connected when client_id + client_secret are present.
+
+    Mirrors the legacy _PLATFORM_CONNECTED_CHECKERS[Platform.DINGTALK] entry.
+    Reads from PlatformConfig.extra first, then env vars.
+    """
+    extra = getattr(config, "extra", {}) or {}
+    return bool(
+        (extra.get("client_id") or os.getenv("DINGTALK_CLIENT_ID"))
+        and (extra.get("client_secret") or os.getenv("DINGTALK_CLIENT_SECRET"))
+    )
+
+
+def _build_adapter(config):
+    """Factory wrapper that constructs DingTalkAdapter from a PlatformConfig."""
+    return DingTalkAdapter(config)
+
+
+def register(ctx) -> None:
+    """Plugin entry point — called by the Hermes plugin system."""
+    ctx.register_platform(
+        name="dingtalk",
+        label="DingTalk",
+        adapter_factory=_build_adapter,
+        check_fn=check_dingtalk_requirements,
+        is_connected=_is_connected,
+        validate_config=_is_connected,
+        required_env=["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET"],
+        install_hint="pip install 'dingtalk-stream>=0.20' httpx",
+        setup_fn=interactive_setup,
+        apply_yaml_config_fn=_apply_yaml_config,
+        allowed_users_env="DINGTALK_ALLOWED_USERS",
+        allow_all_env="DINGTALK_ALLOW_ALL_USERS",
+        cron_deliver_env_var="DINGTALK_HOME_CHANNEL",
+        standalone_sender_fn=_standalone_send,
+        emoji="🐳",
+        allow_update_command=True,
+    )

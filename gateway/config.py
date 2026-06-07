@@ -425,7 +425,6 @@ _PLATFORM_CONNECTED_CHECKERS: dict[Platform, Callable[[PlatformConfig], bool]] =
     Platform.WEIXIN: lambda cfg: bool(
         cfg.extra.get("account_id") and (cfg.token or cfg.extra.get("token"))
     ),
-    Platform.WHATSAPP: lambda cfg: True,  # bridge handles auth
     Platform.SIGNAL: lambda cfg: bool(cfg.extra.get("http_url")),
     Platform.EMAIL: lambda cfg: bool(cfg.extra.get("address")),
     Platform.SMS: lambda cfg: bool(os.getenv("TWILIO_ACCOUNT_SID")),
@@ -447,10 +446,6 @@ _PLATFORM_CONNECTED_CHECKERS: dict[Platform, Callable[[PlatformConfig], bool]] =
     ),
     Platform.YUANBAO: lambda cfg: bool(
         cfg.extra.get("app_id") and cfg.extra.get("app_secret")
-    ),
-    Platform.DINGTALK: lambda cfg: bool(
-        (cfg.extra.get("client_id") or os.getenv("DINGTALK_CLIENT_ID"))
-        and (cfg.extra.get("client_secret") or os.getenv("DINGTALK_CLIENT_SECRET"))
     ),
 }
 
@@ -1097,31 +1092,9 @@ def load_gateway_config() -> GatewayConfig:
                     for _telegram_extra_key, _telegram_extra_value in _telegram_extra.items():
                         _plat_extra.setdefault(_telegram_extra_key, _telegram_extra_value)
 
-            whatsapp_cfg = yaml_cfg.get("whatsapp", {})
-            if isinstance(whatsapp_cfg, dict):
-                if "require_mention" in whatsapp_cfg and not os.getenv("WHATSAPP_REQUIRE_MENTION"):
-                    os.environ["WHATSAPP_REQUIRE_MENTION"] = str(whatsapp_cfg["require_mention"]).lower()
-                if "mention_patterns" in whatsapp_cfg and not os.getenv("WHATSAPP_MENTION_PATTERNS"):
-                    os.environ["WHATSAPP_MENTION_PATTERNS"] = json.dumps(whatsapp_cfg["mention_patterns"])
-                frc = whatsapp_cfg.get("free_response_chats")
-                if frc is not None and not os.getenv("WHATSAPP_FREE_RESPONSE_CHATS"):
-                    if isinstance(frc, list):
-                        frc = ",".join(str(v) for v in frc)
-                    os.environ["WHATSAPP_FREE_RESPONSE_CHATS"] = str(frc)
-                if "dm_policy" in whatsapp_cfg and not os.getenv("WHATSAPP_DM_POLICY"):
-                    os.environ["WHATSAPP_DM_POLICY"] = str(whatsapp_cfg["dm_policy"]).lower()
-                af = whatsapp_cfg.get("allow_from")
-                if af is not None and not os.getenv("WHATSAPP_ALLOWED_USERS"):
-                    if isinstance(af, list):
-                        af = ",".join(str(v) for v in af)
-                    os.environ["WHATSAPP_ALLOWED_USERS"] = str(af)
-                if "group_policy" in whatsapp_cfg and not os.getenv("WHATSAPP_GROUP_POLICY"):
-                    os.environ["WHATSAPP_GROUP_POLICY"] = str(whatsapp_cfg["group_policy"]).lower()
-                gaf = whatsapp_cfg.get("group_allow_from")
-                if gaf is not None and not os.getenv("WHATSAPP_GROUP_ALLOWED_USERS"):
-                    if isinstance(gaf, list):
-                        gaf = ",".join(str(v) for v in gaf)
-                    os.environ["WHATSAPP_GROUP_ALLOWED_USERS"] = str(gaf)
+            # WhatsApp settings → env vars: migrated to the whatsapp plugin's
+            # apply_yaml_config_fn hook (plugins/platforms/whatsapp/adapter.py).
+            # #41112 / #3823.
 
             # Signal settings → env vars (env vars take precedence)
             signal_cfg = yaml_cfg.get("signal", {})
@@ -1129,29 +1102,9 @@ def load_gateway_config() -> GatewayConfig:
                 if "require_mention" in signal_cfg and not os.getenv("SIGNAL_REQUIRE_MENTION"):
                     os.environ["SIGNAL_REQUIRE_MENTION"] = str(signal_cfg["require_mention"]).lower()
 
-            # DingTalk settings → env vars (env vars take precedence)
-            dingtalk_cfg = yaml_cfg.get("dingtalk", {})
-            if isinstance(dingtalk_cfg, dict):
-                if "require_mention" in dingtalk_cfg and not os.getenv("DINGTALK_REQUIRE_MENTION"):
-                    os.environ["DINGTALK_REQUIRE_MENTION"] = str(dingtalk_cfg["require_mention"]).lower()
-                if "mention_patterns" in dingtalk_cfg and not os.getenv("DINGTALK_MENTION_PATTERNS"):
-                    os.environ["DINGTALK_MENTION_PATTERNS"] = json.dumps(dingtalk_cfg["mention_patterns"])
-                frc = dingtalk_cfg.get("free_response_chats")
-                if frc is not None and not os.getenv("DINGTALK_FREE_RESPONSE_CHATS"):
-                    if isinstance(frc, list):
-                        frc = ",".join(str(v) for v in frc)
-                    os.environ["DINGTALK_FREE_RESPONSE_CHATS"] = str(frc)
-                # allowed_chats: if set, bot ONLY responds in these group chats (whitelist)
-                ac = dingtalk_cfg.get("allowed_chats")
-                if ac is not None and not os.getenv("DINGTALK_ALLOWED_CHATS"):
-                    if isinstance(ac, list):
-                        ac = ",".join(str(v) for v in ac)
-                    os.environ["DINGTALK_ALLOWED_CHATS"] = str(ac)
-                allowed = dingtalk_cfg.get("allowed_users")
-                if allowed is not None and not os.getenv("DINGTALK_ALLOWED_USERS"):
-                    if isinstance(allowed, list):
-                        allowed = ",".join(str(v) for v in allowed)
-                    os.environ["DINGTALK_ALLOWED_USERS"] = str(allowed)
+            # DingTalk settings → env vars: migrated to the dingtalk plugin's
+            # apply_yaml_config_fn hook (plugins/platforms/dingtalk/adapter.py).
+            # #41112 / #3823.
 
             # Mattermost config bridge moved into plugins/platforms/mattermost/
             # adapter.py::_apply_yaml_config — see #25443 (apply_yaml_config_fn).
