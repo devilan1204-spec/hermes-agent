@@ -795,7 +795,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
         elif platform == Platform.FEISHU:
             result = await _registry_standalone_send("feishu", pconfig, chat_id, chunk, thread_id)
         elif platform == Platform.WECOM:
-            result = await _send_wecom(pconfig.extra, chat_id, chunk)
+            result = await _registry_standalone_send("wecom", pconfig, chat_id, chunk, thread_id)
         elif platform == Platform.BLUEBUBBLES:
             result = await _send_bluebubbles(pconfig.extra, chat_id, chunk)
         elif platform == Platform.QQBOT:
@@ -1443,31 +1443,8 @@ async def _send_matrix_via_adapter(pconfig, chat_id, message, media_files=None, 
 # wired via standalone_sender_fn and reached through _registry_standalone_send. #41112.
 
 
-async def _send_wecom(extra, chat_id, message):
-    """Send via WeCom using the adapter's WebSocket send pipeline."""
-    try:
-        from gateway.platforms.wecom import WeComAdapter, check_wecom_requirements
-        if not check_wecom_requirements():
-            return {"error": "WeCom requirements not met. Need aiohttp + WECOM_BOT_ID/SECRET."}
-    except ImportError:
-        return {"error": "WeCom adapter not available."}
-
-    try:
-        from gateway.config import PlatformConfig
-        pconfig = PlatformConfig(extra=extra)
-        adapter = WeComAdapter(pconfig)
-        connected = await adapter.connect()
-        if not connected:
-            return _error(f"WeCom: failed to connect - {adapter.fatal_error_message or 'unknown error'}")
-        try:
-            result = await adapter.send(chat_id, message)
-            if not result.success:
-                return _error(f"WeCom send failed: {result.error}")
-            return {"success": True, "platform": "wecom", "chat_id": chat_id, "message_id": result.message_id}
-        finally:
-            await adapter.disconnect()
-    except Exception as e:
-        return _error(f"WeCom send failed: {e}")
+# _send_wecom moved to plugins/platforms/wecom/adapter.py::_standalone_send,
+# wired via standalone_sender_fn and reached through _registry_standalone_send. #41112.
 
 
 async def _send_weixin(pconfig, chat_id, message, media_files=None):

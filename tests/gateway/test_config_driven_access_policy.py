@@ -103,7 +103,7 @@ def test_base_adapter_defaults_to_not_owning_access_policy():
 @pytest.mark.parametrize(
     "module_path, class_name",
     [
-        ("gateway.platforms.wecom", "WeComAdapter"),
+        ("plugins.platforms.wecom.adapter", "WeComAdapter"),
         ("gateway.platforms.weixin", "WeixinAdapter"),
         ("gateway.platforms.yuanbao", "YuanbaoAdapter"),
         ("gateway.platforms.qqbot.adapter", "QQAdapter"),

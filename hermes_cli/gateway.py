@@ -4006,105 +4006,9 @@ _PLATFORMS = [
     # Feishu moved to plugins/platforms/feishu/ — setup metadata discovered
     # dynamically via the platform registry entry registered by
     # plugins/platforms/feishu/adapter.py::register(). #41112.
-    {
-        "key": "wecom",
-        "label": "WeCom (Enterprise WeChat)",
-        "emoji": "💬",
-        "token_var": "WECOM_BOT_ID",
-        "setup_instructions": [
-            "1. Go to WeCom Admin Console → Applications → Create AI Bot",
-            "2. Copy the Bot ID and Secret from the bot's credentials page",
-            "3. The bot connects via WebSocket — no public endpoint needed",
-            "4. Add the bot to a group chat or message it directly in WeCom",
-            "5. Restrict access with WECOM_ALLOWED_USERS for production use",
-        ],
-        "vars": [
-            {
-                "name": "WECOM_BOT_ID",
-                "prompt": "Bot ID",
-                "password": False,
-                "help": "The Bot ID from your WeCom AI Bot.",
-            },
-            {
-                "name": "WECOM_SECRET",
-                "prompt": "Secret",
-                "password": True,
-                "help": "The secret from your WeCom AI Bot.",
-            },
-            {
-                "name": "WECOM_ALLOWED_USERS",
-                "prompt": "Allowed user IDs (comma-separated, or empty)",
-                "password": False,
-                "is_allowlist": True,
-                "help": "Restrict which WeCom users can interact with the bot.",
-            },
-            {
-                "name": "WECOM_HOME_CHANNEL",
-                "prompt": "Home chat ID (optional, for cron/notifications)",
-                "password": False,
-                "help": "Chat ID for scheduled results and notifications.",
-            },
-        ],
-    },
-    {
-        "key": "wecom_callback",
-        "label": "WeCom Callback (Self-Built App)",
-        "emoji": "💬",
-        "token_var": "WECOM_CALLBACK_CORP_ID",
-        "setup_instructions": [
-            "1. Go to WeCom Admin Console → Applications → Create Self-Built App",
-            "2. Note the Corp ID (top of admin console) and create a Corp Secret",
-            "3. Under Receive Messages, configure the callback URL to point to your server",
-            "4. Copy the Token and EncodingAESKey from the callback configuration",
-            "5. The adapter runs an HTTP server — ensure the port is reachable from WeCom",
-            "6. Restrict access with WECOM_CALLBACK_ALLOWED_USERS for production use",
-        ],
-        "vars": [
-            {
-                "name": "WECOM_CALLBACK_CORP_ID",
-                "prompt": "Corp ID",
-                "password": False,
-                "help": "Your WeCom enterprise Corp ID.",
-            },
-            {
-                "name": "WECOM_CALLBACK_CORP_SECRET",
-                "prompt": "Corp Secret",
-                "password": True,
-                "help": "The secret for your self-built application.",
-            },
-            {
-                "name": "WECOM_CALLBACK_AGENT_ID",
-                "prompt": "Agent ID",
-                "password": False,
-                "help": "The Agent ID of your self-built application.",
-            },
-            {
-                "name": "WECOM_CALLBACK_TOKEN",
-                "prompt": "Callback Token",
-                "password": True,
-                "help": "The Token from your WeCom callback configuration.",
-            },
-            {
-                "name": "WECOM_CALLBACK_ENCODING_AES_KEY",
-                "prompt": "Encoding AES Key",
-                "password": True,
-                "help": "The EncodingAESKey from your WeCom callback configuration.",
-            },
-            {
-                "name": "WECOM_CALLBACK_PORT",
-                "prompt": "Callback server port (default: 8645)",
-                "password": False,
-                "help": "Port for the HTTP callback server.",
-            },
-            {
-                "name": "WECOM_CALLBACK_ALLOWED_USERS",
-                "prompt": "Allowed user IDs (comma-separated, or empty)",
-                "password": False,
-                "is_allowlist": True,
-                "help": "Restrict which WeCom users can interact with the app.",
-            },
-        ],
-    },
+    # WeCom (wecom + wecom_callback) moved to plugins/platforms/wecom/ —
+    # setup metadata discovered dynamically via the platform registry
+    # entries registered by plugins/platforms/wecom/adapter.py::register(). #41112.
     {
         "key": "weixin",
         "label": "Weixin / WeChat",
@@ -4567,129 +4471,8 @@ def _setup_standard_platform(platform: dict):
 # (registered via setup_fn, dispatched through the plugin path). #41112.
 
 
-def _setup_wecom():
-    """Interactive setup for WeCom — scan QR code or manual credential input."""
-    print()
-    print(color("  ─── 💬 WeCom (Enterprise WeChat) Setup ───", Colors.CYAN))
-
-    existing_bot_id = get_env_value("WECOM_BOT_ID")
-    existing_secret = get_env_value("WECOM_SECRET")
-    if existing_bot_id and existing_secret:
-        print()
-        print_success("WeCom is already configured.")
-        if not prompt_yes_no("  Reconfigure WeCom?", False):
-            return
-
-    # ── Choose setup method ──
-    print()
-    method_choices = [
-        "Scan QR code to obtain Bot ID and Secret automatically (recommended)",
-        "Enter existing Bot ID and Secret manually",
-    ]
-    method_idx = prompt_choice(
-        "  How would you like to set up WeCom?", method_choices, 0
-    )
-
-    bot_id = None
-    secret = None
-
-    if method_idx == 0:
-        # ── QR scan flow ──
-        try:
-            from gateway.platforms.wecom import qr_scan_for_bot_info
-        except Exception as exc:
-            print_error(f"  WeCom QR scan import failed: {exc}")
-            qr_scan_for_bot_info = None
-
-        if qr_scan_for_bot_info is not None:
-            try:
-                credentials = qr_scan_for_bot_info()
-            except KeyboardInterrupt:
-                print()
-                print_warning("  WeCom setup cancelled.")
-                return
-            except Exception as exc:
-                print_warning(f"  QR scan failed: {exc}")
-                credentials = None
-            if credentials:
-                bot_id = credentials.get("bot_id", "")
-                secret = credentials.get("secret", "")
-                print_success("  ✔ QR scan successful! Bot ID and Secret obtained.")
-
-        if not bot_id or not secret:
-            print_info("  QR scan did not complete. Continuing with manual input.")
-            bot_id = None
-            secret = None
-
-    # ── Manual credential input ──
-    if not bot_id or not secret:
-        print()
-        print_info(
-            "  1. Go to WeCom Application → Workspace → Smart Robot -> Create smart robots"
-        )
-        print_info("  2. Select API Mode")
-        print_info("  3. Copy the Bot ID and Secret from the bot's credentials info")
-        print_info("  4. The bot connects via WebSocket — no public endpoint needed")
-        print()
-        bot_id = prompt("  Bot ID", password=False)
-        if not bot_id:
-            print_warning("  Skipped — WeCom won't work without a Bot ID.")
-            return
-        secret = prompt("  Secret", password=True)
-        if not secret:
-            print_warning("  Skipped — WeCom won't work without a Secret.")
-            return
-
-    # ── Save core credentials ──
-    save_env_value("WECOM_BOT_ID", bot_id)
-    save_env_value("WECOM_SECRET", secret)
-
-    # ── Allowed users (deny-by-default security) ──
-    print()
-    print_info("  The gateway DENIES all users by default for security.")
-    print_info("  Enter user IDs to create an allowlist, or leave empty.")
-    allowed = prompt("  Allowed user IDs (comma-separated, or empty)", password=False)
-    if allowed:
-        cleaned = allowed.replace(" ", "")
-        save_env_value("WECOM_ALLOWED_USERS", cleaned)
-        print_success("  Saved — only these users can interact with the bot.")
-    else:
-        print()
-        access_choices = [
-            "Enable open access (anyone can message the bot)",
-            "Use DM pairing (unknown users request access, you approve with 'hermes pairing approve')",
-            "Disable direct messages",
-            "Skip for now (bot will deny all users until configured)",
-        ]
-        access_idx = prompt_choice(
-            "  How should unauthorized users be handled?", access_choices, 1
-        )
-        if access_idx == 0:
-            save_env_value("WECOM_DM_POLICY", "open")
-            save_env_value("GATEWAY_ALLOW_ALL_USERS", "true")
-            print_warning("  Open access enabled — anyone can use your bot!")
-        elif access_idx == 1:
-            save_env_value("WECOM_DM_POLICY", "pairing")
-            print_success(
-                "  DM pairing mode — users will receive a code to request access."
-            )
-            print_info("  Approve with: hermes pairing approve <platform> <code>")
-        elif access_idx == 2:
-            save_env_value("WECOM_DM_POLICY", "disabled")
-            print_warning("  Direct messages disabled.")
-        else:
-            print_info("  Skipped — configure later with 'hermes gateway setup'")
-
-    # ── Home channel (optional) ──
-    print()
-    print_info("  Chat ID for scheduled results and notifications.")
-    home = prompt("  Home chat ID (optional, for cron/notifications)", password=False)
-    if home:
-        save_env_value("WECOM_HOME_CHANNEL", home)
-        print_success(f"  Home channel set to {home}")
-
-    print()
-    print_success("💬 WeCom configured!")
+# _setup_wecom moved to plugins/platforms/wecom/adapter.py::interactive_setup
+# (registered via setup_fn, dispatched through the plugin path). #41112.
 
 
 def _is_service_installed() -> bool:
@@ -5223,7 +5006,8 @@ def _builtin_setup_fn(key: str):
         "weixin": _setup_weixin,
         # feishu moved into the plugin: setup_fn registered by
         # plugins/platforms/feishu/adapter.py::register(). #41112.
-        "wecom": _setup_wecom,
+        # wecom moved into the plugin: setup_fn registered by
+        # plugins/platforms/wecom/adapter.py::register(). #41112.
         "qqbot": _setup_qqbot,
     }.get(key)
 

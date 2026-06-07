@@ -303,7 +303,7 @@ class TestMatrixTextBatching:
 
 def _make_wecom_adapter():
     """Create a minimal WeComAdapter for testing text batching."""
-    from gateway.platforms.wecom import WeComAdapter
+    from plugins.platforms.wecom.adapter import WeComAdapter
 
     config = PlatformConfig(enabled=True, token="test-token")
     adapter = object.__new__(WeComAdapter)

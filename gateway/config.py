@@ -433,10 +433,6 @@ _PLATFORM_CONNECTED_CHECKERS: dict[Platform, Callable[[PlatformConfig], bool]] =
     Platform.MSGRAPH_WEBHOOK: lambda cfg: bool(
         str(cfg.extra.get("client_state") or "").strip()
     ),
-    Platform.WECOM: lambda cfg: bool(cfg.extra.get("bot_id")),
-    Platform.WECOM_CALLBACK: lambda cfg: bool(
-        cfg.extra.get("corp_id") or cfg.extra.get("apps")
-    ),
     Platform.BLUEBUBBLES: lambda cfg: bool(
         cfg.extra.get("server_url") and cfg.extra.get("password")
     ),

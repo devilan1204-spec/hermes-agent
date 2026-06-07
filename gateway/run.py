@@ -6892,23 +6892,6 @@ class GatewayRunner:
                 return None
             return SmsAdapter(config)
 
-        elif platform == Platform.WECOM_CALLBACK:
-            from gateway.platforms.wecom_callback import (
-                WecomCallbackAdapter,
-                check_wecom_callback_requirements,
-            )
-            if not check_wecom_callback_requirements():
-                logger.warning("WeComCallback: aiohttp/httpx/defusedxml not installed")
-                return None
-            return WecomCallbackAdapter(config)
-
-        elif platform == Platform.WECOM:
-            from gateway.platforms.wecom import WeComAdapter, check_wecom_requirements
-            if not check_wecom_requirements():
-                logger.warning("WeCom: aiohttp not installed or WECOM_BOT_ID/SECRET not set")
-                return None
-            return WeComAdapter(config)
-
         elif platform == Platform.WEIXIN:
             from gateway.platforms.weixin import WeixinAdapter, check_weixin_requirements
             if not check_weixin_requirements():
