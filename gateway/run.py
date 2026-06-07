@@ -19547,8 +19547,6 @@ def _next_run_sleep_seconds(interval: int) -> int:
     moment.  Falls back to ``interval`` if the hint file is missing or
     unreadable.
     """
-    from pathlib import Path
-
     hint_file = get_hermes_home() / "cron" / ".next_run"
     try:
         text = hint_file.read_text(encoding="utf-8").strip()
@@ -19558,8 +19556,13 @@ def _next_run_sleep_seconds(interval: int) -> int:
         now = datetime.now(tz=next_run.tzinfo) if next_run.tzinfo else datetime.utcnow()
         delta = (next_run - now).total_seconds()
         if delta <= 0:
-            return 0  # job is already due; tick immediately
-        return min(int(delta) + 1, interval)  # cap at normal interval
+            # Job is due (or the hint is stale/past-due — e.g. a paused job
+            # whose next_run_at is in the past).  Return 1, not 0: a 0-second
+            # sleep would tight-loop the ticker at 100% CPU until the hint is
+            # rewritten.  cron_tick() is idempotent, so a 1s floor still fires
+            # a genuinely-due job promptly while bounding the spin.
+            return 1
+        return max(1, min(int(delta) + 1, interval))  # 1s floor, cap at interval
     except Exception:
         return interval
 
