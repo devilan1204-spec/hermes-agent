@@ -150,7 +150,7 @@ class TestEditMessageFinalizeSignature:
         [
             ("gateway.platforms.telegram", "TelegramAdapter"),
             ("plugins.platforms.discord.adapter", "DiscordAdapter"),
-            ("gateway.platforms.slack", "SlackAdapter"),
+            ("plugins.platforms.slack.adapter", "SlackAdapter"),
             ("gateway.platforms.matrix", "MatrixAdapter"),
             ("plugins.platforms.mattermost.adapter", "MattermostAdapter"),
             ("gateway.platforms.feishu", "FeishuAdapter"),
