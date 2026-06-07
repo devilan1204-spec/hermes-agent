@@ -11938,7 +11938,14 @@ class HermesCLI:
                     result = response_queue.get(timeout=1)
                     self._approval_state = None
                     self._approval_deadline = 0
-                    self._invalidate()
+                    # Bypass the throttle here too — the panel must clear
+                    # immediately once the user responds, consistent with the
+                    # entry/countdown/timeout invalidates above.
+                    if hasattr(self, "_app") and self._app:
+                        try:
+                            self._app.invalidate()
+                        except Exception:
+                            pass
                     return result
                 except queue.Empty:
                     remaining = self._approval_deadline - _time.monotonic()

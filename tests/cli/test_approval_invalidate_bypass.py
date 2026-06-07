@@ -69,22 +69,45 @@ def test_approval_callback_calls_app_invalidate_not_throttled():
 
 
 def test_approval_callback_retry_bypasses_throttle():
-    """The 5-second retry invalidation must also bypass the throttle."""
+    """The 5-second retry invalidation must also bypass the throttle.
+
+    Uses a fake monotonic clock so the >=5s countdown-refresh branch fires
+    without sleeping 6 real seconds.
+    """
     cli = _make_cli_stub()
     cli._approval_choices = MagicMock(return_value=["once", "session", "always", "deny"])
 
-    # Respond after 6 seconds (triggers at least one 5s retry)
-    def respond_later():
-        time.sleep(6)
-        cli._approval_state["response_queue"].put("once")
+    # Fake clock: each call to monotonic() jumps forward 3s, so by the second
+    # queue.Empty timeout the loop has "elapsed" >=5s and fires the retry
+    # invalidate. The responder answers on the 3rd poll.
+    clock = {"t": 0.0}
 
-    t = threading.Thread(target=respond_later)
-    t.start()
-    result = cli._approval_callback("cmd", "desc")
-    t.join()
+    def fake_monotonic():
+        clock["t"] += 3.0
+        return clock["t"]
+
+    polls = {"n": 0}
+
+    def fake_queue_get(self, timeout=None):
+        polls["n"] += 1
+        if polls["n"] >= 3:
+            return "once"
+        raise queue.Empty
+
+    with patch.object(cli_module, "CLI_CONFIG", {"approvals": {"timeout": 60}}), \
+         patch("time.monotonic", side_effect=fake_monotonic):
+        # Swap the response queue's get for a deterministic stub once state exists.
+        orig_callback = cli._approval_callback
+
+        def run():
+            return orig_callback("cmd", "desc")
+
+        # Patch queue.Queue.get globally for this call.
+        with patch.object(queue.Queue, "get", fake_queue_get):
+            result = run()
 
     assert result == "once"
-    # app.invalidate should be called multiple times (initial + at least one retry)
+    # initial render + at least one 5s-retry invalidate
     assert cli._app.invalidate.call_count >= 2
 
 
