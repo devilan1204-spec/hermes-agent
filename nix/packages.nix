@@ -52,6 +52,7 @@
         desktop = hermesAgent.hermesDesktop;
 
         fix-lockfiles = hermesAgent.hermesNpmLib.mkFixLockfiles { attr = "tui"; };
+        update-npm-lockfile = hermesAgent.hermesNpmLib.updateNpmLockfile;
       };
     };
 }

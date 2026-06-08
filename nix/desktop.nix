@@ -8,7 +8,7 @@
 # No reimplementation of the agent resolution in this wrapper.
 { pkgs, lib, stdenv, makeWrapper, hermesNpmLib, electron, hermesAgent, ... }:
 let
-  npm = hermesNpmLib.mkNpmPassthru { folder = "apps/desktop"; attr = "desktop"; pname = "hermes-desktop"; };
+  npm = hermesNpmLib.mkNpmPassthru { dirs = [ "apps/desktop" "apps/shared" ]; };
 
   packageJson = builtins.fromJSON (builtins.readFile (npm.src + "/apps/desktop/package.json"));
   version = packageJson.version;

@@ -1,9 +1,16 @@
 # nix/lib.nix — Shared helpers for nix stuff
 #
 # All npm packages in this repo are workspace members sharing a single
-# root package-lock.json.  mkNpmPassthru provides the shared src, npmDeps,
+# root package-lock.json.  mkNpmPassthru provides the shared npmDeps,
 # npmRoot, and npmDepsFetcherVersion so individual .nix files don't
 # duplicate them.  One hash to rule them all.
+#
+# Source filters (pythonSrc, npmDepsSrc) and per-package srcs reduce rebuild
+# scope so that e.g. a .tsx change doesn't trigger a Python venv rebuild,
+# and a .py change doesn't trigger a TUI/Web/Desktop rebuild.  Each
+# derivation gets a filtered src that only includes files it actually
+# needs, while keeping the repo-root directory layout intact for
+# buildNpmPackage / npmConfigHook workspace resolution.
 #
 # mkNpmPassthru returns packageJsonPath (e.g. "ui-tui/package.json")
 # instead of a per-package devShellHook.  The root devshell hook
@@ -11,29 +18,199 @@
 # and if any changed, runs a single `npm i --package-lock-only` from
 # root to update the lockfile, then `npm ci` if the lockfile changed.
 {
+  lib,
   pkgs,
   npm-lockfile-fix,
   nodejs,
 }:
 let
-  # The workspace root — where the single package-lock.json lives.
-  src = ../.;
+  repoRoot = ./..;
+
+  # ── npm workspace discovery ────────────────────────────────────────
+  # Single source of truth: the `workspaces` field of the root
+  # package.json.  Everything below (workspace package.json discovery,
+  # the Python source's JS-dir exclusions) is derived from this so the
+  # topology is never duplicated.  Add a workspace to package.json and
+  # the nix build picks it up automatically.
+  rootPackageJson = builtins.fromJSON (builtins.readFile (repoRoot + "/package.json"));
+
+  # Expand a workspace glob (e.g. "apps/*") into concrete member dirs
+  # relative to the repo root.  Only trailing "*" globs are supported —
+  # that's all npm uses here.  Literal patterns (e.g. "ui-tui") pass
+  # through unchanged.
+  expandWorkspace =
+    pattern:
+    let
+      parts = lib.splitString "/" pattern;
+    in
+    if lib.last parts == "*" then
+      let
+        parent = lib.concatStringsSep "/" (lib.init parts);
+        entries = builtins.readDir (repoRoot + "/${parent}");
+        dirs = lib.filterAttrs (_: t: t == "directory") entries;
+      in
+      map (d: "${parent}/${d}") (builtins.attrNames dirs)
+    else
+      [ pattern ];
+
+  # All workspace member directories (relative paths), filtered to those
+  # that actually carry a package.json — a glob like apps/* may match a
+  # dir that isn't really a package.
+  workspaceMemberDirs = builtins.filter (d: builtins.pathExists (repoRoot + "/${d}/package.json")) (
+    lib.concatMap expandWorkspace rootPackageJson.workspaces
+  );
+
+  # Top-level directory of each workspace member, deduplicated.  Used to
+  # exclude JS/TS workspace trees from the Python source filter.  E.g.
+  # apps/desktop + apps/shared + ui-tui + web → [ "apps" "ui-tui" "web" ].
+  jsWorkspaceTopDirs = lib.unique (
+    map (d: builtins.head (lib.splitString "/" d)) workspaceMemberDirs
+  );
+
+  # ── Source filters for reducing rebuild scope ──────────────────────
+  # Changing a .tsx/.mjs file should NOT trigger a Python venv rebuild,
+  # and changing a .py file should NOT trigger a TUI/Web/Desktop rebuild.
+
+  # Python source: everything except JS/TS/docs/infra directories.
+  pythonSrc = lib.cleanSourceWith {
+    src = repoRoot;
+    name = "hermes-python-source";
+    filter =
+      path: type:
+      let
+        relPath = lib.removePrefix (toString repoRoot + "/") (toString path);
+        components = lib.splitString "/" relPath;
+        topComponent = if components == [ ] then "" else builtins.head components;
+        excludedDirs =
+          # JS/TS workspace directories — derived from the npm workspaces
+          # so a new workspace member is excluded from the Python source
+          # without touching this list.
+          jsWorkspaceTopDirs ++ [
+            # Documentation
+            "docs"
+            "website"
+            # CI/infra
+            "docker"
+            ".github"
+            # Content/examples
+            "infographic"
+            "datagen-config-examples"
+            # unused packaging infra
+            "packaging"
+            # Test infrastructure
+            "tests"
+            # Plan/temp files
+            "plans"
+            # Nix build definitions (Python build doesn't need these)
+            "nix"
+          ];
+        excludedFiles = [
+          # JS root manifests
+          "package.json"
+          "package-lock.json"
+          # Docker files
+          "Dockerfile"
+          "docker-compose.yml"
+          "docker-compose.windows.yml"
+        ];
+      in
+      if relPath == "" then
+        true
+      else if builtins.elem relPath excludedFiles then
+        false
+      else if builtins.elem topComponent excludedDirs then
+        false
+      else
+        true;
+  };
+
+  # Common npm workspace resolution files needed by all npm builds.
+  # npm ci requires all workspace package.json files to resolve
+  # workspace: protocol dependencies correctly.  Discovered from the
+  # root package.json workspaces — root manifests + every member's
+  # package.json.
+  npmWorkspaceFiles = lib.fileset.unions (
+    [
+      (repoRoot + "/package.json")
+      (repoRoot + "/package-lock.json")
+    ]
+    ++ map (d: repoRoot + "/${d}/package.json") workspaceMemberDirs
+  );
+
+  # Npm deps source: just what fetchNpmDeps needs.
+  # Much smaller than the full repo, so changing source files
+  # won't invalidate the npmDeps derivation.
+  npmDepsSrc = lib.fileset.toSource {
+    root = repoRoot;
+    fileset = npmWorkspaceFiles;
+  };
 
   # Single npm deps fetch from the workspace root lockfile.
   # All workspace packages share this derivation.
   npmDepsHash = "sha256-T9UtpXgBCl/GywDZyrvG4a69RkV8oD6p1UOT7GPgAS0=";
 
   npmDeps = pkgs.fetchNpmDeps {
-    inherit src;
+    src = npmDepsSrc;
     fetcherVersion = 2;
     hash = npmDepsHash;
   };
+
+  # Build a per-package npm source: workspace resolution files + the
+  # package's own directory tree(s).  Source ROOT is always the repo
+  # root, preserving the workspace layout that buildNpmPackage and
+  # npmConfigHook expect.  Callers pass the dirs they need (relative to
+  # the repo root), so each package owns its own source scope.
+  mkNpmSrc =
+    dirs:
+    lib.fileset.toSource {
+      root = repoRoot;
+      fileset = lib.fileset.union npmWorkspaceFiles (
+        lib.fileset.unions (map (d: repoRoot + "/${d}") dirs)
+      );
+    };
+
+  # npmConfigHook diffs the source lockfile against the npm-deps cache
+  # lockfile byte-for-byte.  fetchNpmDeps preserves whatever trailing
+  # newlines the lockfile has, so we shim `diff` with a wrapper that
+  # normalizes trailing newlines on both sides before comparing.
+  newlineAgnosticDiff = pkgs.writeShellScript "newline-agnostic-diff" ''
+    f1=$(mktemp) && sed -z 's/\n*$/\n/' "$1" > "$f1"
+    f2=$(mktemp) && sed -z 's/\n*$/\n/' "$2" > "$f2"
+    ${pkgs.diffutils}/bin/diff "$f1" "$f2" && rc=0 || rc=$?
+    rm -f "$f1" "$f2"
+    exit $rc
+  '';
 in
 {
+  inherit
+    pythonSrc
+    npmDepsSrc
+    ;
+
+  # Regenerate the shared root lockfile from scratch and verify all npm
+  # packages still build.  Exposed as a runnable package — `nix run
+  # .#update-npm-lockfile` — so it's actually usable, unlike a bin buried
+  # in a build sandbox's PATH.  All workspace packages share one lockfile,
+  # so there's a single script (not one per package).
+  updateNpmLockfile = pkgs.writeShellScriptBin "update-npm-lockfile" ''
+    set -euox pipefail
+
+    REPO_ROOT=$(git rev-parse --show-toplevel)
+    cd "$REPO_ROOT"
+
+    rm -rf node_modules/
+    ${pkgs.lib.getExe' nodejs "npm"} cache clean --force
+    CI=true ${pkgs.lib.getExe' nodejs "npm"} install --workspaces
+    ${pkgs.lib.getExe npm-lockfile-fix} ./package-lock.json
+
+    # Hash lives in lib.nix — rebuild every npm package to verify.
+    nix build .#tui .#web .#desktop
+    echo "Lockfile updated and all npm packages built."
+  '';
+
   # Returns a buildNpmPackage-compatible attrs set that provides:
   #   src, npmDeps, npmRoot, npmDepsFetcherVersion
   #   patchPhase             — ensures root lockfile has exactly one trailing newline
-  #   nativeBuildInputs      — [ updateLockfileScript ] (list, prepend with ++ for more)
   #   passthru.packageJsonPath — relative path to this workspace's package.json
   #   nodejs                 — fixed nodejs version for all packages we use in the repo
   #
@@ -42,26 +219,33 @@ in
   # newlines the lockfile has. The patchPhase normalizes to exactly one
   # trailing newline so both sides always match.
   #
+  # `dirs` is the single source of truth for what the package contains:
+  # its first entry is the package's own folder (→ packageJsonPath), and
+  # all entries scope the filtered src.  pname/version come from the
+  # package's own package.json at the call site.
+  #
   # Usage:
-  #   npm = hermesNpmLib.mkNpmPassthru { folder = "ui-tui"; attr = "tui"; pname = "hermes-tui"; };
+  #   npm = hermesNpmLib.mkNpmPassthru { dirs = [ "ui-tui" ]; };
+  #   npm = hermesNpmLib.mkNpmPassthru { dirs = [ "apps/desktop" "apps/shared" ]; };
   #   pkgs.buildNpmPackage (npm // {
-  #     sourceRoot = "ui-tui";
+  #     pname = "hermes-tui";
+  #     inherit version;
   #     buildPhase = '' ... '';
   #     installPhase = '' ... '';
   #   })
   mkNpmPassthru =
-    {
-      folder, # repo-relative folder with package.json, e.g. "ui-tui"
-      attr, # flake package attr, e.g. "tui"
-      pname, # e.g. "hermes-tui"
-    }:
+    { dirs }:
     let
+      # The package's own folder is the first dir; it carries the
+      # package.json that buildNpmPackage reads.
+      folder = builtins.head dirs;
       # No sourceRoot — the workspace root (with the single package-lock.json)
       # is auto-detected as sourceRoot by nix.  npmRoot stays at "."
       # so npmConfigHook finds the lockfile there.
     in
     {
-      inherit src npmDeps nodejs;
+      inherit nodejs npmDeps;
+      src = mkNpmSrc dirs;
       npmRoot = ".";
       npmDepsFetcherVersion = 2;
 
@@ -75,44 +259,16 @@ in
         runHook prePatch
         # Normalize trailing newlines on the root lockfile so source and
         # npm-deps always match, regardless of what fetchNpmDeps preserves.
-        sed -i -z 's/\\n*$/\\n/' package-lock.json
+        sed -i -z 's/\n*$/\n/' package-lock.json
 
-        # Make npmConfigHook's byte-for-byte diff newline-agnostic by
-        # replacing its hardcoded /nix/store/.../diff with a wrapper that
-        # normalizes trailing newlines on both sides before comparing.
+        # Shim npmConfigHook's hardcoded `diff` with a newline-agnostic
+        # wrapper so its byte-for-byte lockfile comparison passes.
         mkdir -p "$TMPDIR/bin"
-        cat > "$TMPDIR/bin/diff" << DIFFWRAP
-        #!/bin/sh
-        f1=\\$(mktemp) && sed -z 's/\\n*$/\\n/' "\\$1" > "\\$f1"
-        f2=\\$(mktemp) && sed -z 's/\\n*$/\\n/' "\\$2" > "\\$f2"
-        ${pkgs.diffutils}/bin/diff "\\$f1" "\\$f2" && rc=0 || rc=\\$?
-        rm -f "\\$f1" "\\$f2"
-        exit \\$rc
-        DIFFWRAP
-        chmod +x "$TMPDIR/bin/diff"
+        ln -sf ${newlineAgnosticDiff} "$TMPDIR/bin/diff"
         export PATH="$TMPDIR/bin:$PATH"
 
         runHook postPatch
       '';
-
-      nativeBuildInputs = [
-        (pkgs.writeShellScriptBin "update_${attr}_lockfile" ''
-          set -euox pipefail
-
-          REPO_ROOT=$(git rev-parse --show-toplevel)
-
-          # All workspace packages share the root lockfile.
-          cd "$REPO_ROOT"
-          rm -rf node_modules/
-          ${pkgs.lib.getExe' nodejs "npm"} cache clean --force
-          CI=true ${pkgs.lib.getExe' nodejs "npm"} install --workspaces
-          ${pkgs.lib.getExe npm-lockfile-fix} ./package-lock.json
-
-          # Hash lives in lib.nix — just rebuild to verify.
-          nix build .#${attr}
-          echo "Lockfile updated and build verified for .#${attr}"
-        '')
-      ];
 
       passthru = {
         packageJsonPath = "${folder}/package.json";

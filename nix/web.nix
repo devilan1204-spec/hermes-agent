@@ -1,7 +1,7 @@
 # nix/web.nix — Hermes Web Dashboard (Vite/React) frontend build
 { pkgs, hermesNpmLib, ... }:
 let
-  npm = hermesNpmLib.mkNpmPassthru { folder = "web"; attr = "web"; pname = "hermes-web"; };
+  npm = hermesNpmLib.mkNpmPassthru { dirs = [ "web" ]; };
 
   packageJson = builtins.fromJSON (builtins.readFile (npm.src + "/web/package.json"));
   version = packageJson.version;

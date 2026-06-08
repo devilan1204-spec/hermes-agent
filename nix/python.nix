@@ -7,10 +7,11 @@
   pyproject-nix,
   pyproject-build-systems,
   stdenv,
+  pythonSrc,
   dependency-groups ? [ "all" ],
 }:
 let
-  workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./..; };
+  workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = pythonSrc; };
   hacks = callPackage pyproject-nix.build.hacks { };
 
   overlay = workspace.mkPyprojectOverlay {

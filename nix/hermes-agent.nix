@@ -39,6 +39,7 @@ let
   nodejs = nodejs_22;
   hermesVenv = callPackage ./python.nix {
     inherit uv2nix pyproject-nix pyproject-build-systems;
+    pythonSrc = hermesNpmLib.pythonSrc;
     dependency-groups = [ "all" ] ++ extraDependencyGroups;
   };
 
