@@ -21,6 +21,12 @@ describe('stripToolEnvelope', () => {
     expect(stripToolEnvelope('{not json')).toBe('{not json')
     expect(stripToolEnvelope('{"result":"no output key"}')).toBe('{"result":"no output key"}')
   })
+  test('un-double-escapes literal \\n when they dominate (item 7 verbose tail)', () => {
+    // double-escaped output (literal backslash-n) → real newlines
+    expect(stripToolEnvelope('a\\nb\\nc')).toBe('a\nb\nc')
+    // genuine multi-line output (real newlines) with one literal \n is left alone
+    expect(stripToolEnvelope('line1\nline2\nshow \\n here')).toBe('line1\nline2\nshow \\n here')
+  })
 })
 
 describe('collapseToolOutput / truncate', () => {

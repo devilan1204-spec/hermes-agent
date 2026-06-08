@@ -27,6 +27,8 @@ import type { CompletionItem } from '../logic/store.ts'
 import type { PromptHistory } from '../logic/history.ts'
 import { useTheme } from './theme.tsx'
 
+const GUTTER = 2
+
 /** Keys that must NOT steal focus back to the composer (scroll/edit/nav). */
 const NAV_KEYS = new Set([
   'return',
@@ -154,7 +156,7 @@ export function Composer(props: {
   onMount(() => ta?.focus())
 
   return (
-    <box style={{ flexDirection: 'column', flexShrink: 0, marginTop: 1 }}>
+    <box style={{ flexDirection: 'column', flexShrink: 0 }}>
       <Show when={completions().length > 0}>
         <box
           style={{
@@ -175,19 +177,28 @@ export function Composer(props: {
           <text fg={theme().color.muted}>Tab complete · Esc dismiss</text>
         </box>
       </Show>
-      <textarea
-        ref={el => (ta = el)}
-        style={{ height: 3, width: '100%' }}
-        placeholder={theme().brand.welcome}
-        placeholderColor={theme().color.muted}
-        textColor={theme().color.text}
-        cursorColor={theme().color.accent}
-        focusedBackgroundColor={theme().color.statusBg}
-        keyBindings={[{ action: 'submit', name: 'return' }]}
-        onMouseDown={() => ta?.focus()}
-        onSubmit={submit}
-        onContentChange={() => props.onType?.(ta?.plainText ?? '')}
-      />
+      {/* prompt glyph + textarea — the glyph (item 3) marks the input line so the
+          composer is distinguished by structure (glyph + the status-bar rule above),
+          not a background tint. */}
+      <box style={{ flexDirection: 'row', flexShrink: 0 }}>
+        <box style={{ flexShrink: 0, width: GUTTER }}>
+          <text>
+            <span style={{ fg: theme().color.prompt }}>{theme().brand.prompt}</span>
+          </text>
+        </box>
+        <textarea
+          ref={el => (ta = el)}
+          style={{ height: 3, flexGrow: 1, minWidth: 0 }}
+          placeholder={theme().brand.welcome}
+          placeholderColor={theme().color.muted}
+          textColor={theme().color.text}
+          cursorColor={theme().color.accent}
+          keyBindings={[{ action: 'submit', name: 'return' }]}
+          onMouseDown={() => ta?.focus()}
+          onSubmit={submit}
+          onContentChange={() => props.onType?.(ta?.plainText ?? '')}
+        />
+      </box>
     </box>
   )
 }

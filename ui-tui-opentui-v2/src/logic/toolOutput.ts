@@ -20,6 +20,20 @@ export function truncate(s: string, width: number): string {
 }
 
 /**
+ * Un-double-escape gateway output that arrived with LITERAL `\n`/`\t` escapes
+ * (some tool tails are repr'd, so newlines show as backslash-n — item 7 "ugly").
+ * Conservative: only un-escapes when literal `\n` sequences OUTNUMBER real
+ * newlines, so genuinely multi-line output (and code that legitimately contains
+ * the two chars `\` + `n`) is left untouched.
+ */
+export function normalizeOutput(text: string): string {
+  const real = (text.match(/\n/g) ?? []).length
+  const literal = (text.match(/\\n/g) ?? []).length
+  if (literal > real) return text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ')
+  return text
+}
+
+/**
  * Unwrap the gateway's tool-result JSON envelope so the view shows the actual
  * output, not the wrapper. Many tools return
  * `{"output": "...", "exit_code": 0, "error": null}`. If `raw` parses to such an
@@ -28,7 +42,7 @@ export function truncate(s: string, width: number): string {
  */
 export function stripToolEnvelope(raw: string): string {
   const s = (raw ?? '').trim()
-  if (!s.startsWith('{')) return raw ?? ''
+  if (!s.startsWith('{')) return normalizeOutput(raw ?? '')
 
   try {
     const parsed: unknown = JSON.parse(s)
@@ -39,12 +53,12 @@ export function stripToolEnvelope(raw: string): string {
       const code = obj.exit_code
       if (typeof err === 'string' && err) out += `\n[error] ${err}`
       else if (typeof code === 'number' && code !== 0) out += `\n[exit ${code}]`
-      return out
+      return normalizeOutput(out)
     }
   } catch {
     // not JSON — fall through and return raw
   }
-  return raw ?? ''
+  return normalizeOutput(raw ?? '')
 }
 
 /**
