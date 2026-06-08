@@ -11,6 +11,7 @@
 import { For, Match, Show, Switch } from 'solid-js'
 
 import type { Message } from '../logic/store.ts'
+import { Markdown } from './markdown.tsx'
 import { useTheme } from './theme.tsx'
 import { ToolPart } from './toolPart.tsx'
 
@@ -52,11 +53,7 @@ export function MessageLine(props: { message: Message }) {
                   )}
                 </Match>
                 <Match when={part.type === 'text' && part}>
-                  {t => (
-                    <text>
-                      <span style={{ fg: theme().color.text }}>{t().text}</span>
-                    </text>
-                  )}
+                  {t => <Markdown text={t().text} streaming={m().streaming ?? false} />}
                 </Match>
               </Switch>
             )}

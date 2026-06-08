@@ -29,7 +29,7 @@ describe('App render (Phase 1, themed)', () => {
           <App store={store} />
         </ThemeProvider>
       ),
-      { width: 60, height: 16 }
+      { until: 'Hi there, glitch!', width: 60, height: 16 }
     )
 
     expect(frame).toContain('Hermes Agent') // default brand.name
@@ -74,7 +74,7 @@ describe('App render (Phase 1, themed)', () => {
           <App store={store} />
         </ThemeProvider>
       ),
-      { width: 60, height: 16 }
+      { until: 'Listing files:', width: 60, height: 16 }
     )
 
     expect(frame).toContain('Listing files:') // text part
