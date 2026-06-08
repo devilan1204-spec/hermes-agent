@@ -29,7 +29,7 @@ import { acquireRenderer } from '../boundary/renderer.ts'
 import { makeAppLayer } from '../boundary/runtime.ts'
 import { createPromptHistory, dirHistoryPersister, loadDirHistory } from '../logic/history.ts'
 import { mapResumeHistory, mapSessionList } from '../logic/resume.ts'
-import { dispatchSlash, mapCompletions, type SlashContext } from '../logic/slash.ts'
+import { dispatchSlash, mapCompletions, planCompletion, readReplaceFrom, type SlashContext } from '../logic/slash.ts'
 import { createSessionStore, type SessionStore } from '../logic/store.ts'
 import { App } from '../view/App.tsx'
 import { ThemeProvider } from '../view/theme.tsx'
@@ -265,16 +265,20 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
         else submitPrompt(text)
       }
 
-      // Live slash completions: query `complete.slash` while typing a `/command`
-      // name (no space yet); clear otherwise. Cheap local completer — fired per
-      // keystroke (a debounce is a polish item).
+      // Live completions (items 5 + 13): a `/command [args]` line queries
+      // `complete.slash` (the gateway completes names AND args); a trailing
+      // path-like word queries `complete.path` (file/@-mention tagging). The
+      // accepted item replaces from the gateway's `replace_from` (or the token
+      // start), so only the relevant token is spliced — not the whole line.
+      // Fired per keystroke (a debounce is a polish item).
       const onType = (text: string) => {
-        if (!text.startsWith('/') || text.includes(' ') || text.includes('\n')) {
+        const plan = planCompletion(text)
+        if (!plan) {
           store.clearCompletions()
           return
         }
-        Effect.runPromise(gateway.request('complete.slash', { text }))
-          .then(result => store.setCompletions(mapCompletions(result)))
+        Effect.runPromise(gateway.request(plan.method, plan.params))
+          .then(result => store.setCompletions(mapCompletions(result), readReplaceFrom(result, plan.from)))
           .catch(() => store.clearCompletions())
       }
 

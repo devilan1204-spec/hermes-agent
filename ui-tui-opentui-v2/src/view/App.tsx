@@ -86,6 +86,7 @@ export function App(props: AppProps) {
                     onSubmit={props.onSubmit ?? NOOP}
                     onType={props.onType}
                     completions={() => props.store.state.completions ?? []}
+                    completionFrom={() => props.store.state.completionFrom}
                     onDismiss={() => props.store.clearCompletions()}
                     history={props.history}
                   />

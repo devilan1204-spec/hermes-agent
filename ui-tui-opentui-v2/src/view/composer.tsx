@@ -75,6 +75,7 @@ export function Composer(props: {
   onSubmit: (text: string) => void
   onType?: ((text: string) => void) | undefined
   completions?: (() => CompletionItem[]) | undefined
+  completionFrom?: (() => number) | undefined
   onDismiss?: (() => void) | undefined
   history?: PromptHistory | undefined
 }) {
@@ -108,8 +109,11 @@ export function Composer(props: {
       if (key.name === 'tab') {
         const top = completions()[0]
         if (top && ta) {
-          ta.clear()
-          ta.insertText(top.text + ' ')
+          // splice only the token being completed (slash-arg / @-mention), not the
+          // whole line — `completionFrom` is the gateway's replace_from / token start.
+          const from = props.completionFrom?.() ?? 0
+          const before = ta.plainText.slice(0, Math.min(Math.max(0, from), ta.plainText.length))
+          setBuffer(before + top.text + ' ')
           props.onDismiss?.()
         }
         return

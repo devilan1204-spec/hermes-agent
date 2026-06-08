@@ -137,8 +137,11 @@ export interface StoreState {
   switcher: SessionItem[] | undefined
   /** The open generic picker (model/skills/…); undefined when none. */
   picker: PickerState | undefined
-  /** Live slash-completion candidates shown above the composer; undefined/empty when none. */
+  /** Live completion candidates (slash-name/args or file/@-mention) shown above the composer. */
   completions: CompletionItem[] | undefined
+  /** Char offset in the input where an accepted completion should start replacing
+   *  (gateway `replace_from` for slash args; the path-token start for @-mentions). */
+  completionFrom: number
   /** Delegated subagents (from `subagent.*`), shown in the agents dashboard. */
   subagents: SubagentInfo[]
   /** Whether the agents dashboard overlay is open (/agents). */
@@ -231,6 +234,7 @@ export function createSessionStore() {
     switcher: undefined,
     picker: undefined,
     completions: undefined,
+    completionFrom: 0,
     subagents: [],
     dashboard: false,
     status: undefined,
@@ -379,12 +383,15 @@ export function createSessionStore() {
     if (Object.keys(patch).length) setState('info', prev => ({ ...prev, ...patch }))
   }
 
-  /** Set / clear the live slash-completion candidates (composer dropdown). */
-  function setCompletions(items: CompletionItem[]) {
+  /** Set / clear the live completion candidates (composer dropdown). `from` is the
+   *  input char offset an accepted item replaces from (slash-arg / @-mention splice). */
+  function setCompletions(items: CompletionItem[], from = 0) {
     setState('completions', items.length ? items : undefined)
+    setState('completionFrom', items.length ? Math.max(0, from) : 0)
   }
   function clearCompletions() {
     setState('completions', undefined)
+    setState('completionFrom', 0)
   }
 
   /** Reduce a decoded gateway event into the store. The sole boundary->Solid sink. */

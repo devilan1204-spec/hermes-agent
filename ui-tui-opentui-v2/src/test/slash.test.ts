@@ -4,7 +4,14 @@
  */
 import { describe, expect, test } from 'bun:test'
 
-import { dispatchSlash, mapCompletions, parseSlash, type SlashContext } from '../logic/slash.ts'
+import {
+  dispatchSlash,
+  mapCompletions,
+  parseSlash,
+  planCompletion,
+  readReplaceFrom,
+  type SlashContext
+} from '../logic/slash.ts'
 import type { PickerItem, SessionItem } from '../logic/store.ts'
 
 const FAKE_SESSIONS: SessionItem[] = [{ id: 's1', messageCount: 5, preview: 'hello there', title: 'First chat' }]
@@ -19,6 +26,47 @@ describe('mapCompletions', () => {
     ])
     expect(mapCompletions({ items: [] })).toEqual([])
     expect(mapCompletions(null)).toEqual([])
+  })
+})
+
+describe('planCompletion (items 5 + 13)', () => {
+  test('a slash line → complete.slash with the full text (name AND args)', () => {
+    expect(planCompletion('/mod')).toEqual({ from: 0, method: 'complete.slash', params: { text: '/mod' } })
+    // args too — the gateway completes e.g. /details section names
+    expect(planCompletion('/details thi')).toEqual({
+      from: 0,
+      method: 'complete.slash',
+      params: { text: '/details thi' }
+    })
+  })
+
+  test('a trailing path-like word → complete.path with that word + token start offset', () => {
+    expect(planCompletion('explain @src/fo')).toEqual({
+      from: 'explain '.length,
+      method: 'complete.path',
+      params: { word: '@src/fo' }
+    })
+    expect(planCompletion('cat ./rea')).toEqual({ from: 'cat '.length, method: 'complete.path', params: { word: './rea' } })
+    expect(planCompletion('open ~/proj')).toEqual({
+      from: 'open '.length,
+      method: 'complete.path',
+      params: { word: '~/proj' }
+    })
+  })
+
+  test('plain prose / multiline → no completion', () => {
+    expect(planCompletion('just some words')).toBeNull()
+    expect(planCompletion('hello')).toBeNull()
+    expect(planCompletion('/cmd with\nnewline')).toBeNull()
+  })
+})
+
+describe('readReplaceFrom', () => {
+  test('reads gateway replace_from, falls back when absent/non-number', () => {
+    expect(readReplaceFrom({ items: [], replace_from: 9 }, 0)).toBe(9)
+    expect(readReplaceFrom({ items: [] }, 4)).toBe(4)
+    expect(readReplaceFrom({ replace_from: 'nope' }, 7)).toBe(7)
+    expect(readReplaceFrom(null, 2)).toBe(2)
   })
 })
 

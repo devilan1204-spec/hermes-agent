@@ -61,7 +61,55 @@ function readStr(value: unknown, key: string): string | undefined {
 
 const titleCase = (name: string) => name.charAt(0).toUpperCase() + name.slice(1)
 
-/** Map a `complete.slash` result ({items:[{text,display,meta}]}) into completion candidates. */
+/** A planned completion query (item 5/13): which RPC + params, and where an
+ *  accepted item replaces from if the RPC omits its own `replace_from`. */
+export interface CompletionPlan {
+  method: 'complete.slash' | 'complete.path'
+  params: Record<string, unknown>
+  from: number
+}
+
+/** A path-like last token worth file/@-mention completion (mirrors Ink's TAB_PATH_RE intent). */
+function isPathLike(word: string): boolean {
+  return (
+    word.startsWith('@') ||
+    word.startsWith('~') ||
+    word.startsWith('./') ||
+    word.startsWith('../') ||
+    word.startsWith('/') ||
+    word.includes('/')
+  )
+}
+
+/**
+ * Decide what to complete for the current composer text (cursor assumed at end):
+ *   - `/command [args]` → `complete.slash {text}` (the gateway completes names AND
+ *     args, e.g. /details section names),
+ *   - a trailing path-like word (`@…`, `~/…`, `./…`, `/…`, or anything with `/`) →
+ *     `complete.path {word}` for file/dir tagging,
+ *   - otherwise nothing.
+ * Returns null when there's no completion to run (so the dropdown clears).
+ */
+export function planCompletion(text: string): CompletionPlan | null {
+  if (text.includes('\n')) return null
+  if (text.startsWith('/')) return { from: 0, method: 'complete.slash', params: { text } }
+  const word = /(\S+)$/.exec(text)?.[1]
+  if (word && isPathLike(word)) {
+    return { from: text.length - word.length, method: 'complete.path', params: { word } }
+  }
+  return null
+}
+
+/** Read a `replace_from` offset off a completion result, falling back to `fallback`. */
+export function readReplaceFrom(result: unknown, fallback: number): number {
+  if (result && typeof result === 'object') {
+    const rf = (result as { replace_from?: unknown }).replace_from
+    if (typeof rf === 'number') return rf
+  }
+  return fallback
+}
+
+/** Map a `complete.slash`/`complete.path` result ({items:[{text,display,meta}]}) into candidates. */
 export function mapCompletions(result: unknown): CompletionItem[] {
   if (!result || typeof result !== 'object') return []
   const items = (result as { items?: unknown }).items
