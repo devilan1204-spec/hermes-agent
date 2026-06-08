@@ -72,6 +72,20 @@ export interface SessionItem {
   messageCount: number
 }
 
+/** A row in a generic `<select>` picker (model picker, skills hub, …). */
+export interface PickerItem {
+  label: string
+  description?: string
+  value: string
+}
+
+/** An open generic picker overlay: a titled list whose pick runs `onPick(value)`. */
+export interface PickerState {
+  title: string
+  items: PickerItem[]
+  onPick: (value: string) => void
+}
+
 export interface StoreState {
   ready: boolean
   messages: Message[]
@@ -82,6 +96,8 @@ export interface StoreState {
   pager: PagerState | undefined
   /** The open session switcher (replaces the composer while set); undefined when none. */
   switcher: SessionItem[] | undefined
+  /** The open generic picker (model/skills/…); undefined when none. */
+  picker: PickerState | undefined
 }
 
 const LRU_LIMIT = 1000
@@ -99,7 +115,8 @@ export function createSessionStore() {
     theme: DEFAULT_THEME,
     prompt: undefined,
     pager: undefined,
-    switcher: undefined
+    switcher: undefined,
+    picker: undefined
   })
 
   // Monotonic part id (stable `key` per part so a new tool part below a streaming
@@ -211,6 +228,16 @@ export function createSessionStore() {
   /** Close the session switcher. */
   function closeSwitcher() {
     setState('switcher', undefined)
+  }
+
+  /** Open the generic picker (model picker, skills hub, …). */
+  function openPicker(picker: PickerState) {
+    setState('picker', picker)
+  }
+
+  /** Close the generic picker. */
+  function closePicker() {
+    setState('picker', undefined)
   }
 
   /** Reduce a decoded gateway event into the store. The sole boundary->Solid sink. */
@@ -379,6 +406,8 @@ export function createSessionStore() {
     closePager,
     openSwitcher,
     closeSwitcher,
+    openPicker,
+    closePicker,
     hydrate,
     beginBuffer,
     commitSnapshot,

@@ -168,6 +168,7 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
             .tail(200)
             .map(e => `${e.scope}: ${e.msg}`),
         openPager: (title, text) => store.openPager(title, text),
+        openPicker: picker => store.openPicker(picker),
         openSwitcher: sessions => store.openSwitcher(sessions),
         pushSystem: text => store.pushSystem(text),
         quit: () => {

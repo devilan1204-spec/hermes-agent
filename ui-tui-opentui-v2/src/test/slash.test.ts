@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { dispatchSlash, parseSlash, type SlashContext } from '../logic/slash.ts'
-import type { SessionItem } from '../logic/store.ts'
+import type { PickerItem, SessionItem } from '../logic/store.ts'
 
 const FAKE_SESSIONS: SessionItem[] = [{ id: 's1', messageCount: 5, preview: 'hello there', title: 'First chat' }]
 
@@ -26,6 +26,7 @@ interface Probe {
   confirmed: Array<{ message: string; onConfirm: () => void }>
   paged: Array<{ title: string; text: string }>
   switched: SessionItem[][]
+  pickers: Array<{ title: string; items: PickerItem[]; onPick: (value: string) => void }>
   quit: { value: boolean }
   cleared: { value: boolean }
 }
@@ -37,6 +38,7 @@ function makeCtx(request: (method: string, params: Record<string, unknown>) => P
   const confirmed: Probe['confirmed'] = []
   const paged: Probe['paged'] = []
   const switched: Probe['switched'] = []
+  const pickers: Probe['pickers'] = []
   const quit = { value: false }
   const cleared = { value: false }
   const ctx: SlashContext = {
@@ -45,6 +47,7 @@ function makeCtx(request: (method: string, params: Record<string, unknown>) => P
     listSessions: () => Promise.resolve(FAKE_SESSIONS),
     logTail: () => ['gateway: spawned', 'bootstrap: session created'],
     openPager: (title, text) => paged.push({ text, title }),
+    openPicker: p => pickers.push(p),
     openSwitcher: sessions => switched.push(sessions),
     pushSystem: text => system.push(text),
     quit: () => (quit.value = true),
@@ -55,7 +58,7 @@ function makeCtx(request: (method: string, params: Record<string, unknown>) => P
     sessionId: () => 'sid-1',
     submit: text => submitted.push(text)
   }
-  return { calls, cleared, confirmed, ctx, paged, quit, submitted, switched, system }
+  return { calls, cleared, confirmed, ctx, paged, pickers, quit, submitted, switched, system }
 }
 
 describe('dispatchSlash — client commands', () => {
@@ -90,6 +93,55 @@ describe('dispatchSlash — client commands', () => {
     const p2 = makeCtx(async () => ({}))
     await dispatchSlash('/resume', p2.ctx)
     expect(p2.switched).toHaveLength(1)
+  })
+
+  test('/model (bare) opens a picker of authenticated providers’ models; pick switches', async () => {
+    const p = makeCtx(async method => {
+      if (method === 'model.options')
+        return {
+          model: 'claude-sonnet-4.6',
+          providers: [
+            {
+              authenticated: true,
+              models: ['claude-sonnet-4.6', 'claude-opus-4.6'],
+              name: 'Anthropic',
+              slug: 'anthropic'
+            },
+            { authenticated: false, models: ['gpt-5.4'], name: 'OpenAI', slug: 'openai' }
+          ]
+        }
+      return { output: 'switched' }
+    })
+    await dispatchSlash('/model', p.ctx)
+    expect(p.pickers).toHaveLength(1)
+    expect(p.pickers[0]!.title).toBe('Switch model')
+    // only the authenticated provider's models; current is marked
+    expect(p.pickers[0]!.items.map(i => i.value)).toEqual(['claude-sonnet-4.6', 'claude-opus-4.6'])
+    expect(p.pickers[0]!.items[0]!.label).toContain('✓')
+    // picking switches via slash.exec `model <name>`
+    p.pickers[0]!.onPick('claude-opus-4.6')
+    await Promise.resolve()
+    expect(p.calls.some(c => c.method === 'slash.exec' && c.params.command === 'model claude-opus-4.6')).toBe(true)
+  })
+
+  test('/model <name> switches directly without opening the picker', async () => {
+    const p = makeCtx(async () => ({ output: 'ok' }))
+    await dispatchSlash('/model anthropic/claude-opus-4.6', p.ctx)
+    expect(p.pickers).toHaveLength(0)
+    expect(p.calls[0]).toEqual({
+      method: 'slash.exec',
+      params: { command: 'model anthropic/claude-opus-4.6', session_id: 'sid-1' }
+    })
+  })
+
+  test('/skills opens a picker flattened from skills.manage list', async () => {
+    const p = makeCtx(async method =>
+      method === 'skills.manage' ? { skills: { media: ['ffmpeg', 'whisper'], web: ['firecrawl'] } } : {}
+    )
+    await dispatchSlash('/skills', p.ctx)
+    expect(p.pickers).toHaveLength(1)
+    expect(p.pickers[0]!.title).toBe('Skills')
+    expect(p.pickers[0]!.items.map(i => i.value).sort()).toEqual(['ffmpeg', 'firecrawl', 'whisper'])
   })
 
   test('/help renders the gateway catalog', async () => {

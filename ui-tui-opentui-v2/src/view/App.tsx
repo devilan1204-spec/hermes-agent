@@ -1,25 +1,25 @@
 /**
  * App — the Solid view shell (spec v4 §2 `view/App.tsx`). Header + a content zone
  * that is either the PAGER overlay (long slash output) or the normal
- * transcript + input zone; the input zone swaps the composer for a blocking-prompt
- * overlay when one is active. Fully themed via the ThemeProvider (§7.5).
+ * transcript + input zone; the input zone is one of: blocking prompt, session
+ * switcher, generic picker (model/skills), or the composer. Fully themed (§7.5).
  *
  *   header     flexShrink:0            (top chrome line)
  *   content    flexGrow:1, minHeight:0 — Pager OR (transcript + input zone)
  *   transcript flexGrow:1, minHeight:0 (the one <scrollbox>; §8 #2 gotchas)
- *   input zone flexShrink:0            (Composer, OR PromptOverlay when blocked)
+ *   input zone flexShrink:0            (PromptOverlay | SessionSwitcher | Picker | Composer)
  *
- * Overlays REPLACE rather than stack: a blocking prompt replaces the composer
- * (§8 #6 deadlock fix); the pager replaces transcript+composer. Replacing (not
- * hiding) means the composer remounts + refocuses when an overlay closes, and the
- * key that closed the overlay can't leak into it (the close is deferred a tick).
+ * Overlays REPLACE rather than stack (a `<Switch>`), so the composer remounts +
+ * refocuses when an overlay closes; the key that closed an overlay can't leak
+ * into it because the close is deferred a tick.
  */
-import { Show } from 'solid-js'
+import { Match, Show, Switch } from 'solid-js'
 
 import type { SessionStore } from '../logic/store.ts'
 import { Composer } from './composer.tsx'
 import { Header } from './header.tsx'
 import { Pager } from './overlays/pager.tsx'
+import { Picker } from './overlays/picker.tsx'
 import { SessionSwitcher } from './overlays/sessionSwitcher.tsx'
 import { PromptOverlay } from './prompts/promptOverlay.tsx'
 import { Transcript } from './transcript.tsx'
@@ -41,10 +41,12 @@ export function App(props: AppProps) {
   const blocked = () => props.store.state.prompt !== undefined
   const pager = () => props.store.state.pager
   const switcher = () => props.store.state.switcher
+  const picker = () => props.store.state.picker
   // Defer the close so the key that closed an overlay (Esc/q/Enter) can't land in
   // the freshly-remounted composer.
   const closePager = () => setTimeout(() => props.store.closePager(), 0)
   const closeSwitcher = () => setTimeout(() => props.store.closeSwitcher(), 0)
+  const closePicker = () => setTimeout(() => props.store.closePicker(), 0)
   const resume = (id: string) => {
     ;(props.onResume ?? NOOP_RESUME)(id)
     closeSwitcher()
@@ -58,20 +60,31 @@ export function App(props: AppProps) {
         fallback={
           <>
             <Transcript store={props.store} />
-            <Show
-              when={blocked()}
-              fallback={
-                <Show when={switcher()} fallback={<Composer onSubmit={props.onSubmit ?? NOOP} />}>
-                  {sessions => <SessionSwitcher sessions={sessions()} onPick={resume} onClose={closeSwitcher} />}
-                </Show>
-              }
-            >
-              <PromptOverlay
-                store={props.store}
-                onRespond={props.onRespond ?? NOOP_RESPOND}
-                sessionId={props.sessionId ?? NO_SESSION}
-              />
-            </Show>
+            <Switch fallback={<Composer onSubmit={props.onSubmit ?? NOOP} />}>
+              <Match when={blocked()}>
+                <PromptOverlay
+                  store={props.store}
+                  onRespond={props.onRespond ?? NOOP_RESPOND}
+                  sessionId={props.sessionId ?? NO_SESSION}
+                />
+              </Match>
+              <Match when={switcher()}>
+                {sessions => <SessionSwitcher sessions={sessions()} onPick={resume} onClose={closeSwitcher} />}
+              </Match>
+              <Match when={picker()}>
+                {p => (
+                  <Picker
+                    title={p().title}
+                    items={p().items}
+                    onPick={value => {
+                      p().onPick(value)
+                      closePicker()
+                    }}
+                    onClose={closePicker}
+                  />
+                )}
+              </Match>
+            </Switch>
           </>
         }
       >

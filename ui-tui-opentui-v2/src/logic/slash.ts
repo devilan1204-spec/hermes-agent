@@ -11,7 +11,7 @@
  *      (exec/plugin → system · alias → re-dispatch · skill/send → submit a turn ·
  *       prefill → notice). Long output routes to the pager (Phase 5a).
  */
-import type { SessionItem } from './store.ts'
+import type { PickerItem, PickerState, SessionItem } from './store.ts'
 
 export interface ParsedSlash {
   name: string
@@ -47,6 +47,8 @@ export interface SlashContext {
   readonly listSessions: () => Promise<SessionItem[]>
   /** Open the session switcher with the given rows. */
   readonly openSwitcher: (sessions: SessionItem[]) => void
+  /** Open a generic picker (model picker, skills hub). */
+  readonly openPicker: (picker: PickerState) => void
 }
 
 function readStr(value: unknown, key: string): string | undefined {
@@ -66,6 +68,8 @@ function present(ctx: SlashContext, title: string, text: string): void {
 
 const CLIENT_HELP = [
   '/help — list commands',
+  '/model [name] — switch model (picker if bare)',
+  '/skills — browse skills',
   '/sessions, /resume — switch/resume a session',
   '/clear, /new — clear the transcript (confirm)',
   '/logs — recent engine log lines',
@@ -82,13 +86,89 @@ const openSwitcher: ClientHandler = async (_arg, ctx) => {
   else ctx.pushSystem('No sessions to resume.')
 }
 
+/** Flatten `model.options` (authenticated providers' models) into picker rows; mark the current. */
+function mapModelOptions(opts: unknown): PickerItem[] {
+  if (!opts || typeof opts !== 'object') return []
+  const providers = (opts as { providers?: unknown }).providers
+  if (!Array.isArray(providers)) return []
+  const current = readStr(opts, 'model')
+  const items: PickerItem[] = []
+  for (const p of providers) {
+    if (!p || typeof p !== 'object' || (p as { authenticated?: unknown }).authenticated !== true) continue
+    const slug = readStr(p, 'slug') ?? readStr(p, 'name') ?? ''
+    const models = (p as { models?: unknown }).models
+    if (!Array.isArray(models)) continue
+    for (const m of models) {
+      if (typeof m === 'string') items.push({ description: slug, label: m === current ? `${m} ✓` : m, value: m })
+    }
+  }
+  return items
+}
+
+/** Flatten `skills.manage {action:'list'}` ({skills: Record<category, names[]>}) into picker rows. */
+function mapSkills(result: unknown): PickerItem[] {
+  if (!result || typeof result !== 'object') return []
+  const skills = (result as { skills?: unknown }).skills
+  if (!skills || typeof skills !== 'object') return []
+  const items: PickerItem[] = []
+  for (const [category, names] of Object.entries(skills as { [k: string]: unknown })) {
+    if (!Array.isArray(names)) continue
+    for (const n of names) if (typeof n === 'string') items.push({ description: category, label: n, value: n })
+  }
+  return items
+}
+
+/** Switch the model via the server (shared by `/model <name>` and the picker pick). */
+async function switchModel(ctx: SlashContext, name: string): Promise<void> {
+  try {
+    const r = await ctx.request('slash.exec', { command: `model ${name}`, session_id: ctx.sessionId() })
+    ctx.pushSystem(readStr(r, 'output') || `→ ${name}`)
+  } catch (error) {
+    ctx.pushSystem(`/model ${name}: ${error instanceof Error ? error.message : 'switch failed'}`)
+  }
+}
+
+/** `/model` — bare opens the model picker; `/model <name>` switches directly. */
+const modelCmd: ClientHandler = async (arg, ctx) => {
+  if (arg.trim()) {
+    await switchModel(ctx, arg.trim())
+    return
+  }
+  const items = mapModelOptions(await ctx.request('model.options', {}))
+  if (!items.length) {
+    ctx.pushSystem('No models available (no authenticated providers).')
+    return
+  }
+  ctx.openPicker({ items, onPick: name => void switchModel(ctx, name), title: 'Switch model' })
+}
+
+/** `/skills` — open the skills hub; picking a skill shows its info in the pager. */
+const skillsCmd: ClientHandler = async (_arg, ctx) => {
+  const items = mapSkills(await ctx.request('skills.manage', { action: 'list' }))
+  if (!items.length) {
+    ctx.pushSystem('No skills found.')
+    return
+  }
+  ctx.openPicker({
+    items,
+    onPick: name =>
+      void ctx
+        .request('skills.manage', { action: 'inspect', query: name })
+        .then(info => ctx.openPager(`Skill: ${name}`, readStr(info, 'info') || JSON.stringify(info, null, 2)))
+        .catch(() => ctx.pushSystem(`/skills: could not inspect ${name}`)),
+    title: 'Skills'
+  })
+}
+
 /** The TUI-only client commands (run in-process, never hit the gateway). */
 const CLIENT: Record<string, ClientHandler> = {
   clear: (_arg, ctx) => ctx.confirm('Clear the transcript?', ctx.clearTranscript),
   exit: (_arg, ctx) => ctx.quit(),
+  model: modelCmd,
   resume: openSwitcher,
   session: openSwitcher,
   sessions: openSwitcher,
+  skills: skillsCmd,
   switch: openSwitcher,
   help: async (_arg, ctx) => {
     // Prefer the live catalog; fall back to the client list if it's unavailable.
