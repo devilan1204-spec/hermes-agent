@@ -23,6 +23,7 @@ import { Pager } from './overlays/pager.tsx'
 import { Picker } from './overlays/picker.tsx'
 import { SessionSwitcher } from './overlays/sessionSwitcher.tsx'
 import { PromptOverlay } from './prompts/promptOverlay.tsx'
+import { StatusLine } from './statusLine.tsx'
 import { Transcript } from './transcript.tsx'
 
 export interface AppProps {
@@ -64,6 +65,7 @@ export function App(props: AppProps) {
         fallback={
           <>
             <Transcript store={props.store} />
+            <StatusLine store={props.store} />
             <Switch
               fallback={
                 <Composer

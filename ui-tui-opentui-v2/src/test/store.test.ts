@@ -118,6 +118,25 @@ describe('session store — ordered parts (Phase 2b)', () => {
     const parts = store.state.messages.at(-1)!.parts ?? []
     expect(parts[0]).toMatchObject({ type: 'reasoning', text: 'thinking hard' })
   })
+
+  test('thinking.delta (kaomoji face) → transient status, NOT a transcript part; complete clears it', () => {
+    const store = createSessionStore()
+    store.apply({ type: 'message.start' })
+    store.apply({ type: 'thinking.delta', payload: { text: '(´･_･`) formulating...' } })
+    expect(store.state.status).toBe('(´･_･`) formulating...')
+    expect(store.state.messages.at(-1)!.parts ?? []).toHaveLength(0) // no reasoning row from the face
+    store.apply({ type: 'message.delta', payload: { text: 'Hi!' } })
+    store.apply({ type: 'message.complete' })
+    expect(store.state.status).toBeUndefined() // cleared when the turn ends
+    // only the real reply text part remains — the face never entered the transcript
+    expect((store.state.messages.at(-1)!.parts ?? []).map(p => p.type)).toEqual(['text'])
+  })
+
+  test('status.update also drives the transient status line', () => {
+    const store = createSessionStore()
+    store.apply({ type: 'status.update', payload: { kind: 'tool', text: 'running terminal…' } })
+    expect(store.state.status).toBe('running terminal…')
+  })
 })
 
 describe('session store — blocking prompts (Phase 3)', () => {

@@ -123,6 +123,9 @@ export interface StoreState {
   subagents: SubagentInfo[]
   /** Whether the agents dashboard overlay is open (/agents). */
   dashboard: boolean
+  /** Transient busy indicator (the kaomoji face/verb from `thinking.delta`/`status.update`);
+   *  shown above the composer WHILE a turn runs, cleared on `message.complete`. NOT transcript. */
+  status: string | undefined
 }
 
 const LRU_LIMIT = 1000
@@ -159,7 +162,8 @@ export function createSessionStore() {
     picker: undefined,
     completions: undefined,
     subagents: [],
-    dashboard: false
+    dashboard: false,
+    status: undefined
   })
 
   // Monotonic part id (stable `key` per part so a new tool part below a streaming
@@ -319,6 +323,7 @@ export function createSessionStore() {
         setSkin(event.payload)
         break
       case 'message.start':
+        setState('status', undefined)
         setState(
           produce(draft => {
             draft.messages.push({ role: 'assistant', text: '', parts: [], streaming: true })
@@ -349,9 +354,19 @@ export function createSessionStore() {
             live.streaming = false
           })
         )
+        setState('status', undefined)
         break
-      case 'reasoning.delta':
-      case 'thinking.delta': {
+      // thinking.delta / status.update are the TRANSIENT busy indicator (kaomoji
+      // face/verb) — route them to the status line, NOT the transcript (gotcha: Ink
+      // shows these as a FaceTicker, not message content).
+      case 'thinking.delta':
+      case 'status.update': {
+        const text = event.payload?.text ?? ''
+        if (text) setState('status', text)
+        break
+      }
+      // reasoning.delta is the model's actual reasoning — a (dim) transcript part.
+      case 'reasoning.delta': {
         const text = event.payload?.text ?? ''
         if (!text) break
         setState(
