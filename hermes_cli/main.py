@@ -1527,8 +1527,122 @@ def _find_bundled_tui(hermes_cli_dir: Path | None = None) -> Path | None:
     return bundled if bundled.is_file() else None
 
 
+def _config_tui_engine_early() -> str:
+    """Read ``display.tui_engine`` from config via a minimal YAML read.
+
+    Best-effort: any error → "ink" (the shipping default). Mirrors
+    :func:`_config_default_interface_early`.
+    """
+    try:
+        home = os.environ.get("HERMES_HOME")
+        cfg_path = (
+            os.path.join(home, "config.yaml")
+            if home
+            else os.path.join(os.path.expanduser("~"), ".hermes", "config.yaml")
+        )
+        if os.path.exists(cfg_path):
+            import yaml as _yaml_eng
+
+            with open(cfg_path, encoding="utf-8") as _f:
+                raw = _yaml_eng.safe_load(_f) or {}
+            disp = raw.get("display", {})
+            if isinstance(disp, dict):
+                eng = disp.get("tui_engine")
+                if isinstance(eng, str) and eng.strip():
+                    return eng.strip().lower()
+    except Exception:
+        pass
+    return "ink"
+
+
+def _resolve_tui_engine() -> str:
+    """Which TUI engine to launch: "ink" (default) or "opentui".
+
+    Precedence: ``HERMES_TUI_ENGINE`` env > ``display.tui_engine`` config > "ink".
+    The OpenTUI engine runs on Bun, which is not reliably available on Windows
+    or Termux — request "opentui" there falls back to "ink" with a notice so a
+    stale flag never strands the user on an engine that can't start.
+    """
+    env = (os.environ.get("HERMES_TUI_ENGINE") or "").strip().lower()
+    engine = env or _config_tui_engine_early()
+    if engine != "opentui":
+        return "ink"
+
+    # opentui requested — gate on platform support.
+    unsupported = sys.platform.startswith("win") or _is_termux_startup_environment()
+    if unsupported:
+        if not os.environ.get("HERMES_QUIET"):
+            where = "Windows" if sys.platform.startswith("win") else "Termux"
+            print(
+                f"HERMES_TUI_ENGINE=opentui is not supported on {where} "
+                f"(needs Bun) — falling back to the Ink engine.",
+                file=sys.stderr,
+            )
+        return "ink"
+    return "opentui"
+
+
+def _bun_bin() -> str:
+    """Resolve the Bun binary for the OpenTUI engine.
+
+    ``HERMES_BUN`` override > ``bun`` on PATH > common install dirs. Exits with a
+    clear message if Bun is missing (the OpenTUI engine cannot run without it).
+    """
+    env_bun = os.environ.get("HERMES_BUN")
+    if env_bun and os.path.isfile(env_bun) and os.access(env_bun, os.X_OK):
+        return env_bun
+    path = shutil.which("bun")
+    if path:
+        return path
+    for cand in (
+        Path.home() / ".bun" / "bin" / "bun",
+        Path("/usr/local/bin/bun"),
+        Path("/opt/homebrew/bin/bun"),
+    ):
+        if cand.is_file() and os.access(cand, os.X_OK):
+            return str(cand)
+    print(
+        "bun not found — the OpenTUI TUI engine requires Bun.\n"
+        "Install it (https://bun.sh) or set HERMES_BUN=/path/to/bun, "
+        "or unset HERMES_TUI_ENGINE to use the default Ink engine.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def _make_opentui_argv(tui_dev: bool) -> tuple[list[str], Path]:
+    """Argv for the native OpenTUI engine: ``bun src/entry.real.tsx``.
+
+    No build step — Bun runs the TypeScript entry directly. Returns the argv and
+    the ``ui-tui-opentui/`` cwd. ``tui_dev`` adds ``--watch`` for hot reload.
+    """
+    app_dir = PROJECT_ROOT / "ui-tui-opentui"
+    entry = app_dir / "src" / "entry.real.tsx"
+    if not entry.is_file():
+        print(
+            f"OpenTUI engine entry not found at {entry}.\n"
+            f"Unset HERMES_TUI_ENGINE to use the default Ink engine.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    bun = _bun_bin()
+    args = [bun]
+    if tui_dev:
+        args.append("--watch")
+    args.append(str(entry))
+    return args, app_dir
+
+
 def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
-    """TUI: --dev → tsx src; else node dist (HERMES_TUI_DIR prebuilt or esbuild)."""
+    """TUI: --dev → tsx src; else node dist (HERMES_TUI_DIR prebuilt or esbuild).
+
+    Dual-engine: when ``HERMES_TUI_ENGINE``/``display.tui_engine`` selects the
+    native OpenTUI engine, dispatch to ``_make_opentui_argv`` (Bun) BEFORE any
+    Node bootstrap — a Bun-only host must not be forced through ``_ensure_tui_node``.
+    """
+    if _resolve_tui_engine() == "opentui":
+        return _make_opentui_argv(tui_dev)
+
     _ensure_tui_node()
 
     def _node_bin(bin: str) -> str:
@@ -1887,10 +2001,15 @@ def _launch_tui(
     # --expose-gc is *not* added here: Node rejects it in NODE_OPTIONS
     # ("--expose-gc is not allowed in NODE_OPTIONS") and refuses to start.
     # It is passed as a direct argv flag in _make_tui_argv() instead.
-    _tokens = env.get("NODE_OPTIONS", "").split()
-    if not any(t.startswith("--max-old-space-size=") for t in _tokens):
-        _tokens.append(f"--max-old-space-size={_resolve_tui_heap_mb()}")
-    env["NODE_OPTIONS"] = " ".join(_tokens)
+    #
+    # ENGINE-GATED: --max-old-space-size is a V8/Node flag. The OpenTUI engine
+    # runs on Bun (JavaScriptCore), which has no such flag and would error/ignore
+    # it — so only apply the Node heap sizing for the Ink engine.
+    if _resolve_tui_engine() == "ink":
+        _tokens = env.get("NODE_OPTIONS", "").split()
+        if not any(t.startswith("--max-old-space-size=") for t in _tokens):
+            _tokens.append(f"--max-old-space-size={_resolve_tui_heap_mb()}")
+        env["NODE_OPTIONS"] = " ".join(_tokens)
     # HERMES_TUI_RESUME is an internal hand-off from the Python wrapper to the
     # Ink app.  Because we start from os.environ.copy(), an exported/stale value
     # in the user's shell would otherwise make a plain `hermes --tui` try to
