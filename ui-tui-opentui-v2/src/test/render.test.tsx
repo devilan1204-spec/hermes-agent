@@ -29,12 +29,13 @@ describe('App render (Phase 1, themed)', () => {
           <App store={store} />
         </ThemeProvider>
       ),
-      { width: 60, height: 8 }
+      { width: 60, height: 16 }
     )
 
     expect(frame).toContain('Hermes Agent') // default brand.name
     expect(frame).toContain('ready')
     expect(frame).toContain('Hi there, glitch!')
+    expect(frame).toContain('Type your message') // composer placeholder (brand.welcome)
   })
 
   test('applying a skin re-themes the brand name (skinnable, no hardcoding)', async () => {
@@ -48,7 +49,7 @@ describe('App render (Phase 1, themed)', () => {
           <App store={store} />
         </ThemeProvider>
       ),
-      { width: 60, height: 8 }
+      { width: 60, height: 16 }
     )
 
     expect(frame).toContain('Zephyr')

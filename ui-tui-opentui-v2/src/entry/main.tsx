@@ -92,6 +92,25 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
       const gateway = yield* GatewayService
       yield* gateway.subscribe(event => store.apply(event))
 
+      // Composer submit: a plain callback the Solid view calls. The service value
+      // is already in hand, so `gateway.request(...)` is Effect<…, never> — fire it
+      // detached with runFork; failures are logged, never thrown into the view.
+      const submit = (text: string) => {
+        store.pushUser(text)
+        const sid = gateway.sessionId()
+        if (!sid) {
+          getLog().warn('submit', 'no session yet — dropping prompt', { text })
+          return
+        }
+        Effect.runFork(
+          gateway
+            .request('prompt.submit', { session_id: sid, text })
+            .pipe(
+              Effect.catchCause(cause => Effect.sync(() => getLog().warn('submit', 'failed', { cause: String(cause) })))
+            )
+        )
+      }
+
       // Live backend: drive a session (create + optional initial prompt) concurrently.
       if (!input.fake) yield* Effect.forkScoped(bootstrapSession(gateway, store, input))
 
@@ -101,7 +120,7 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
         render(
           () => (
             <ThemeProvider theme={() => store.state.theme}>
-              <App store={store} />
+              <App store={store} onSubmit={submit} />
             </ThemeProvider>
           ),
           renderer
