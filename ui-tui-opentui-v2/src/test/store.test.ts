@@ -154,6 +154,32 @@ describe('session store — blocking prompts (Phase 3)', () => {
   })
 })
 
+describe('session store — subagents (Phase 5e agents dashboard)', () => {
+  test('subagent.* events build + update a subagent by id', () => {
+    const store = createSessionStore()
+    store.apply({
+      type: 'subagent.start',
+      payload: { subagent_id: 'a1', goal: 'research X', model: 'haiku', depth: 1 }
+    })
+    expect(store.state.subagents).toHaveLength(1)
+    expect(store.state.subagents[0]).toMatchObject({ id: 'a1', goal: 'research X', status: 'running', depth: 1 })
+
+    store.apply({ type: 'subagent.tool', payload: { subagent_id: 'a1', tool_name: 'web_search' } })
+    expect(store.state.subagents[0]).toMatchObject({ status: 'tool', lastTool: 'web_search' })
+
+    store.apply({ type: 'subagent.complete', payload: { subagent_id: 'a1', summary: 'found it' } })
+    expect(store.state.subagents).toHaveLength(1) // updated in place
+    expect(store.state.subagents[0]).toMatchObject({ status: 'complete', summary: 'found it' })
+  })
+
+  test('clearTranscript also clears subagents', () => {
+    const store = createSessionStore()
+    store.apply({ type: 'subagent.start', payload: { subagent_id: 'a1', goal: 'g' } })
+    store.clearTranscript()
+    expect(store.state.subagents).toHaveLength(0)
+  })
+})
+
 describe('session store — resume hydrate (Phase 4b)', () => {
   test('beginBuffer + commitSnapshot replaces history then replays events buffered across the resume', () => {
     const store = createSessionStore()

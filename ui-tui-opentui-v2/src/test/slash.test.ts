@@ -42,6 +42,7 @@ interface Probe {
   pickers: Array<{ title: string; items: PickerItem[]; onPick: (value: string) => void }>
   quit: { value: boolean }
   cleared: { value: boolean }
+  dashboard: { value: boolean }
 }
 
 function makeCtx(request: (method: string, params: Record<string, unknown>) => Promise<unknown>): Probe {
@@ -54,11 +55,13 @@ function makeCtx(request: (method: string, params: Record<string, unknown>) => P
   const pickers: Probe['pickers'] = []
   const quit = { value: false }
   const cleared = { value: false }
+  const dashboard = { value: false }
   const ctx: SlashContext = {
     clearTranscript: () => (cleared.value = true),
     confirm: (message, onConfirm) => confirmed.push({ message, onConfirm }),
     listSessions: () => Promise.resolve(FAKE_SESSIONS),
     logTail: () => ['gateway: spawned', 'bootstrap: session created'],
+    openDashboard: () => (dashboard.value = true),
     openPager: (title, text) => paged.push({ text, title }),
     openPicker: p => pickers.push(p),
     openSwitcher: sessions => switched.push(sessions),
@@ -71,7 +74,7 @@ function makeCtx(request: (method: string, params: Record<string, unknown>) => P
     sessionId: () => 'sid-1',
     submit: text => submitted.push(text)
   }
-  return { calls, cleared, confirmed, ctx, paged, pickers, quit, submitted, switched, system }
+  return { calls, cleared, confirmed, ctx, dashboard, paged, pickers, quit, submitted, switched, system }
 }
 
 describe('dispatchSlash — client commands', () => {
@@ -145,6 +148,15 @@ describe('dispatchSlash — client commands', () => {
       method: 'slash.exec',
       params: { command: 'model anthropic/claude-opus-4.6', session_id: 'sid-1' }
     })
+  })
+
+  test('/agents (and /tasks) open the agents dashboard', async () => {
+    const p = makeCtx(async () => ({}))
+    await dispatchSlash('/agents', p.ctx)
+    expect(p.dashboard.value).toBe(true)
+    const p2 = makeCtx(async () => ({}))
+    await dispatchSlash('/tasks', p2.ctx)
+    expect(p2.dashboard.value).toBe(true)
   })
 
   test('/skills opens a picker flattened from skills.manage list', async () => {

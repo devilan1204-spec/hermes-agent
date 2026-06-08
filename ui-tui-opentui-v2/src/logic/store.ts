@@ -93,6 +93,18 @@ export interface CompletionItem {
   meta: string
 }
 
+/** A delegated subagent, tracked from the `subagent.*` event stream (agents dashboard). */
+export interface SubagentInfo {
+  id: string
+  goal: string
+  status: string
+  depth: number
+  model?: string
+  parentId?: string
+  summary?: string
+  lastTool?: string
+}
+
 export interface StoreState {
   ready: boolean
   messages: Message[]
@@ -107,6 +119,10 @@ export interface StoreState {
   picker: PickerState | undefined
   /** Live slash-completion candidates shown above the composer; undefined/empty when none. */
   completions: CompletionItem[] | undefined
+  /** Delegated subagents (from `subagent.*`), shown in the agents dashboard. */
+  subagents: SubagentInfo[]
+  /** Whether the agents dashboard overlay is open (/agents). */
+  dashboard: boolean
 }
 
 const LRU_LIMIT = 1000
@@ -115,6 +131,21 @@ const LRU_LIMIT = 1000
 function readStr(payload: { readonly [k: string]: unknown }, key: string): string | undefined {
   const v = payload[key]
   return typeof v === 'string' ? v : undefined
+}
+
+/** Read a number field off an unknown payload record. */
+function readNum(payload: { readonly [k: string]: unknown }, key: string): number {
+  const v = payload[key]
+  return typeof v === 'number' ? v : 0
+}
+
+/** The subagent status implied by an event type (an explicit payload `status` wins). */
+function subagentStatusFor(type: string): string {
+  if (type === 'subagent.complete') return 'complete'
+  if (type === 'subagent.thinking') return 'thinking'
+  if (type === 'subagent.tool') return 'tool'
+  if (type === 'subagent.progress') return 'working'
+  return 'running'
 }
 
 export function createSessionStore() {
@@ -126,7 +157,9 @@ export function createSessionStore() {
     pager: undefined,
     switcher: undefined,
     picker: undefined,
-    completions: undefined
+    completions: undefined,
+    subagents: [],
+    dashboard: false
   })
 
   // Monotonic part id (stable `key` per part so a new tool part below a streaming
@@ -210,9 +243,18 @@ export function createSessionStore() {
     )
   }
 
-  /** Clear the transcript (e.g. /clear, /new). */
+  /** Clear the transcript (e.g. /clear, /new) and any tracked subagents. */
   function clearTranscript() {
     setState('messages', [])
+    setState('subagents', [])
+  }
+
+  /** Open / close the agents dashboard overlay (/agents). */
+  function openDashboard() {
+    setState('dashboard', true)
+  }
+  function closeDashboard() {
+    setState('dashboard', false)
   }
 
   /** Open a local Y/N confirm dialog (non-gateway; e.g. /clear). */
@@ -381,8 +423,39 @@ export function createSessionStore() {
           requestId: event.payload.request_id
         })
         break
-      // Other event types (chrome, subagents) are reduced in later phases;
-      // unhandled members are intentionally ignored here.
+      // ── subagents (agents dashboard) — track the delegation tree by id ──
+      case 'subagent.spawn_requested':
+      case 'subagent.start':
+      case 'subagent.thinking':
+      case 'subagent.tool':
+      case 'subagent.progress':
+      case 'subagent.complete': {
+        const id = readStr(event.payload, 'subagent_id')
+        if (!id) break
+        setState(
+          produce(draft => {
+            let sa = draft.subagents.find(s => s.id === id)
+            if (!sa) {
+              sa = { depth: readNum(event.payload, 'depth'), goal: '', id, status: 'running' }
+              draft.subagents.push(sa)
+            }
+            const goal = readStr(event.payload, 'goal')
+            if (goal) sa.goal = goal
+            const model = readStr(event.payload, 'model')
+            if (model) sa.model = model
+            const parent = readStr(event.payload, 'parent_id')
+            if (parent) sa.parentId = parent
+            const summary = readStr(event.payload, 'summary')
+            if (summary) sa.summary = summary
+            const tool = readStr(event.payload, 'tool_name')
+            if (tool) sa.lastTool = tool
+            sa.status = readStr(event.payload, 'status') ?? subagentStatusFor(event.type)
+          })
+        )
+        break
+      }
+      // Other event types (chrome) are reduced in later phases; unhandled members
+      // are intentionally ignored here.
     }
   }
 
@@ -428,6 +501,8 @@ export function createSessionStore() {
     closePicker,
     setCompletions,
     clearCompletions,
+    openDashboard,
+    closeDashboard,
     hydrate,
     beginBuffer,
     commitSnapshot,

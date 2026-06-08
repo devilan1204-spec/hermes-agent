@@ -13,11 +13,12 @@
  * refocuses when an overlay closes; the key that closed an overlay can't leak
  * into it because the close is deferred a tick.
  */
-import { Match, Show, Switch } from 'solid-js'
+import { Match, Switch } from 'solid-js'
 
 import type { SessionStore } from '../logic/store.ts'
 import { Composer } from './composer.tsx'
 import { Header } from './header.tsx'
+import { AgentsDashboard } from './overlays/agentsDashboard.tsx'
 import { Pager } from './overlays/pager.tsx'
 import { Picker } from './overlays/picker.tsx'
 import { SessionSwitcher } from './overlays/sessionSwitcher.tsx'
@@ -41,11 +42,13 @@ const NO_SESSION = () => undefined
 export function App(props: AppProps) {
   const blocked = () => props.store.state.prompt !== undefined
   const pager = () => props.store.state.pager
+  const dashboard = () => props.store.state.dashboard
   const switcher = () => props.store.state.switcher
   const picker = () => props.store.state.picker
   // Defer the close so the key that closed an overlay (Esc/q/Enter) can't land in
   // the freshly-remounted composer.
   const closePager = () => setTimeout(() => props.store.closePager(), 0)
+  const closeDashboard = () => setTimeout(() => props.store.closeDashboard(), 0)
   const closeSwitcher = () => setTimeout(() => props.store.closeSwitcher(), 0)
   const closePicker = () => setTimeout(() => props.store.closePicker(), 0)
   const resume = (id: string) => {
@@ -56,8 +59,8 @@ export function App(props: AppProps) {
   return (
     <box style={{ flexDirection: 'column', flexGrow: 1, padding: 1 }}>
       <Header store={props.store} />
-      <Show
-        when={pager()}
+      {/* content zone: a full-screen overlay (pager / agents dashboard) OR the transcript + input zone */}
+      <Switch
         fallback={
           <>
             <Transcript store={props.store} />
@@ -98,8 +101,11 @@ export function App(props: AppProps) {
           </>
         }
       >
-        {p => <Pager title={p().title} text={p().text} onClose={closePager} />}
-      </Show>
+        <Match when={pager()}>{p => <Pager title={p().title} text={p().text} onClose={closePager} />}</Match>
+        <Match when={dashboard()}>
+          <AgentsDashboard subagents={props.store.state.subagents} onClose={closeDashboard} />
+        </Match>
+      </Switch>
     </box>
   )
 }

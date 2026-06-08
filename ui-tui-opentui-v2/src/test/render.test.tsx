@@ -170,4 +170,30 @@ describe('App render (Phase 1, themed)', () => {
     expect(frame).toContain('compress context') // its meta
     expect(frame).toContain('Tab complete') // dropdown hint
   })
+
+  test('the agents dashboard renders the subagent tree and replaces the transcript', async () => {
+    const store = createSessionStore()
+    store.apply({ type: 'gateway.ready' })
+    store.pushUser('parent turn')
+    store.apply({
+      type: 'subagent.start',
+      payload: { subagent_id: 'a1', goal: 'research the topic', model: 'haiku', depth: 0 }
+    })
+    store.apply({ type: 'subagent.tool', payload: { subagent_id: 'a1', tool_name: 'web_search' } })
+    store.openDashboard()
+
+    const frame = await captureFrame(
+      () => (
+        <ThemeProvider theme={() => store.state.theme}>
+          <App store={store} />
+        </ThemeProvider>
+      ),
+      { until: 'Agents', width: 72, height: 18 }
+    )
+
+    expect(frame).toContain('Agents') // dashboard header
+    expect(frame).toContain('research the topic') // subagent goal
+    expect(frame).toContain('web_search') // its last tool
+    expect(frame).not.toContain('parent turn') // transcript replaced by the dashboard
+  })
 })

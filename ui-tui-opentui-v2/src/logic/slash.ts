@@ -49,6 +49,8 @@ export interface SlashContext {
   readonly openSwitcher: (sessions: SessionItem[]) => void
   /** Open a generic picker (model picker, skills hub). */
   readonly openPicker: (picker: PickerState) => void
+  /** Open the agents dashboard (/agents, /tasks). */
+  readonly openDashboard: () => void
 }
 
 function readStr(value: unknown, key: string): string | undefined {
@@ -176,6 +178,7 @@ const skillsCmd: ClientHandler = async (_arg, ctx) => {
 
 /** The TUI-only client commands (run in-process, never hit the gateway). */
 const CLIENT: Record<string, ClientHandler> = {
+  agents: (_arg, ctx) => ctx.openDashboard(),
   clear: (_arg, ctx) => ctx.confirm('Clear the transcript?', ctx.clearTranscript),
   exit: (_arg, ctx) => ctx.quit(),
   model: modelCmd,
@@ -184,6 +187,7 @@ const CLIENT: Record<string, ClientHandler> = {
   sessions: openSwitcher,
   skills: skillsCmd,
   switch: openSwitcher,
+  tasks: (_arg, ctx) => ctx.openDashboard(),
   help: async (_arg, ctx) => {
     // Prefer the live catalog; fall back to the client list if it's unavailable.
     try {
