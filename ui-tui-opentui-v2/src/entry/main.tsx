@@ -27,6 +27,7 @@ import { liveGatewayLayer } from '../boundary/gateway/liveGateway.ts'
 import { getLog } from '../boundary/log.ts'
 import { acquireRenderer } from '../boundary/renderer.ts'
 import { makeAppLayer } from '../boundary/runtime.ts'
+import { createPromptHistory, dirHistoryPersister, loadDirHistory } from '../logic/history.ts'
 import { mapResumeHistory, mapSessionList } from '../logic/resume.ts'
 import { dispatchSlash, mapCompletions, type SlashContext } from '../logic/slash.ts'
 import { createSessionStore, type SessionStore } from '../logic/store.ts'
@@ -138,6 +139,16 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
     Effect.gen(function* () {
       // Solid side: the store + reducer. Created here, lives in Solid-land.
       const store = createSessionStore()
+
+      // Prompt history (item 6): scoped to the launch directory so prior prompts
+      // from the same project dir are recallable (Up/Down), without bleeding
+      // across different dirs. process.cwd() is the user's launch dir under the
+      // real launcher.
+      const historyCwd = process.cwd()
+      const history = createPromptHistory({
+        initial: loadDirHistory(historyCwd),
+        persist: dirHistoryPersister(historyCwd)
+      })
 
       // Contact point #2: boundary pushes decoded events into the Solid store.
       const gateway = yield* GatewayService
@@ -297,6 +308,7 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
                 onRespond={respond}
                 onResume={onResume}
                 sessionId={() => gateway.sessionId()}
+                history={history}
               />
             </ThemeProvider>
           ),

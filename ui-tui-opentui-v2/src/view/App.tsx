@@ -15,6 +15,7 @@
  */
 import { Match, Switch } from 'solid-js'
 
+import type { PromptHistory } from '../logic/history.ts'
 import type { SessionStore } from '../logic/store.ts'
 import { Composer } from './composer.tsx'
 import { Header } from './header.tsx'
@@ -35,6 +36,7 @@ export interface AppProps {
   readonly onRespond?: (method: string, params: Record<string, unknown>) => void
   readonly onResume?: (sessionId: string) => void
   readonly sessionId?: () => string | undefined
+  readonly history?: PromptHistory
 }
 
 const NOOP = () => {}
@@ -85,6 +87,7 @@ export function App(props: AppProps) {
                     onType={props.onType}
                     completions={() => props.store.state.completions ?? []}
                     onDismiss={() => props.store.clearCompletions()}
+                    history={props.history}
                   />
                 }
               >

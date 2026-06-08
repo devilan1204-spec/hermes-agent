@@ -24,6 +24,7 @@ import { useKeyboard } from '@opentui/solid'
 import { For, onMount, Show } from 'solid-js'
 
 import type { CompletionItem } from '../logic/store.ts'
+import type { PromptHistory } from '../logic/history.ts'
 import { useTheme } from './theme.tsx'
 
 /** Keys that must NOT steal focus back to the composer (scroll/edit/nav). */
@@ -75,11 +76,19 @@ export function Composer(props: {
   onType?: ((text: string) => void) | undefined
   completions?: (() => CompletionItem[]) | undefined
   onDismiss?: (() => void) | undefined
+  history?: PromptHistory | undefined
 }) {
   const theme = useTheme()
   let ta: TextareaRenderable | undefined
   let submitting = false
   const completions = () => props.completions?.() ?? []
+
+  /** Replace the textarea content and park the cursor at the end (history recall). */
+  const setBuffer = (text: string) => {
+    if (!ta) return
+    ta.setText(text)
+    ta.cursorOffset = text.length
+  }
 
   const submit = () => {
     if (submitting || !ta) return
@@ -87,6 +96,7 @@ export function Composer(props: {
     if (!text) return
     submitting = true
     props.onSubmit(text)
+    props.history?.push(text)
     ta.clear()
     props.onDismiss?.()
     submitting = false
@@ -109,7 +119,26 @@ export function Composer(props: {
         return
       }
     }
-    // 2) always-active input (item 2): a printable key while the textarea lost
+    // 2) prompt history (item 6): Up at the first line → older prompt; Down at the
+    // last line → newer/draft. At the boundary the textarea's own up/down is a
+    // no-op, so there's no conflict; mid-buffer it falls through to cursor moves.
+    if (ta && props.history) {
+      if (key.name === 'up' && ta.logicalCursor.row === 0) {
+        const entry = props.history.prev(ta.plainText)
+        if (entry !== null) setBuffer(entry)
+        return
+      }
+      if (key.name === 'down' && ta.logicalCursor.row === ta.lineCount - 1) {
+        const entry = props.history.next()
+        if (entry !== null) setBuffer(entry)
+        return
+      }
+      // any edit resets the recall cursor so the next Up starts from the bottom
+      if (key.name === 'backspace' || key.name === 'delete' || isPrintableKey(key)) {
+        props.history.reset()
+      }
+    }
+    // 3) always-active input (item 2): a printable key while the textarea lost
     // focus reclaims it AND recovers the char (the in-flight event went to this
     // global handler, not the unfocused textarea). Nav/scroll keys are untouched.
     if (ta && !ta.focused && isPrintableKey(key)) {
