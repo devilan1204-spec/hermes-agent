@@ -15,6 +15,7 @@
 import { Effect, Layer, Option, Schema } from 'effect'
 import { batch } from 'solid-js'
 
+import { backoffMs, planGatewayRecovery } from '../../logic/gatewayRecovery.ts'
 import { GatewayError } from '../errors.ts'
 import { getLog } from '../log.ts'
 import { GatewayEventSchema, type GatewayEvent } from '../schema/GatewayEvent.ts'
@@ -29,6 +30,14 @@ function makeLiveGateway(): { service: GatewayServiceShape; stop: () => void } {
   const log = getLog()
   const handlers = new Set<(event: GatewayEvent) => void>()
   let sessionId: string | undefined
+
+  // Auto-heal recovery state (driver below). `recoverSid` is the resume target
+  // carried across a respawn that died before gateway.ready; `recoveryAttempts`
+  // is the sliding crash-loop budget window; `restartTimer` is the pending
+  // backoff respawn (cleared on teardown so it can't fire post-stop).
+  let recoverSid: string | undefined
+  let recoveryAttempts: number[] = []
+  let restartTimer: ReturnType<typeof setTimeout> | undefined
 
   // 16ms event coalescing → one batched repaint (opencode sdk.tsx model).
   let queue: GatewayEvent[] = []
@@ -69,10 +78,37 @@ function makeLiveGateway(): { service: GatewayServiceShape; stop: () => void } {
     enqueue(decoded.value)
   }
 
+  // Recovery driver: on a child exit, clear the frozen spinner (via the store's
+  // gateway.exited case), then — under the crash-loop budget — respawn the child
+  // on exponential backoff. The post-respawn gateway.ready triggers the re-resume
+  // (driven from entry's subscribe callback). Hoisted so it can be passed to
+  // `new RawGatewayClient` below while itself referencing the `client` const —
+  // `client` is assigned by the time onExit ever fires at runtime.
+  function onExit(reason: string): void {
+    log.warn('gateway', 'transport exited', { reason })
+    // Clears the frozen spinner + shows status (store handles gateway.exited).
+    enqueue({ type: 'gateway.exited', payload: { reason } })
+    const plan = planGatewayRecovery(sessionId ?? null, recoverSid ?? null, recoveryAttempts, Date.now())
+    recoveryAttempts = plan.attempts
+    if (!plan.recover || plan.sid === null) {
+      enqueue({ type: 'error', payload: { message: 'gateway exited repeatedly — type /resume to retry' } })
+      return
+    }
+    recoverSid = plan.sid
+    const attempt = recoveryAttempts.length
+    const delay = backoffMs(attempt)
+    enqueue({ type: 'gateway.recovering', payload: { attempt, delay_ms: delay } })
+    if (restartTimer) clearTimeout(restartTimer)
+    restartTimer = setTimeout(() => {
+      restartTimer = undefined
+      client.start()
+    }, delay)
+  }
+
   const client = new RawGatewayClient({
     log,
     onEvent: onRawEvent,
-    onExit: reason => log.warn('gateway', 'transport exited', { reason })
+    onExit
   })
 
   const service: GatewayServiceShape = {
@@ -118,6 +154,9 @@ function makeLiveGateway(): { service: GatewayServiceShape; stop: () => void } {
   const stop = () => {
     if (timer) clearTimeout(timer)
     timer = undefined
+    // Also kill any pending backoff respawn so it can't fire after teardown.
+    if (restartTimer) clearTimeout(restartTimer)
+    restartTimer = undefined
     client.stop()
   }
   return { service, stop }

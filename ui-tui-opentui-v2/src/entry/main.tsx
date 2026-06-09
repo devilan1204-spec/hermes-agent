@@ -194,8 +194,28 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
       const pasteStore = createPasteStore()
 
       // Contact point #2: boundary pushes decoded events into the Solid store.
+      // The callback ALSO drives auto-heal re-resume: a post-crash gateway.ready
+      // (i.e. one that follows a gateway.exited, so `recoverSid` is set) re-resumes
+      // the session so the transcript continues. The INITIAL gateway.ready has
+      // `recoverSid === undefined`, so the normal bootstrap path is untouched.
       const gateway = yield* GatewayService
-      yield* gateway.subscribe(event => store.apply(event))
+      let recoverSid: string | undefined
+      yield* gateway.subscribe(event => {
+        store.apply(event)
+        if (event.type === 'gateway.exited') {
+          recoverSid = gateway.sessionId() ?? recoverSid
+        } else if (event.type === 'gateway.ready' && recoverSid !== undefined) {
+          const sid = recoverSid
+          recoverSid = undefined
+          Effect.runFork(
+            resumeInto(gateway, store, sid, input.cols).pipe(
+              Effect.catchCause(cause =>
+                Effect.sync(() => getLog().warn('recover', 'resume failed', { cause: String(cause) }))
+              )
+            )
+          )
+        }
+      })
 
       // ── Ctrl+C state machine (item 11) ──────────────────────────────────
       // While a turn runs, the first Ctrl+C STOPS the agent (session.interrupt);

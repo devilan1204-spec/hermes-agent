@@ -74,6 +74,9 @@ export class RawGatewayClient {
       stdout: 'pipe',
       stderr: 'pipe',
       onExit: (_p, code, signal) => {
+        // Identity guard: a stale child's late exit must not act after a restart
+        // has already installed a new `this.proc` (else it'd null the live child).
+        if (this.proc !== proc) return
         const reason = `gateway exited (code=${code ?? 'null'} signal=${signal ?? 'null'})`
         this.log.warn('gateway', reason)
         this.rejectAll(reason)
@@ -171,7 +174,9 @@ export class RawGatewayClient {
 
   /** Send a JSON-RPC request; resolves with `result` (long handlers reply async). */
   request<A = unknown>(method: string, params: unknown): Promise<A> {
-    if (!this.proc) this.start()
+    // Do NOT auto-start here: during the recovery backoff window `this.proc` is
+    // null, and a respawn here would BYPASS the backoff (the first spawn always
+    // comes from subscribe() → client.start()). A null proc rejects below.
     const proc = this.proc
     const stdin = proc?.stdin
     if (!stdin || typeof stdin === 'number') return Promise.reject(new Error('gateway not running'))

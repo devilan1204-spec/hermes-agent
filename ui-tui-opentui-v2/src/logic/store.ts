@@ -685,7 +685,10 @@ export function createSessionStore() {
       // the user their in-flight reply was lost, and show a recovering status.
       case 'gateway.exited': {
         setState('info', prev => ({ ...prev, running: false }))
-        setState('status', 'gateway exited — recovering…')
+        // Neutral status: we don't ALWAYS recover (budget exhaustion). The
+        // "recovering…" wording now comes from the gateway.recovering case,
+        // which fires only when a respawn is actually scheduled.
+        setState('status', 'gateway exited')
         const reason = event.payload?.reason
         const base = 'gateway exited — recovering your session (any in-flight reply was lost)'
         pushSystem(reason ? `${base}: ${reason}` : base)

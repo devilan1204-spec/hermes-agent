@@ -339,7 +339,8 @@ describe('session store — gateway lifecycle / transport errors (auto-heal foun
     store.apply({ type: 'gateway.exited' })
     // THE key bug fix: the spinner is cleared even though no message.complete arrived.
     expect(store.state.info.running).toBe(false)
-    expect(store.state.status).toBe('gateway exited — recovering…')
+    // Neutral status — "recovering…" now comes from gateway.recovering only.
+    expect(store.state.status).toBe('gateway exited')
     const sys = store.state.messages.filter(m => m.role === 'system')
     expect(sys).toHaveLength(1)
     expect(sys[0]!.text).toContain('in-flight reply was lost')
