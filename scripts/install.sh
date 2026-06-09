@@ -268,7 +268,7 @@ emit_manifest() {
     if [ "$INCLUDE_DESKTOP" = true ]; then
         desktop_stage='{"name":"desktop","title":"Build desktop app","category":"runtime","needs_user_input":false},'
     fi
-    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
+    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"opentui-engine","title":"Set up OpenTUI engine","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
     printf '\n'
 }
 
@@ -1924,6 +1924,83 @@ install_node_deps() {
     restore_dirty_lockfiles "$INSTALL_DIR"
 }
 
+# Provision the native OpenTUI engine (Bun runtime + `bun install` in
+# ui-tui-opentui-v2). The launcher (hermes_cli/main.py:_opentui_available)
+# defaults the TUI to OpenTUI only when Bun resolves AND the v2 package's
+# node_modules/@opentui is present, otherwise it transparently falls back to
+# the legacy Ink engine. So this stage is STRICTLY best-effort: any failure
+# (unsupported platform, no network, Bun install fails, `bun install` fails)
+# logs a warning and returns 0. A skipped OpenTUI setup just means the user
+# gets Ink — breaking the install would be far worse than skipping OpenTUI.
+# Every sub-step is guarded with `|| { log_warn ...; return 0; }`; this
+# function never `exit`s and never returns non-zero.
+install_opentui() {
+    # Bun is unreliable on Windows and Termux — keep those hosts on Ink.
+    # (detect_os already aborts the bash installer on Windows, but guard
+    # defensively in case this is ever reached via a stage runner.)
+    if [ "$OS" = "windows" ] || [ "$DISTRO" = "termux" ] || [ "$OS" = "android" ]; then
+        log_info "Skipping OpenTUI engine (unsupported platform) — using Ink."
+        return 0
+    fi
+
+    # Only meaningful if the v2 package is present in this checkout.
+    if [ ! -f "$INSTALL_DIR/ui-tui-opentui-v2/package.json" ]; then
+        log_info "Skipping OpenTUI engine (ui-tui-opentui-v2 not present) — using Ink."
+        return 0
+    fi
+
+    log_info "Setting up OpenTUI engine (native TUI)..."
+
+    # Resolve Bun: PATH, then the common install dirs the launcher also probes
+    # (HERMES_BUN > bun on PATH > ~/.bun/bin/bun > /usr/local/bin > Homebrew).
+    local bun_bin=""
+    if command -v bun >/dev/null 2>&1; then
+        bun_bin="$(command -v bun)"
+    else
+        for cand in "$HOME/.bun/bin/bun" "/usr/local/bin/bun" "/opt/homebrew/bin/bun"; do
+            if [ -x "$cand" ]; then
+                bun_bin="$cand"
+                break
+            fi
+        done
+    fi
+
+    # Install Bun if it isn't already resolvable (idempotent: skipped when found).
+    if [ -z "$bun_bin" ]; then
+        log_info "Installing Bun (https://bun.sh)..."
+        # Best-effort: bun.sh's installer drops the binary at ~/.bun/bin/bun.
+        # On any failure (no network, install error) warn and fall back to Ink.
+        if ! curl -fsSL https://bun.sh/install | bash >/dev/null 2>&1; then
+            log_warn "OpenTUI engine setup skipped (Bun install failed) — the Ink engine will be used; see https://bun.sh"
+            return 0
+        fi
+        if command -v bun >/dev/null 2>&1; then
+            bun_bin="$(command -v bun)"
+        elif [ -x "$HOME/.bun/bin/bun" ]; then
+            bun_bin="$HOME/.bun/bin/bun"
+        fi
+    fi
+
+    if [ -z "$bun_bin" ]; then
+        log_warn "OpenTUI engine setup skipped (Bun not available after install) — the Ink engine will be used; see https://bun.sh"
+        return 0
+    fi
+
+    log_success "Bun found ($("$bun_bin" --version 2>/dev/null || echo "unknown"))"
+
+    # Pull the v2 package's dependencies — this fetches the per-arch
+    # @opentui/core-<arch> native lib automatically. Idempotent.
+    log_info "Installing OpenTUI dependencies (bun install)..."
+    cd "$INSTALL_DIR/ui-tui-opentui-v2"
+    if ! "$bun_bin" install >/dev/null 2>&1; then
+        log_warn "OpenTUI engine setup skipped (bun install failed) — the Ink engine will be used; see https://bun.sh"
+        return 0
+    fi
+
+    log_success "OpenTUI engine ready (now the default; set HERMES_TUI_ENGINE=ink for the legacy Ink engine)."
+    return 0
+}
+
 run_setup_wizard() {
     if [ "$RUN_SETUP" = false ]; then
         log_info "Skipping setup wizard (--skip-setup)"
@@ -2458,6 +2535,12 @@ run_stage_body() {
             check_node
             install_node_deps
             ;;
+        opentui-engine)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            install_opentui
+            ;;
         path)
             detect_os
             resolve_install_layout
@@ -2565,6 +2648,7 @@ main() {
     setup_venv
     install_deps
     install_node_deps
+    install_opentui
     setup_path
     copy_config_templates
     run_setup_wizard
