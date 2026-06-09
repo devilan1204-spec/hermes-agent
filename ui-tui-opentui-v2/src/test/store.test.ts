@@ -91,6 +91,24 @@ describe('session store — ordered parts (Phase 2b)', () => {
     }
   })
 
+  test('message.complete with text but NO prior start creates the turn (complete-only gateway; no drop)', () => {
+    const store = createSessionStore()
+    store.apply({ type: 'gateway.ready' })
+    // no message.start / no deltas — straight to complete with the full text
+    store.apply({ type: 'message.complete', payload: { text: 'The whole answer.' } })
+    const msg = store.state.messages.at(-1)!
+    expect(msg.role).toBe('assistant')
+    expect(msg.streaming).toBe(false)
+    expect(msg.parts?.some(p => p.type === 'text' && p.text === 'The whole answer.')).toBe(true)
+  })
+
+  test('message.complete with no live turn and no text does NOT create an empty bubble', () => {
+    const store = createSessionStore()
+    store.apply({ type: 'gateway.ready' })
+    store.apply({ type: 'message.complete', payload: {} })
+    expect(store.state.messages.filter(m => m.role === 'assistant')).toHaveLength(0)
+  })
+
   test('tool.complete updates the running tool part IN PLACE (not a new row)', () => {
     const store = createSessionStore()
     store.apply({ type: 'message.start' })

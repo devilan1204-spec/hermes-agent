@@ -113,7 +113,14 @@ function makeLiveGateway(): { service: GatewayServiceShape; stop: () => void } {
     sessionId: () => sessionId
   }
 
-  return { service, stop: () => client.stop() }
+  // Clear a pending coalesce timer on teardown so a queued flush() can't fire
+  // batch()/handlers into a torn-down store after the layer scope releases.
+  const stop = () => {
+    if (timer) clearTimeout(timer)
+    timer = undefined
+    client.stop()
+  }
+  return { service, stop }
 }
 
 /**

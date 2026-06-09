@@ -323,15 +323,15 @@ export function createSessionStore() {
     return created
   }
 
-  /** Find a tool part by id, scanning recent assistant turns (complete may land late). */
+  /** Find a tool part by id in the CURRENT (last) assistant turn — a tool.complete
+   *  always pairs with a tool.start in the live turn, so scoping there avoids
+   *  matching a same-id tool in an older/resumed turn (and is O(parts), not O(all)). */
   function findToolPart(draft: StoreState, id: string): ToolPartState | undefined {
-    for (let i = draft.messages.length - 1; i >= 0; i--) {
-      const parts = draft.messages[i]?.parts
-      if (!parts) continue
-      for (let j = parts.length - 1; j >= 0; j--) {
-        const p = parts[j]
-        if (p && p.type === 'tool' && p.id === id) return p
-      }
+    const parts = liveAssistant(draft)?.parts
+    if (!parts) return undefined
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const p = parts[j]
+      if (p && p.type === 'tool' && p.id === id) return p
     }
     return undefined
   }
@@ -473,10 +473,12 @@ export function createSessionStore() {
       case 'message.complete':
         setState(
           produce(draft => {
-            const live = liveAssistant(draft, true)
+            // complete-only gateways may send `message.complete{text}` with no prior
+            // start/delta → create the turn so the final text isn't dropped.
+            const finalText = event.payload?.text
+            const live = liveAssistant(draft, true) ?? (finalText ? ensureAssistant(draft) : undefined)
             if (!live) return
             // If no deltas arrived (complete-only gateways), seed the full text once.
-            const finalText = event.payload?.text
             const hasText = (live.parts ?? []).some(p => p.type === 'text' && p.text.length > 0)
             if (finalText && !hasText) appendPart(live, 'text', finalText)
             live.streaming = false
