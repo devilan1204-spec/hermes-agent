@@ -146,11 +146,12 @@ export function Composer(props: {
       }
     }
     // 3) always-active input (item 2): a printable key while the textarea lost
-    // focus reclaims it AND recovers the char (the in-flight event went to this
-    // global handler, not the unfocused textarea). Nav/scroll keys are untouched.
+    // focus reclaims it. The renderer runs this GLOBAL handler BEFORE routing the
+    // key to the focused renderable, so after focus() the SAME keystroke is still
+    // delivered to the (now-focused) textarea — do NOT insert it here too, or the
+    // first letter doubles. Nav/scroll keys are untouched.
     if (ta && !ta.focused && isPrintableKey(key)) {
       ta.focus()
-      ta.insertText(key.sequence)
     }
   })
 
