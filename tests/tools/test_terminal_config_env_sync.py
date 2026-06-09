@@ -87,14 +87,18 @@ def _gateway_env_map_keys() -> set[str]:
 
 
 def _save_config_env_sync_keys() -> set[str]:
-    """terminal config keys bridged by ``hermes config set foo bar``."""
+    """terminal config keys bridged by ``hermes config set foo bar``.
+
+    ``set_config_value`` bridges ``terminal.X`` keys to env vars via
+    ``terminal_config_env_var_for_key()``, which looks up the shared
+    module-level ``TERMINAL_CONFIG_ENV_MAP`` (keyed by bare leaf name).
+    Read that map directly — it is the single source of truth the
+    ``hermes config set`` path actually consults, so this stays correct
+    across refactors of ``set_config_value`` instead of parsing a
+    function-local dict literal that no longer exists.
+    """
     from hermes_cli import config as hc_config
-    source = inspect.getsource(hc_config.set_config_value)
-    keys = _extract_dict_keys(source, "_config_to_env_sync")
-    # set_config_value uses fully-qualified ``terminal.foo`` keys; strip the
-    # prefix so we can compare against the other two maps which use bare
-    # leaf keys.
-    return {k.split(".", 1)[1] for k in keys if k.startswith("terminal.")}
+    return set(hc_config.TERMINAL_CONFIG_ENV_MAP.keys())
 
 
 # Keys present in cli.py env_mappings but intentionally absent from
