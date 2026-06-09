@@ -1,23 +1,37 @@
 /**
  * DEV BENCH — NOT a test, NOT production code. Throwaway memory-measurement
- * harness for the Epic 5 comparison doc. Empirically checks whether the rolling
- * MESSAGE_CAP bounds the native (Yoga/renderable) allocation footprint as the
- * transcript grows. Excluded from `bun test` (not a *.test.ts) and lint-clean.
+ * harness for tuning the rolling `HERMES_TUI_MAX_MESSAGES` cap. Mounts the
+ * production `<App store={createSessionStore()}>` under the `@opentui/solid` test
+ * renderer and samples `process.memoryUsage()` + the mounted-renderable count +
+ * `getAllocatorStats().activeAllocations`, forcing `Bun.gc(true)` before each
+ * sample. Excluded from `bun test` (not a *.test.ts) and lint-clean.
  *
- *   Uncapped:  HERMES_TUI_MAX_MESSAGES=100000 bun scripts/mem-bench.ts
- *   Capped:    HERMES_TUI_MAX_MESSAGES=400    bun scripts/mem-bench.ts
+ * It pushes a REALISTIC heavy-session fixture (scripts/fixture.ts) — varied user
+ * turns + fat multi-part assistant turns (markdown + reasoning + several tool
+ * headers) — because per-message size varies hugely, so message-count is only a
+ * LOOSE memory proxy and we're choosing a cap default.
  *
- * Run each as a SEPARATE bun invocation so the WASM/native heap starts fresh.
+ *   Uncapped:  MEM_BENCH_TOTAL=8000 HERMES_TUI_MAX_MESSAGES=100000 bun scripts/mem-bench.tsx
+ *   Capped:    MEM_BENCH_TOTAL=8000 HERMES_TUI_MAX_MESSAGES=1500   bun scripts/mem-bench.tsx
+ *
+ * Run each cap as a SEPARATE bun invocation so the WASM/native heap starts fresh.
+ * The matrix loop:
+ *   for cap in 400 1500 3000 6000 100000; do \
+ *     MEM_BENCH_TOTAL=8000 HERMES_TUI_MAX_MESSAGES=$cap bun scripts/mem-bench.tsx; done
  *
  * Signal: native `getAllocatorStats().activeAllocations` (the Zig-side allocator
  * count — every live renderable/Yoga subtree contributes) and the recursive
  * renderable descendant count under `renderer.root`. RSS is reported too but is
  * noisy and grow-only (WASM linear memory never returns to the OS), so the
- * meaningful comparison is the SLOPE of activeAllocations / descendant count:
- * capped should plateau after ~CAP messages; uncapped should keep climbing.
+ * meaningful comparison is the STEADY-STATE plateau: capped should flatten after
+ * ~CAP messages; uncapped should keep climbing.
  *
  * GC: forces `Bun.gc(true)` (synchronous) before each sample to measure RETAINED
  * memory, not garbage. (`--expose-gc`/`global.gc` is unavailable under Bun.)
+ *
+ * RESUME PATH: after the live push matrix, builds the full fixture as a settled
+ * Message[] and `commitSnapshot`s it (the resume path), reporting mounted nodes +
+ * RSS — verifying the slice-before-set fix bounds resume mounting to ≤ cap.
  */
 import { resolveRenderLib } from '@opentui/core'
 import type { Renderable } from '@opentui/core'
@@ -26,11 +40,12 @@ import { testRender } from '@opentui/solid'
 import { createSessionStore } from '../src/logic/store.ts'
 import { App } from '../src/view/App.tsx'
 import { ThemeProvider } from '../src/view/theme.tsx'
+import { applyTurn, materialize, rowsPerTurn } from './fixture.ts'
 
 const lib = resolveRenderLib()
 
-const TOTAL = Number.parseInt(process.env.MEM_BENCH_TOTAL ?? '5000', 10)
-const SAMPLE_EVERY = Number.parseInt(process.env.MEM_BENCH_SAMPLE ?? '250', 10)
+const TOTAL = Number.parseInt(process.env.MEM_BENCH_TOTAL ?? '8000', 10)
+const SAMPLE_EVERY = Number.parseInt(process.env.MEM_BENCH_SAMPLE ?? '500', 10)
 const cap = process.env.HERMES_TUI_MAX_MESSAGES ?? '(default 400)'
 
 const MB = (bytes: number) => (bytes / 1024 / 1024).toFixed(1)
@@ -40,16 +55,6 @@ function descendantCount(node: Renderable): number {
   let n = 0
   for (const child of node.getChildren()) n += 1 + descendantCount(child)
   return n
-}
-
-/** One streamed assistant turn = a few text parts (a realistic multi-node subtree). */
-function pushTurn(store: ReturnType<typeof createSessionStore>, i: number): void {
-  store.pushUser(`user message ${i}: please summarize the situation in a few lines`)
-  store.apply({ type: 'message.start' })
-  store.apply({ type: 'message.delta', payload: { text: `Sure — point one for turn ${i}. ` } })
-  store.apply({ type: 'message.delta', payload: { text: `Here is point two with a bit more detail. ` } })
-  store.apply({ type: 'message.delta', payload: { text: `And a closing point three for turn ${i}.` } })
-  store.apply({ type: 'message.complete' })
 }
 
 async function main(): Promise<void> {
@@ -67,8 +72,9 @@ async function main(): Promise<void> {
   await setup.renderOnce()
   await setup.flush()
 
-  // header: pad to fixed widths for a readable table
-  process.stdout.write(`\n=== mem-bench  cap=${cap}  total=${TOTAL}  sampleEvery=${SAMPLE_EVERY} ===\n`)
+  process.stdout.write(
+    `\n=== mem-bench (REALISTIC fixture)  cap=${cap}  total=${TOTAL}  sampleEvery=${SAMPLE_EVERY} ===\n`
+  )
   process.stdout.write(
     'pushes | msgs | rss(MB) | heapUsed(MB) | external(MB) | arrayBuf(MB) | activeAllocs | renderables\n'
   )
@@ -97,12 +103,65 @@ async function main(): Promise<void> {
   }
 
   await sample(0)
-  for (let i = 1; i <= TOTAL; i++) {
-    pushTurn(store, i)
-    if (i % SAMPLE_EVERY === 0) await sample(i)
+  // Pump turns inline, sampling each time the cumulative produced-row count crosses
+  // a SAMPLE_EVERY boundary. Sampling is async (renderOnce/flush/gc), so it lives
+  // in the loop rather than a sync callback. Mounting is synchronous in Solid, so a
+  // render pass at the boundary reflects the just-pushed turns.
+  let pushed = 0
+  let nextSample = SAMPLE_EVERY
+  let turn = 0
+  while (pushed < TOTAL) {
+    applyTurn(store, turn)
+    pushed += rowsPerTurn(turn)
+    turn++
+    if (pushed >= nextSample) {
+      await sample(Math.min(pushed, TOTAL))
+      while (nextSample <= pushed) nextSample += SAMPLE_EVERY
+    }
   }
 
+  // Tear down the live push tree BEFORE the resume path so its mounted nodes don't
+  // pollute the process-wide RSS the resume sample reads. (The renderable COUNT is
+  // already isolated per-renderer-root, but RSS is process-global.)
+  store.clearTranscript()
   setup.renderer.destroy()
+  Bun.gc(true)
+
+  // ── RESUME PATH: build the full settled fixture and commitSnapshot it (the
+  // resume hydrate path). Verifies the slice-before-set fix bounds resume mounting
+  // to ≤ cap — mounting 8000 settled msgs at cap=1500 should mount ~1500-worth of
+  // rows, NOT 8000-worth. Done on a FRESH store + renderer so the live-push history
+  // above doesn't skew the count.
+  const resumeStore = createSessionStore()
+  resumeStore.apply({ type: 'gateway.ready' })
+  const resumeSetup = await testRender(
+    () => (
+      <ThemeProvider theme={() => resumeStore.state.theme}>
+        <App store={resumeStore} />
+      </ThemeProvider>
+    ),
+    { width: 100, height: 40, exitOnCtrlC: false }
+  )
+  await resumeSetup.renderOnce()
+  await resumeSetup.flush()
+
+  const fullFixture = materialize(TOTAL)
+  resumeStore.beginBuffer()
+  resumeStore.commitSnapshot(fullFixture)
+  await resumeSetup.renderOnce()
+  await resumeSetup.flush()
+  Bun.gc(true)
+  const rm = process.memoryUsage()
+  const ralloc = lib.getAllocatorStats()
+  const rrenderables = descendantCount(resumeSetup.renderer.root)
+  process.stdout.write('\n--- resume path (commitSnapshot of the full fixture) ---\n')
+  process.stdout.write(`fixture msgs built : ${fullFixture.length}\n`)
+  process.stdout.write(`mounted msgs (cap) : ${resumeStore.state.messages.length}\n`)
+  process.stdout.write(`mounted renderables: ${rrenderables}\n`)
+  process.stdout.write(`activeAllocations  : ${ralloc.activeAllocations}\n`)
+  process.stdout.write(`rss(MB)            : ${MB(rm.rss)}\n`)
+
+  resumeSetup.renderer.destroy()
 }
 
 await main()
