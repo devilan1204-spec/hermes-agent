@@ -227,8 +227,11 @@ export class RawGatewayClient {
       })
 
       try {
-        stdin.write(frame)
-        stdin.flush()
+        // FileSink.write/flush type as `number | Promise<number>`; for a piped
+        // child stdin they return synchronously — this is intentional
+        // fire-and-forget (no backpressure await), so mark the intent explicitly.
+        void stdin.write(frame)
+        void stdin.flush()
       } catch (cause) {
         this.pending.delete(id)
         clearTimeout(timer)
@@ -250,7 +253,8 @@ export class RawGatewayClient {
     const stdin = this.proc?.stdin
     if (stdin && typeof stdin !== 'number') {
       try {
-        stdin.end()
+        // Fire-and-forget EOF: FileSink.end types as `number | Promise<number>`.
+        void stdin.end()
       } catch {
         // already gone
       }
