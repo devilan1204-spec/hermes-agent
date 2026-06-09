@@ -24,9 +24,10 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }],
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-non-null-assertion": "error",
       "unused-imports/no-unused-imports": "error",
       "unused-imports/no-unused-vars": [
-        "warn",
+        "error",
         { vars: "all", varsIgnorePattern: "^_", args: "after-used", argsIgnorePattern: "^_" },
       ],
 
@@ -54,6 +55,13 @@ export default tseslint.config(
       // until Phase 2 (Schema decode) removes the casts.
       "@typescript-eslint/no-unnecessary-type-assertion": "warn",
       "@typescript-eslint/require-await": "warn",
+    },
+  },
+  {
+    // Tests keep their `!` non-null assertions (fixtures with known-present data).
+    files: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "@typescript-eslint/no-non-null-assertion": "off",
     },
   },
   {

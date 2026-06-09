@@ -69,8 +69,9 @@ export function ToolPart(props: { part: ToolPartState }) {
     const e = argEntries()
     if (argsObj() === undefined) return !!props.part.argsText // unparsed → show raw
     if (e.length === 0) return false
-    if (e.length === 1) {
-      const v = e[0]![1]
+    const only = e.length === 1 ? e[0] : undefined
+    if (only) {
+      const v = only[1]
       const vs = (typeof v === 'string' ? v : JSON.stringify(v)).trim()
       return vs !== (props.part.argsPreview ?? '').trim()
     }
@@ -118,7 +119,7 @@ export function ToolPart(props: { part: ToolPartState }) {
               </span>
             </Show>
             <Show when={!running() && props.part.duration !== undefined}>
-              <span style={{ fg: theme().color.muted }}>{`  · ${fmtDuration(props.part.duration!)}`}</span>
+              <span style={{ fg: theme().color.muted }}>{`  · ${fmtDuration(props.part.duration ?? 0)}`}</span>
             </Show>
             <Show when={collapsible() && !expanded() && lines().length > 1}>
               <span style={{ fg: theme().color.muted }}>{`  (${lines().length} lines)`}</span>

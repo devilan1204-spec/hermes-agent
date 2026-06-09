@@ -170,8 +170,9 @@ export class RawGatewayClient {
     const frame = msg as { id?: unknown; method?: unknown; params?: unknown; result?: unknown; error?: unknown }
 
     // Response: has an id matching a pending request.
-    if (typeof frame.id === 'string' && this.pending.has(frame.id)) {
-      const p = this.pending.get(frame.id)!
+    const pending = typeof frame.id === 'string' ? this.pending.get(frame.id) : undefined
+    if (typeof frame.id === 'string' && pending) {
+      const p = pending
       this.pending.delete(frame.id)
       if (frame.error) {
         const err = frame.error as { code?: number; message?: string }

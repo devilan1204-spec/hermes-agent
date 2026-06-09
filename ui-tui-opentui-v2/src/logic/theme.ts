@@ -81,8 +81,9 @@ export interface GatewaySkin {
 
 function parseHex(h: string): [number, number, number] | null {
   const m = /^#?([0-9a-f]{6})$/i.exec(h)
-  if (!m) return null
-  const n = parseInt(m[1]!, 16)
+  const hex = m?.[1]
+  if (!hex) return null
+  const n = parseInt(hex, 16)
   return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff]
 }
 
@@ -124,10 +125,12 @@ function xtermEightBitRgb(colorNumber: number): [number, number, number] {
   }
   if (colorNumber >= 16) {
     const offset = colorNumber - 16
+    // Indices are `% 6`, always within XTERM_6_LEVELS' bounds; `?? 0` only
+    // satisfies noUncheckedIndexedAccess and is never actually reached.
     return [
-      XTERM_6_LEVELS[Math.floor(offset / 36) % 6]!,
-      XTERM_6_LEVELS[Math.floor(offset / 6) % 6]!,
-      XTERM_6_LEVELS[offset % 6]!
+      XTERM_6_LEVELS[Math.floor(offset / 36) % 6] ?? 0,
+      XTERM_6_LEVELS[Math.floor(offset / 6) % 6] ?? 0,
+      XTERM_6_LEVELS[offset % 6] ?? 0
     ]
   }
   return [0, 0, 0]
@@ -327,13 +330,20 @@ function backgroundLuminance(raw: string): null | number {
   const v = raw.trim().toLowerCase()
   if (!v) return null
   const hex = v.startsWith('#') ? v.slice(1) : v
-  const rgb = HEX_6_RE.test(hex)
-    ? [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)]
-    : HEX_3_RE.test(hex)
-      ? [parseInt(hex[0]! + hex[0]!, 16), parseInt(hex[1]! + hex[1]!, 16), parseInt(hex[2]! + hex[2]!, 16)]
-      : null
+  let rgb: [number, number, number] | null = null
+  if (HEX_6_RE.test(hex)) {
+    rgb = [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)]
+  } else if (HEX_3_RE.test(hex)) {
+    // `charAt` always returns a string (vs index access, which is `string |
+    // undefined` under noUncheckedIndexedAccess); the regex guarantees 3 chars.
+    const r = hex.charAt(0)
+    const g = hex.charAt(1)
+    const b = hex.charAt(2)
+    rgb = [parseInt(r + r, 16), parseInt(g + g, 16), parseInt(b + b, 16)]
+  }
   if (!rgb) return null
-  return (0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!) / 255
+  const [r, g, b] = rgb
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
 }
 
 /** Pick light vs dark with ordered, explainable env signals (mirror Ink). */

@@ -24,8 +24,8 @@ function reasoningSummary(text: string): { title?: string; body: string } {
   const s = (text ?? '').replace('[REDACTED]', '').trim()
   const m = s.match(/^\*\*([^*\n]+)\*\*(?:\r?\n\r?\n|$)/)
   const title = m?.[1]?.trim()
-  if (!title) return { body: s }
-  return { title, body: s.slice(m![0].length).trimStart() }
+  if (!m || !title) return { body: s }
+  return { title, body: s.slice(m[0].length).trimStart() }
 }
 
 export function ReasoningPart(props: { text: string; streaming?: boolean }) {

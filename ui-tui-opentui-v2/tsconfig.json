@@ -13,6 +13,8 @@
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noImplicitReturns": true,
     "jsx": "preserve",
     "jsxImportSource": "@opentui/solid",
     "types": ["bun"],

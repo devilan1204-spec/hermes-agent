@@ -71,18 +71,25 @@ export function StatusBar(props: { store: SessionStore }) {
   const dotColor = () =>
     info().running ? theme().color.statusWarn : props.store.state.ready ? theme().color.statusGood : theme().color.muted
 
-  const model = () => (info().model ? shortModel(info().model!) : '')
+  const model = () => {
+    const m = info().model
+    return m ? shortModel(m) : ''
+  }
   const effort = () => effortSuffix(info().effort, info().fast)
   const pct = () => info().contextPercent
 
   // Progressive disclosure budget (the row is `width - 2` after the box padding).
   // left = dot+space+model+effort ; the context bar shows only when there's room.
   const showBar = createMemo(() => pct() !== undefined && dims().width >= 64)
-  const ctxText = () => (showBar() ? `${ctxBar(pct()!, CTX_BAR_CELLS)} ${pct()}%` : '')
+  const ctxText = () => {
+    const p = pct()
+    return showBar() && p !== undefined ? `${ctxBar(p, CTX_BAR_CELLS)} ${p}%` : ''
+  }
 
   // Right side: cwd (branch), left-truncated to whatever the left side leaves.
   const cwdFull = createMemo(() => {
-    const c = info().cwd ? shortCwd(info().cwd!) : ''
+    const cwd = info().cwd
+    const c = cwd ? shortCwd(cwd) : ''
     if (!c) return ''
     return info().branch ? `${c} (${info().branch})` : c
   })
@@ -111,9 +118,11 @@ export function StatusBar(props: { store: SessionStore }) {
             <span style={{ fg: theme().color.muted }}>{effort()}</span>
           </Show>
           <Show when={showBar()}>
-            {/* a dim divider segments the bar into scannable fields (item 8) */}
+            {/* a dim divider segments the bar into scannable fields (item 8).
+                showBar() already guarantees pct() is defined; `?? 0` only
+                satisfies the type and is never reached. */}
             <span style={{ fg: theme().color.border }}>{'  │  '}</span>
-            <span style={{ fg: ctxColor(pct()!) }}>{ctxBar(pct()!, CTX_BAR_CELLS)}</span>
+            <span style={{ fg: ctxColor(pct() ?? 0) }}>{ctxBar(pct() ?? 0, CTX_BAR_CELLS)}</span>
             <span style={{ fg: theme().color.statusFg }}>{` ${pct()}%`}</span>
           </Show>
         </text>

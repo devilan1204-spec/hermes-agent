@@ -101,18 +101,22 @@ export function HomeHint(props: { store: SessionStore }) {
       {/* session info block: model · Nous Research / dir / Session id */}
       <box style={{ flexDirection: 'column' }}>
         <Show when={info().model}>
-          <text selectable={false}>
-            <span style={{ fg: theme().color.accent }}>{shortModel(info().model!)}</span>
-            <span style={{ fg: theme().color.muted }}> · Nous Research</span>
-          </text>
+          {model => (
+            <text selectable={false}>
+              <span style={{ fg: theme().color.accent }}>{shortModel(model())}</span>
+              <span style={{ fg: theme().color.muted }}> · Nous Research</span>
+            </text>
+          )}
         </Show>
         <Show when={info().cwd}>
-          <text selectable={false}>
-            <span style={{ fg: theme().color.muted }}>{shortCwd(info().cwd!)}</span>
-            <Show when={info().branch}>
-              <span style={{ fg: theme().color.muted }}>{` (${info().branch})`}</span>
-            </Show>
-          </text>
+          {cwd => (
+            <text selectable={false}>
+              <span style={{ fg: theme().color.muted }}>{shortCwd(cwd())}</span>
+              <Show when={info().branch}>
+                <span style={{ fg: theme().color.muted }}>{` (${info().branch})`}</span>
+              </Show>
+            </text>
+          )}
         </Show>
         <Show when={props.store.state.sessionId}>
           <text selectable={false}>
