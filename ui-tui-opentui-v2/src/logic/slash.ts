@@ -40,6 +40,8 @@ export interface SlashContext {
   /** Open a local Y/N confirm; `onConfirm` runs on Yes. */
   readonly confirm: (message: string, onConfirm: () => void) => void
   readonly clearTranscript: () => void
+  /** Copy the n-th newest assistant response to the clipboard; returns whether something was copied. */
+  readonly copyResponse: (n: number) => boolean
   readonly quit: () => void
   /** Recent log lines for `/logs` (the ring buffer). */
   readonly logTail: () => string[]
@@ -133,6 +135,7 @@ function present(ctx: SlashContext, title: string, text: string): void {
 const CLIENT_HELP = [
   '/help — list commands',
   '/model [name] — switch model (picker if bare)',
+  '/copy [n] — copy the last (or n-th) response',
   '/skills — browse skills',
   '/sessions, /resume — switch/resume a session',
   '/clear, /new — clear the transcript (confirm)',
@@ -239,6 +242,10 @@ const toolsCmd: ClientHandler = async (arg, ctx) => {
 const CLIENT: Record<string, ClientHandler> = {
   agents: (_arg, ctx) => ctx.openDashboard(),
   clear: (_arg, ctx) => ctx.confirm('Clear the transcript?', ctx.clearTranscript),
+  copy: (arg, ctx) => {
+    const n = Math.max(1, Number.parseInt(arg, 10) || 1)
+    if (!ctx.copyResponse(n)) ctx.pushSystem('Nothing to copy yet.')
+  },
   exit: (_arg, ctx) => ctx.quit(),
   model: modelCmd,
   resume: openSwitcher,

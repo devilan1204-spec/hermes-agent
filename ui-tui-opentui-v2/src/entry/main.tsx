@@ -31,6 +31,7 @@ import { liveGatewayLayer } from '../boundary/gateway/liveGateway.ts'
 import { getLog } from '../boundary/log.ts'
 import { acquireRenderer } from '../boundary/renderer.ts'
 import { makeAppLayer } from '../boundary/runtime.ts'
+import { nthAssistantResponse } from '../logic/copy.ts'
 import { createPromptHistory, dirHistoryPersister, loadDirHistory } from '../logic/history.ts'
 import { createPasteStore } from '../logic/pastes.ts'
 import { mapResumeHistory, mapSessionList } from '../logic/resume.ts'
@@ -319,6 +320,13 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
       const slashCtx: SlashContext = {
         clearTranscript: () => store.clearTranscript(),
         confirm: (message, onConfirm) => store.setConfirm(message, onConfirm),
+        copyResponse: n => {
+          const text = nthAssistantResponse(store.state.messages, n)
+          if (!text) return false
+          void writeClipboard(text)
+          flashHint(n > 1 ? `Copied response #${n} to clipboard` : 'Copied response to clipboard')
+          return true
+        },
         listSessions: () => Effect.runPromise(gateway.request('session.list', {})).then(mapSessionList),
         logTail: () =>
           getLog()

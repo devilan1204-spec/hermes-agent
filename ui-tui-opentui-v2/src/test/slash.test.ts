@@ -91,6 +91,8 @@ interface Probe {
   quit: { value: boolean }
   cleared: { value: boolean }
   dashboard: { value: boolean }
+  copied: number[]
+  copyN: { value: (n: number) => boolean }
 }
 
 function makeCtx(request: (method: string, params: Record<string, unknown>) => Promise<unknown>): Probe {
@@ -104,9 +106,15 @@ function makeCtx(request: (method: string, params: Record<string, unknown>) => P
   const quit = { value: false }
   const cleared = { value: false }
   const dashboard = { value: false }
+  const copied: number[] = []
+  const copyN: Probe['copyN'] = { value: () => false }
   const ctx: SlashContext = {
     clearTranscript: () => (cleared.value = true),
     confirm: (message, onConfirm) => confirmed.push({ message, onConfirm }),
+    copyResponse: n => {
+      copied.push(n)
+      return copyN.value(n)
+    },
     listSessions: () => Promise.resolve(FAKE_SESSIONS),
     logTail: () => ['gateway: spawned', 'bootstrap: session created'],
     openDashboard: () => (dashboard.value = true),
@@ -122,7 +130,21 @@ function makeCtx(request: (method: string, params: Record<string, unknown>) => P
     sessionId: () => 'sid-1',
     submit: text => submitted.push(text)
   }
-  return { calls, cleared, confirmed, ctx, dashboard, paged, pickers, quit, submitted, switched, system }
+  return {
+    calls,
+    cleared,
+    confirmed,
+    copied,
+    copyN,
+    ctx,
+    dashboard,
+    paged,
+    pickers,
+    quit,
+    submitted,
+    switched,
+    system
+  }
 }
 
 describe('dispatchSlash — client commands', () => {
@@ -196,6 +218,28 @@ describe('dispatchSlash — client commands', () => {
       method: 'slash.exec',
       params: { command: 'model anthropic/claude-opus-4.6', session_id: 'sid-1' }
     })
+  })
+
+  test('/copy copies via copyResponse; no system line on success', async () => {
+    const p = makeCtx(async () => ({}))
+    p.copyN.value = () => true
+    await dispatchSlash('/copy', p.ctx)
+    expect(p.copied).toEqual([1])
+    expect(p.system).toHaveLength(0)
+  })
+
+  test('/copy 2 passes the n-th index through', async () => {
+    const p = makeCtx(async () => ({}))
+    p.copyN.value = () => true
+    await dispatchSlash('/copy 2', p.ctx)
+    expect(p.copied).toEqual([2])
+  })
+
+  test('/copy when nothing to copy pushes a system notice', async () => {
+    const p = makeCtx(async () => ({}))
+    p.copyN.value = () => false
+    await dispatchSlash('/copy', p.ctx)
+    expect(p.system).toContain('Nothing to copy yet.')
   })
 
   test('/agents (and /tasks) open the agents dashboard', async () => {
