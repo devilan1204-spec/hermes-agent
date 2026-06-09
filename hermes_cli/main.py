@@ -1527,10 +1527,11 @@ def _find_bundled_tui(hermes_cli_dir: Path | None = None) -> Path | None:
     return bundled if bundled.is_file() else None
 
 
-def _config_tui_engine_early() -> str:
+def _config_tui_engine_early() -> str | None:
     """Read ``display.tui_engine`` from config via a minimal YAML read.
 
-    Best-effort: any error → "ink" (the shipping default). Mirrors
+    Returns the configured engine string, or ``None`` when unset/unreadable so the
+    caller can apply the availability-gated default. Mirrors
     :func:`_config_default_interface_early`.
     """
     try:
@@ -1552,19 +1553,22 @@ def _config_tui_engine_early() -> str:
                     return eng.strip().lower()
     except Exception:
         pass
-    return "ink"
+    return None
 
 
 def _resolve_tui_engine() -> str:
     """Which TUI engine to launch: "ink" (default) or "opentui".
 
-    Precedence: ``HERMES_TUI_ENGINE`` env > ``display.tui_engine`` config > "ink".
+    Precedence: ``HERMES_TUI_ENGINE`` env > ``display.tui_engine`` config >
+    (OpenTUI when this host can run it — Bun + the installed package — else Ink).
     The OpenTUI engine runs on Bun, which is not reliably available on Windows
     or Termux — request "opentui" there falls back to "ink" with a notice so a
     stale flag never strands the user on an engine that can't start.
     """
     env = (os.environ.get("HERMES_TUI_ENGINE") or "").strip().lower()
-    engine = env or _config_tui_engine_early()
+    # Explicit choice (env > config) wins; otherwise default to OpenTUI when this
+    # host is genuinely set up for it (Bun + the installed package), else Ink.
+    engine = env or _config_tui_engine_early() or ("opentui" if _opentui_available() else "ink")
     if engine != "opentui":
         return "ink"
 
@@ -1582,11 +1586,10 @@ def _resolve_tui_engine() -> str:
     return "opentui"
 
 
-def _bun_bin() -> str:
-    """Resolve the Bun binary for the OpenTUI engine.
+def _bun_bin_or_none() -> str | None:
+    """Resolve the Bun binary, or ``None`` if not found (no exit — a probe).
 
-    ``HERMES_BUN`` override > ``bun`` on PATH > common install dirs. Exits with a
-    clear message if Bun is missing (the OpenTUI engine cannot run without it).
+    ``HERMES_BUN`` override > ``bun`` on PATH > common install dirs.
     """
     env_bun = os.environ.get("HERMES_BUN")
     if env_bun and os.path.isfile(env_bun) and os.access(env_bun, os.X_OK):
@@ -1601,6 +1604,18 @@ def _bun_bin() -> str:
     ):
         if cand.is_file() and os.access(cand, os.X_OK):
             return str(cand)
+    return None
+
+
+def _bun_bin() -> str:
+    """Resolve the Bun binary for the OpenTUI engine, or exit with a clear message.
+
+    The OpenTUI engine cannot run without Bun, so the launch path exits(1) when
+    it's missing. Use :func:`_bun_bin_or_none` for a non-fatal availability probe.
+    """
+    bun = _bun_bin_or_none()
+    if bun is not None:
+        return bun
     print(
         "bun not found — the OpenTUI TUI engine requires Bun.\n"
         "Install it (https://bun.sh) or set HERMES_BUN=/path/to/bun, "
@@ -1608,6 +1623,24 @@ def _bun_bin() -> str:
         file=sys.stderr,
     )
     sys.exit(1)
+
+
+def _opentui_available() -> bool:
+    """Whether the OpenTUI engine can actually launch on this host.
+
+    True only when the platform supports Bun (not Windows/Termux), Bun resolves,
+    AND the v2 package's entry + its installed ``node_modules`` are present. This
+    gates the DEFAULT engine: a host that's genuinely set up for OpenTUI defaults
+    to it; everyone else stays on Ink. An explicit ``HERMES_TUI_ENGINE`` env or
+    ``display.tui_engine`` config choice bypasses this probe entirely.
+    """
+    if sys.platform.startswith("win") or _is_termux_startup_environment():
+        return False
+    if _bun_bin_or_none() is None:
+        return False
+    pkg = PROJECT_ROOT / "ui-tui-opentui-v2"
+    entry = pkg / "src" / "entry" / "main.tsx"
+    return entry.is_file() and (pkg / "node_modules" / "@opentui").is_dir()
 
 
 def _make_opentui_argv(tui_dev: bool) -> tuple[list[str], Path]:
