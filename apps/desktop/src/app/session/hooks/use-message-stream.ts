@@ -15,6 +15,7 @@ import {
 } from '@/lib/chat-messages'
 import { coerceGatewayText, coerceThinkingText, normalizePersonalityValue } from '@/lib/chat-runtime'
 import { gatewayEventRequiresSessionId } from '@/lib/gateway-events'
+import { playCompletionSound } from '@/lib/completion-sound'
 import { triggerHaptic } from '@/lib/haptics'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { setClarifyRequest } from '@/store/clarify'
@@ -781,9 +782,7 @@ export function useMessageStream({
 
         flushQueuedDeltas(sessionId)
 
-        if (isActiveEvent) {
-          triggerHaptic('streamDone')
-        }
+        playCompletionSound()
 
         const finalText = coerceGatewayText(payload?.text) || coerceGatewayText(payload?.rendered)
         completeAssistantMessage(sessionId, finalText)
