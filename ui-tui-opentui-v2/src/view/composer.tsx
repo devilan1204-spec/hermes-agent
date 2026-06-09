@@ -25,6 +25,7 @@ import { For, onMount, Show } from 'solid-js'
 
 import type { CompletionItem } from '../logic/store.ts'
 import type { PromptHistory } from '../logic/history.ts'
+import { useDimensions } from './dimensions.tsx'
 import { useTheme } from './theme.tsx'
 
 const GUTTER = 2
@@ -83,6 +84,10 @@ export function Composer(props: {
   onImagePaste?: (() => void) | undefined
 }) {
   const theme = useTheme()
+  const dims = useDimensions()
+  // Auto-expand the input up to ~a third of the screen, then it scrolls internally
+  // (opencode's prompt: minHeight 1, maxHeight max(6, ⌊rows/3⌋)).
+  const maxHeight = () => Math.max(6, Math.floor(dims().height / 3))
   let ta: TextareaRenderable | undefined
   let submitting = false
   const completions = () => props.completions?.() ?? []
@@ -190,7 +195,9 @@ export function Composer(props: {
         </box>
         <textarea
           ref={el => (ta = el)}
-          style={{ height: 3, flexGrow: 1, minWidth: 0 }}
+          minHeight={1}
+          maxHeight={maxHeight()}
+          style={{ flexGrow: 1, minWidth: 0 }}
           placeholder={theme().brand.welcome}
           placeholderColor={theme().color.muted}
           textColor={theme().color.text}
