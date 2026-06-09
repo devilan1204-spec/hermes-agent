@@ -1,9 +1,7 @@
 // Completion sound bank for agent turn-end cues.
-// Runtime playback is pinned to a curated default (currently variant 9).
+// Runtime playback is pinned to a curated default (currently variant 8).
 
 import { $hapticsMuted } from '@/store/haptics'
-
-import { createDone1AudioBuffer } from './done1-sample'
 
 type OscType = OscillatorType
 
@@ -17,7 +15,6 @@ interface ToneSpec {
 }
 
 let ctx: AudioContext | null = null
-let done1Buffer: AudioBuffer | null = null
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') {
@@ -97,17 +94,6 @@ function makeReverb(ac: AudioContext): ConvolverNode {
   convolver.buffer = reverbImpulse
 
   return convolver
-}
-
-function playDone1Sample(ac: AudioContext, t0: number) {
-  if (!done1Buffer) {
-    done1Buffer = createDone1AudioBuffer(ac)
-  }
-
-  const src = ac.createBufferSource()
-  src.buffer = done1Buffer
-  src.connect(ac.destination)
-  src.start(t0)
 }
 
 export interface CompletionSoundVariant {
@@ -201,13 +187,6 @@ export const COMPLETION_SOUND_VARIANTS: readonly CompletionSoundVariant[] = [
   },
   {
     id: 7,
-    name: 'Cursor done1 sample (bytes)',
-    play: (ac, master, t0) => {
-      playDone1Sample(ac, t0)
-    }
-  },
-  {
-    id: 8,
     name: 'Seslen level-up arpeggio (MIT)',
     play: (ac, master, t0) => {
       const notes = [C5, D5, E5, G5, C6]
@@ -217,7 +196,7 @@ export const COMPLETION_SOUND_VARIANTS: readonly CompletionSoundVariant[] = [
     }
   },
   {
-    id: 9,
+    id: 8,
     name: 'Two-note comfort (minimal)',
     play: (ac, master, t0) => {
       voice(ac, master, t0, { freq: E4, dur: 0.22, gain: 0.05, attack: 0.03, type: 'sine' })
@@ -227,7 +206,7 @@ export const COMPLETION_SOUND_VARIANTS: readonly CompletionSoundVariant[] = [
   }
 ] as const
 
-const DEFAULT_COMPLETION_VARIANT_ID = 9
+const DEFAULT_COMPLETION_VARIANT_ID = 8
 
 function playVariant(variantId: number) {
   const variant = COMPLETION_SOUND_VARIANTS.find(v => v.id === variantId)
