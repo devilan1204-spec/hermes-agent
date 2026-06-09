@@ -4,8 +4,9 @@
  * adds the Esc/Ctrl+C → deny cancel path the select doesn't cover. Answered via
  * `approval.respond {choice, session_id}`.
  */
-import { useKeyboard } from '@opentui/solid'
+import type { BoxRenderable } from '@opentui/core'
 
+import { useCloseLayer } from '../keymap.tsx'
 import { useTheme } from '../theme.tsx'
 
 const OPTIONS = [
@@ -22,12 +23,14 @@ export function ApprovalPrompt(props: {
   onCancel: () => void
 }) {
   const theme = useTheme()
-  useKeyboard(key => {
-    if (key.name === 'escape' || (key.ctrl && key.name === 'c')) props.onCancel()
-  })
+  let rootRef: BoxRenderable | undefined
+  // Native select handles ↑↓/j/k/Enter over the options; the keymap owns the
+  // Esc/Ctrl+C → deny cancel path the select doesn't cover.
+  useCloseLayer(() => rootRef, () => props.onCancel())
 
   return (
     <box
+      ref={el => (rootRef = el)}
       style={{ borderColor: theme().color.border, flexDirection: 'column', flexShrink: 0, marginTop: 1, padding: 1 }}
       border
     >

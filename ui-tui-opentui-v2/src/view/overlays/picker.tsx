@@ -4,10 +4,11 @@
  * Native select nav (↑↓/j/k/Enter); a small useKeyboard adds Esc/Ctrl+C close.
  * Replaces the composer while open.
  */
-import { useKeyboard } from '@opentui/solid'
+import type { BoxRenderable } from '@opentui/core'
 import { createMemo } from 'solid-js'
 
 import type { PickerItem } from '../../logic/store.ts'
+import { useCloseLayer } from '../keymap.tsx'
 import { useTheme } from '../theme.tsx'
 
 export function Picker(props: {
@@ -17,9 +18,9 @@ export function Picker(props: {
   onClose: () => void
 }) {
   const theme = useTheme()
-  useKeyboard(key => {
-    if (key.name === 'escape' || (key.ctrl && key.name === 'c')) props.onClose()
-  })
+  let rootRef: BoxRenderable | undefined
+  // Native select handles ↑↓/j/k/Enter; the keymap owns Esc/Ctrl+C close.
+  useCloseLayer(() => rootRef, () => props.onClose())
 
   const options = createMemo(() =>
     props.items.map(it => ({ description: it.description ?? '', name: it.label, value: it.value }))
@@ -27,6 +28,7 @@ export function Picker(props: {
 
   return (
     <box
+      ref={el => (rootRef = el)}
       style={{ borderColor: theme().color.border, flexDirection: 'column', flexShrink: 0, marginTop: 1, padding: 1 }}
       border
     >

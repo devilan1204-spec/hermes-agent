@@ -19,6 +19,8 @@
  * The body of `run` does not change when the backend swaps — that's the point of
  * the layer; only `makeAppLayer(...)` differs at the edge.
  */
+import { createDefaultOpenTuiKeymap } from '@opentui/keymap/opentui'
+import { KeymapProvider } from '@opentui/keymap/solid'
 import { render } from '@opentui/solid'
 import { Deferred, Duration, Effect } from 'effect'
 import { writeFileSync } from 'node:fs'
@@ -289,6 +291,11 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
         if (!renderer.isDestroyed) renderer.destroy()
       }
 
+      // Native keymap host (Phase 3): one keymap bound to this renderer, provided
+      // to the whole Solid tree via <KeymapProvider>. Overlays/prompts register
+      // close (and confirm) layers against it through useCloseLayer/useBindings.
+      const keymap = createDefaultOpenTuiKeymap(renderer)
+
       // Submit a user turn: the service value is in hand, so `gateway.request(...)`
       // is Effect<…, never> — fire it detached with runFork; failures are logged.
       const submitPrompt = (text: string) => {
@@ -384,19 +391,21 @@ export const run = Effect.fn('Tui.run')(function* (input: TuiInput) {
       yield* Effect.promise(() =>
         render(
           () => (
-            <ThemeProvider theme={() => store.state.theme}>
-              <App
-                store={store}
-                onSubmit={submit}
-                onType={onType}
-                onRespond={respond}
-                onResume={onResume}
-                sessionId={() => gateway.sessionId()}
-                history={history}
-                onImagePaste={onImagePaste}
-                pasteStore={pasteStore}
-              />
-            </ThemeProvider>
+            <KeymapProvider keymap={keymap}>
+              <ThemeProvider theme={() => store.state.theme}>
+                <App
+                  store={store}
+                  onSubmit={submit}
+                  onType={onType}
+                  onRespond={respond}
+                  onResume={onResume}
+                  sessionId={() => gateway.sessionId()}
+                  history={history}
+                  onImagePaste={onImagePaste}
+                  pasteStore={pasteStore}
+                />
+              </ThemeProvider>
+            </KeymapProvider>
           ),
           renderer
         )

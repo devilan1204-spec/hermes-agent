@@ -4,10 +4,11 @@
  * Enter resumes the chosen session (the entry runs the same resume-hydrate path
  * as launch), Esc/Ctrl+C closes. Replaces the composer while open.
  */
-import { useKeyboard } from '@opentui/solid'
+import type { BoxRenderable } from '@opentui/core'
 import { createMemo } from 'solid-js'
 
 import type { SessionItem } from '../../logic/store.ts'
+import { useCloseLayer } from '../keymap.tsx'
 import { useTheme } from '../theme.tsx'
 
 export function SessionSwitcher(props: {
@@ -16,9 +17,9 @@ export function SessionSwitcher(props: {
   onClose: () => void
 }) {
   const theme = useTheme()
-  useKeyboard(key => {
-    if (key.name === 'escape' || (key.ctrl && key.name === 'c')) props.onClose()
-  })
+  let rootRef: BoxRenderable | undefined
+  // Native select handles ↑↓/Enter; the keymap owns Esc/Ctrl+C close.
+  useCloseLayer(() => rootRef, () => props.onClose())
 
   const options = createMemo(() =>
     props.sessions.map(s => ({
@@ -30,6 +31,7 @@ export function SessionSwitcher(props: {
 
   return (
     <box
+      ref={el => (rootRef = el)}
       style={{ borderColor: theme().color.border, flexDirection: 'column', flexShrink: 0, marginTop: 1, padding: 1 }}
       border
     >

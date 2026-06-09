@@ -6,13 +6,14 @@
  *   - bottom: the SELECTED subagent's live trace (goal · status · model, latest
  *     thought, and the tool/progress/summary log) — sticky-bottom so it follows
  *     live; PgUp/PgDn scroll it.
- * Esc/q close. §8 #2 scrollbox gotchas (minHeight:0, sticky bottom).
+ * Esc/Ctrl+C close (native keymap). §8 #2 scrollbox gotchas (minHeight:0, sticky bottom).
  */
-import { type ScrollBoxRenderable } from '@opentui/core'
+import { type BoxRenderable, type ScrollBoxRenderable } from '@opentui/core'
 import { useKeyboard } from '@opentui/solid'
-import { createSignal, For, Show } from 'solid-js'
+import { createSignal, For, onMount, Show } from 'solid-js'
 
 import type { SubagentInfo } from '../../logic/store.ts'
+import { useCloseLayer } from '../keymap.tsx'
 import { useTheme } from '../theme.tsx'
 
 const PAGE = 8
@@ -28,17 +29,21 @@ function statusColor(status: string, theme: ReturnType<typeof useTheme>): string
 export function AgentsDashboard(props: { subagents: SubagentInfo[]; onClose: () => void }) {
   const theme = useTheme()
   const [sel, setSel] = createSignal(0)
+  let rootRef: BoxRenderable | undefined
   let traceBox: ScrollBoxRenderable | undefined
 
   const count = () => props.subagents.length
   const selected = () => Math.min(sel(), Math.max(0, count() - 1))
   const current = () => props.subagents[selected()]
 
+  // Close (Esc/Ctrl+C) is the native keymap; select + scroll stay in the raw global
+  // handler below. Focus the root box on mount so the focus-within close layer is active.
+  onMount(() => rootRef?.focus())
+  useCloseLayer(() => rootRef, () => props.onClose())
+
   useKeyboard(key => {
-    if (key.name === 'escape' || key.name === 'q' || (key.ctrl && key.name === 'c')) {
-      props.onClose()
-      return
-    }
+    // `q` closes (footer advertises "Esc/q close"); Esc/Ctrl+C close via the keymap.
+    if (key.name === 'q') return props.onClose()
     if (key.name === 'up') setSel(s => Math.max(0, s - 1))
     else if (key.name === 'down') setSel(s => Math.min(Math.max(0, count() - 1), s + 1))
     else if (key.name === 'pageup') traceBox?.scrollBy(-PAGE)
@@ -46,7 +51,12 @@ export function AgentsDashboard(props: { subagents: SubagentInfo[]; onClose: () 
   })
 
   return (
-    <box style={{ borderColor: theme().color.accent, flexDirection: 'column', flexGrow: 1, minHeight: 0 }} border>
+    <box
+      ref={el => (rootRef = el)}
+      focusable
+      style={{ borderColor: theme().color.accent, flexDirection: 'column', flexGrow: 1, minHeight: 0 }}
+      border
+    >
       <box style={{ flexShrink: 0, paddingLeft: 1 }}>
         <text fg={theme().color.accent}>
           <b>
