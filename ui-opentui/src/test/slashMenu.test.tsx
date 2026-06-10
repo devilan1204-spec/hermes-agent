@@ -50,7 +50,7 @@ describe('routeMenuKey — key-routing precedence table', () => {
     // glitch 2026-06-10: ANY open menu owns plain arrows/Enter (path/arg menus
     // navigate like the slash menu; Esc hands the cursor keys back).
     ['Down on a path menu moves', 'down', false, ctx({ slashMenu: false }), { kind: 'move', selected: 1 }],
-    ['Up on a path menu moves (wraps)', 'up', false, ctx({ slashMenu: false }), { kind: 'move', selected: 2 }],
+    ['Up on a path menu moves (wraps)', 'up', false, ctx({ slashMenu: false }), { kind: 'move', selected: 3 }],
     [
       'Enter on a path menu accepts the highlighted item',
       'return',

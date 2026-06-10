@@ -228,7 +228,7 @@ describe('App render (Phase 1, themed)', () => {
 
     expect(frame).toContain('/compact') // candidate
     expect(frame).toContain('compress context') // its meta
-    expect(frame).toContain('Tab complete') // dropdown hint
+    expect(frame).toContain('↑/↓ select') // dropdown hint (arrows on every menu)
   })
 
   test('the empty transcript shows the home hint (item 12)', async () => {
