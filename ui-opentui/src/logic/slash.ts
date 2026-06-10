@@ -245,6 +245,27 @@ export function mapModelOptions(opts: unknown): PickerItem[] {
   return items
 }
 
+/**
+ * Provider tab order for the model picker's chip strip (picker v2.2): each
+ * CONFIGURED provider's group (= lab display name) in catalog order, with
+ * Nous-identified groups (slug or lab name containing `nous`) hoisted to the
+ * front. Unconfigured providers (`unavailable` hint rows) get NO tab — they
+ * stay reachable via Ctrl+U under the picker's trailing `All` tab (which the
+ * picker appends itself; it is not part of this list).
+ */
+export function buildModelTabs(items: readonly PickerItem[]): string[] {
+  const seen = new Set<string>()
+  const nous: string[] = []
+  const rest: string[] = []
+  for (const it of items) {
+    if (it.unavailable || !it.group || seen.has(it.group)) continue
+    seen.add(it.group)
+    const identity = [it.group, ...(it.haystacks ?? [])].join(' ').toLowerCase()
+    ;(identity.includes('nous') ? nous : rest).push(it.group)
+  }
+  return [...nous, ...rest]
+}
+
 /** Flatten `skills.manage {action:'list'}` ({skills: Record<category, names[]>}) into
  *  grouped picker rows (category = group header; also a fuzzy haystack). */
 function mapSkills(result: unknown): PickerItem[] {
@@ -295,6 +316,26 @@ export function runPickerRefresh(): Promise<PickerItem[]> | undefined {
   return activePickerRefresh?.()
 }
 
+/**
+ * The open picker's tab-strip seam (picker v2.2 provider tabs) — same pattern
+ * as the refresh seam above: whoever opens a picker registers (or clears) a
+ * tab DERIVATION over the picker's live rows; the mounted Picker re-derives
+ * through it whenever the rows swap (Ctrl+R), so fresh providers grow chips
+ * without re-opening. `/model` registers `buildModelTabs`; pickers without
+ * tabs (skills) clear it and render the classic stripless view.
+ */
+let activePickerTabs: ((items: readonly PickerItem[]) => string[]) | undefined
+
+/** Register (or clear, with `undefined`) the open picker's tab derivation. */
+export function registerPickerTabs(fn: ((items: readonly PickerItem[]) => string[]) | undefined): void {
+  activePickerTabs = fn
+}
+
+/** Derive the open picker's tabs from its rows; [] when no tabs are registered. */
+export function pickerTabs(items: readonly PickerItem[]): string[] {
+  return activePickerTabs?.(items) ?? []
+}
+
 /** Switch the model via the server (shared by `/model <name>` and the picker pick).
  *  A successful switch refreshes the cached rows in the background (fresh ✓). */
 async function switchModel(ctx: SlashContext, name: string): Promise<void> {
@@ -318,6 +359,8 @@ const modelCmd: ClientHandler = async (arg, ctx) => {
   const open = (items: PickerItem[]) => {
     // Ctrl+R in the open picker re-fetches the catalog (and re-syncs the cache).
     registerPickerRefresh(() => refreshModelItems(ctx))
+    // Provider chip strip (picker v2.2): Nous-first configured-provider tabs.
+    registerPickerTabs(buildModelTabs)
     ctx.openPicker({ items, onPick: name => void switchModel(ctx, name), title: 'Switch model' })
   }
   const cached = ctx.modelItems()
@@ -343,6 +386,7 @@ const skillsCmd: ClientHandler = async (_arg, ctx) => {
     return
   }
   registerPickerRefresh(undefined) // no Ctrl+R catalog re-fetch for skills (yet)
+  registerPickerTabs(undefined) // no tab strip for skills — classic grouped view
   ctx.openPicker({
     items,
     onPick: name =>

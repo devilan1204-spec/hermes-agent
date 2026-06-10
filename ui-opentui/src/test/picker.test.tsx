@@ -13,15 +13,18 @@
  */
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { registerPickerRefresh } from '../logic/slash.ts'
+import { buildModelTabs, registerPickerRefresh, registerPickerTabs } from '../logic/slash.ts'
 import type { PickerItem } from '../logic/store.ts'
 import { DEFAULT_THEME } from '../logic/theme.ts'
 import { Picker } from '../view/overlays/picker.tsx'
 import { ThemeProvider } from '../view/theme.tsx'
 import { renderProbe, type RenderProbe } from './lib/render.ts'
 
-// the Ctrl+R seam is module-level state — never leak it across tests
-afterEach(() => registerPickerRefresh(undefined))
+// the Ctrl+R + tab-strip seams are module-level state — never leak them across tests
+afterEach(() => {
+  registerPickerRefresh(undefined)
+  registerPickerTabs(undefined)
+})
 
 /** A grouped model catalog: current = claude-sonnet-4 under Anthropic. */
 const ITEMS: PickerItem[] = [
@@ -355,6 +358,139 @@ describe('Picker — manual catalog refresh (Ctrl+R, v2.1)', () => {
       h.probe.keys.pressKey('r', { ctrl: true })
       await h.probe.settle()
       expect(h.probe.frame()).toContain('claude-sonnet-4') // unchanged, no crash
+    } finally {
+      h.probe.destroy()
+    }
+  })
+})
+
+/** The chip-strip line of a frame: the active chip is always bracketed and the
+ *  trailing `All` chip always present, which no other picker line has both of. */
+function stripLine(frame: string): string {
+  return frame.split('\n').find(l => l.includes('All') && l.includes('[ ')) ?? ''
+}
+
+describe('Picker — provider tabs (v2.2 chip strip)', () => {
+  test('chips order Nous-first then catalog order then All; open lands on the CURRENT provider tab with the ✓ selected', async () => {
+    registerPickerTabs(buildModelTabs)
+    const h = await mountPicker() // catalog order: Anthropic, OpenAI, Nous Research
+    try {
+      const frame = h.probe.frame()
+      const strip = stripLine(frame)
+      // Nous hoisted ahead of catalog order; All trails; current (Anthropic) chip active.
+      expect(strip.indexOf('Nous Research')).toBeGreaterThanOrEqual(0)
+      expect(strip.indexOf('Nous Research')).toBeLessThan(strip.indexOf('Anthropic'))
+      expect(strip.indexOf('Anthropic')).toBeLessThan(strip.indexOf('OpenAI'))
+      expect(strip.indexOf('OpenAI')).toBeLessThan(strip.indexOf('All'))
+      expect(strip).toContain('[ Anthropic ]')
+      // rows are tab-filtered to the active provider; ✓ row selected.
+      expect(frame).toContain('› claude-sonnet-4 ✓')
+      expect(frame).toContain('claude-opus-4')
+      expect(frame).not.toContain('gpt-5')
+      expect(frame).not.toContain('hermes-4-405b')
+      // footer hints the strip
+      expect(frame).toContain('Tab provider')
+    } finally {
+      h.probe.destroy()
+    }
+  })
+
+  test('Tab cycles forward and WRAPS (… → OpenAI → All → Nous → …); Shift+Tab cycles back; returning lands on the ✓', async () => {
+    registerPickerTabs(buildModelTabs)
+    const h = await mountPicker()
+    try {
+      // order: Nous Research, Anthropic(active), OpenAI, All
+      h.probe.keys.pressTab()
+      await h.probe.settle()
+      let frame = h.probe.frame()
+      expect(stripLine(frame)).toContain('[ OpenAI ]')
+      expect(frame).toContain('› gpt-5')
+      expect(frame).not.toContain('claude-sonnet-4')
+      h.probe.keys.pressTab() // → All: the classic full grouped view
+      await h.probe.settle()
+      frame = h.probe.frame()
+      expect(stripLine(frame)).toContain('[ All ]')
+      expect(frame).toContain('claude-sonnet-4')
+      expect(frame).toContain('gpt-5')
+      expect(frame).toContain('hermes-4-405b')
+      h.probe.keys.pressTab() // wrap → Nous Research (first chip)
+      await h.probe.settle()
+      frame = h.probe.frame()
+      expect(stripLine(frame)).toContain('[ Nous Research ]')
+      expect(frame).toContain('› hermes-4-405b')
+      h.probe.keys.pressTab({ shift: true }) // back → All
+      await h.probe.settle()
+      expect(stripLine(h.probe.frame())).toContain('[ All ]')
+      h.probe.keys.pressTab({ shift: true }) // back → OpenAI
+      h.probe.keys.pressTab({ shift: true }) // back → Anthropic: ✓ re-selected
+      await h.probe.settle()
+      frame = h.probe.frame()
+      expect(stripLine(frame)).toContain('[ Anthropic ]')
+      expect(frame).toContain('› claude-sonnet-4 ✓')
+    } finally {
+      h.probe.destroy()
+    }
+  })
+
+  test('←/→ cycle ONLY while the query is empty; the active tab filters BEFORE the fuzzy query', async () => {
+    registerPickerTabs(buildModelTabs)
+    const h = await mountPicker()
+    try {
+      h.probe.keys.pressArrow('right') // empty query → Anthropic → OpenAI
+      await h.probe.settle()
+      expect(stripLine(h.probe.frame())).toContain('[ OpenAI ]')
+      // search WITHIN the tab: hermes-4-405b exists under Nous, not here
+      await h.probe.keys.typeText('hermes')
+      await h.probe.settle()
+      let frame = await h.probe.waitForFrame(f => f.includes('(no matches)'))
+      expect(frame).not.toContain('hermes-4-405b')
+      // with a non-empty query ←/→ stay native cursor moves — no cycling
+      h.probe.keys.pressArrow('left')
+      await h.probe.settle()
+      expect(stripLine(h.probe.frame())).toContain('[ OpenAI ]')
+      // Tab still cycles with a query; the query carries over (composes per tab)
+      h.probe.keys.pressTab() // → All
+      await h.probe.settle()
+      frame = await h.probe.waitForFrame(f => f.includes('hermes-4-405b'))
+      expect(stripLine(frame)).toContain('[ All ]')
+      expect(frame).not.toContain('gpt-5') // fuzzy query still applied under All
+    } finally {
+      h.probe.destroy()
+    }
+  })
+
+  test('unconfigured providers get NO chips; Ctrl+U under All reveals them (unchanged); provider tabs drop the hint', async () => {
+    registerPickerTabs(buildModelTabs)
+    const h = await mountPicker(MIXED) // tabs: Anthropic, OpenAI (Mistral/Copilot unconfigured)
+    try {
+      let frame = h.probe.frame()
+      const strip = stripLine(frame)
+      expect(strip).not.toContain('Mistral')
+      expect(strip).not.toContain('GitHub Copilot')
+      // active provider tab: Ctrl+U does not apply (no unconfigured rows here)
+      expect(frame).not.toContain('Ctrl+U show unconfigured')
+      h.probe.keys.pressTab()
+      h.probe.keys.pressTab() // Anthropic → OpenAI → All
+      await h.probe.settle()
+      frame = h.probe.frame()
+      expect(stripLine(frame)).toContain('[ All ]')
+      expect(frame).toContain('Ctrl+U show unconfigured')
+      h.probe.keys.pressKey('u', { ctrl: true })
+      await h.probe.settle()
+      frame = await h.probe.waitForFrame(f => f.includes('Mistral'))
+      expect(frame).toContain('no API key — set MISTRAL_API_KEY')
+      expect(frame).toContain('no API key — set GITHUB_TOKEN')
+    } finally {
+      h.probe.destroy()
+    }
+  })
+
+  test('without a registered tab derivation the picker stays stripless (skills view)', async () => {
+    const h = await mountPicker()
+    try {
+      const frame = h.probe.frame()
+      expect(frame).not.toContain('All')
+      expect(frame).not.toContain('Tab provider')
     } finally {
       h.probe.destroy()
     }

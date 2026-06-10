@@ -6,12 +6,15 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import type { DetailsMode } from '../logic/details.ts'
 import {
+  buildModelTabs,
   dispatchSlash,
   mapCompletions,
   parseSlash,
+  pickerTabs,
   planCompletion,
   readReplaceFrom,
   registerPickerRefresh,
+  registerPickerTabs,
   runPickerRefresh,
   type SlashContext
 } from '../logic/slash.ts'
@@ -19,8 +22,11 @@ import type { PickerItem, SessionItem } from '../logic/store.ts'
 
 const FAKE_SESSIONS: SessionItem[] = [{ id: 's1', messageCount: 5, preview: 'hello there', title: 'First chat' }]
 
-// the picker-refresh seam is module-level state — never leak it across tests
-afterEach(() => registerPickerRefresh(undefined))
+// the picker-refresh/tabs seams are module-level state — never leak them across tests
+afterEach(() => {
+  registerPickerRefresh(undefined)
+  registerPickerTabs(undefined)
+})
 
 /** A `model.options` payload: two authed providers + two unconfigured skeleton
  *  rows (the gateway sends them with `include_unconfigured=True,
@@ -362,6 +368,35 @@ describe('dispatchSlash — client commands', () => {
       p.calls.some(c => c.method === 'slash.exec' && c.params.command === 'model hermes-4-405b --provider nous')
     ).toBe(true)
     expect(p.calls.filter(c => c.method === 'model.options')).toHaveLength(2)
+  })
+
+  test('buildModelTabs: Nous-identified groups first, then catalog order; unconfigured providers get NO tab', () => {
+    const items: PickerItem[] = [
+      { group: 'Anthropic', haystacks: ['anthropic', 'Anthropic'], label: 'claude-sonnet-4.6', value: 'a' },
+      { group: 'Anthropic', haystacks: ['anthropic', 'Anthropic'], label: 'claude-opus-4.6', value: 'b' },
+      {
+        group: 'OpenAI API',
+        haystacks: ['openai-api', 'OpenAI API'],
+        label: 'no API key',
+        unavailable: true,
+        value: 'openai-api'
+      },
+      { group: 'GitHub Copilot', haystacks: ['copilot', 'GitHub Copilot'], label: 'gpt-5', value: 'c' },
+      // Nous identified via the SLUG haystack even when the display name hides it
+      { group: 'Portal', haystacks: ['nous-portal', 'Portal'], label: 'hermes-4-405b', value: 'd' }
+    ]
+    expect(buildModelTabs(items)).toEqual(['Portal', 'Anthropic', 'GitHub Copilot'])
+    expect(buildModelTabs([])).toEqual([])
+  })
+
+  test('/model registers the provider-tab seam (buildModelTabs); /skills clears it back to stripless', async () => {
+    const p = makeCtx(async method => (method === 'model.options' ? MODEL_OPTIONS : { output: 'switched' }))
+    await dispatchSlash('/model', p.ctx)
+    // the open picker derives Nous-first tabs through the seam
+    expect(pickerTabs(p.pickers[0]!.items)).toEqual(['Nous Research', 'Anthropic'])
+    const p2 = makeCtx(async () => ({ skills: { General: ['memory'] } }))
+    await dispatchSlash('/skills', p2.ctx)
+    expect(pickerTabs(p.pickers[0]!.items)).toEqual([])
   })
 
   test('/model <name> switches directly without opening the picker', async () => {

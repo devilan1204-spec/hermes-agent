@@ -20,15 +20,26 @@
  *   (logic/slash.ts registerPickerRefresh) and swaps the rows in live, with a
  *   transient `refreshing…` note — also self-heals a stale ✓.
  *
- * Everything heavy is memoized off (query, toggle, items): keystrokes re-score
- * at most once and unrelated store updates don't.
+ * v2.2 (provider tabs, user feedback): when the opener registers a tab
+ * derivation (registerPickerTabs — `/model` registers buildModelTabs), a chip
+ * strip renders under the query line: one chip per configured provider
+ * (Nous-first) plus a trailing `All` (the classic full grouped view, where
+ * Ctrl+U still reveals unconfigured providers). The active tab filters rows
+ * BEFORE the fuzzy query (search-within-tab). The strip is styled text — NOT a
+ * focused tab_select — so the search input keeps focus; Tab/Shift+Tab cycle
+ * (free inside the picker: the composer and its completion menu are unmounted
+ * while an overlay replaces them), and ←/→ also cycle while the query is
+ * empty (the resume-picker design doc §A specs this same pattern).
+ *
+ * Everything heavy is memoized off (query, toggle, tab, items): keystrokes
+ * re-score at most once and unrelated store updates don't.
  */
 import type { BoxRenderable, InputRenderable } from '@opentui/core'
 import { useKeyboard } from '@opentui/solid'
 import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js'
 
 import { buildPickerRows, fuzzyFilter, visibleRows, type FuzzyField } from '../../logic/fuzzy.ts'
-import { canRefreshPicker, runPickerRefresh } from '../../logic/slash.ts'
+import { canRefreshPicker, pickerTabs, runPickerRefresh } from '../../logic/slash.ts'
 import type { PickerItem } from '../../logic/store.ts'
 import { useCloseLayer } from '../keymap.tsx'
 import { useTheme } from '../theme.tsx'
@@ -46,6 +57,37 @@ function fieldsOf(item: PickerItem): FuzzyField[] {
   if (item.description) fields.push({ text: item.description })
   for (const h of item.haystacks ?? []) fields.push({ text: h })
   return fields
+}
+
+/**
+ * Styled-text chip strip (the picker's tab bar) — deliberately a standalone,
+ * reusable piece: the resume-session picker renders the SAME strip (design doc
+ * docs/plans/opentui-resume-picker.md §A — chips as styled text, NOT a focused
+ * `<tab_select>`, so focus stays on the search input). Active chip: bracketed
+ * + theme-highlighted; inactive: dimmed with breathing space.
+ */
+export function TabChips(props: { labels: string[]; active: number }) {
+  const theme = useTheme()
+  // Chip descriptors are derived in a memo: `<For>` runs its callback OUTSIDE
+  // a tracking scope (Solid mapArray), so a ternary on `props.active` inside
+  // it would never re-render. Fresh descriptor objects per change re-key the
+  // <For> instead — a handful of chips, so the re-create is free.
+  const chips = createMemo(() => props.labels.map((label, at) => ({ active: at === props.active, label })))
+  return (
+    <text>
+      <For each={chips()}>
+        {chip =>
+          chip.active ? (
+            <span style={{ bg: theme().color.selectionBg, fg: theme().color.accent }}>
+              <b>{`[ ${chip.label} ]`}</b>
+            </span>
+          ) : (
+            <span style={{ fg: theme().color.muted }}>{`  ${chip.label}  `}</span>
+          )
+        }
+      </For>
+    </text>
+  )
 }
 
 export function Picker(props: {
@@ -72,10 +114,33 @@ export function Picker(props: {
   const [live, setLive] = createSignal<PickerItem[] | undefined>(undefined)
   const [refreshing, setRefreshing] = createSignal(false)
   const items = () => live() ?? props.items
-  const hasUnavailable = createMemo(() => items().some(it => it.unavailable))
+
+  // ── provider tabs (v2.2) ────────────────────────────────────────────────
+  // Derived through the opener-registered seam over the LIVE rows (a Ctrl+R
+  // swap re-derives). `undefined` = the trailing `All` tab (classic view).
+  const tabs = createMemo(() => pickerTabs(items()))
+  // Open lands on the CURRENT (✓) item's provider tab; All when it has none.
+  const [activeTab, setActiveTab] = createSignal<string | undefined>(
+    (() => {
+      const cur = props.items.find(it => it.current)?.group
+      return cur !== undefined && pickerTabs(props.items).includes(cur) ? cur : undefined
+    })()
+  )
+  // A live-refresh can drop the active tab's provider — degrade to All.
+  const tab = createMemo(() => {
+    const t = activeTab()
+    return t !== undefined && tabs().includes(t) ? t : undefined
+  })
+  // Ctrl+U only applies under All (provider tabs never hold unavailable rows).
+  const hasUnavailable = createMemo(() => tab() === undefined && items().some(it => it.unavailable))
 
   // pool → score → group → window, all memoized: typing re-scores once; nothing else does.
-  const pool = createMemo(() => (showAll() ? items() : items().filter(it => !it.unavailable)))
+  // The active tab filters BEFORE the fuzzy query (search-within-tab).
+  const pool = createMemo(() => {
+    const t = tab()
+    if (t !== undefined) return items().filter(it => !it.unavailable && it.group === t)
+    return showAll() ? items() : items().filter(it => !it.unavailable)
+  })
   const filtered = createMemo(() => fuzzyFilter(query(), pool(), fieldsOf))
   const grouped = createMemo(() =>
     buildPickerRows(
@@ -85,14 +150,32 @@ export function Picker(props: {
     )
   )
 
-  // Start on the current (✓) item; reset to the top match whenever the filter changes.
+  // Start on the current (✓) item; reset to the top match whenever the QUERY,
+  // the Ctrl+U toggle or a live row swap changes the filter. Tab switches are
+  // deliberately NOT in this list — cycleTab re-seats the selection itself
+  // (on the ✓ row when the new tab holds it).
   const [sel, setSel] = createSignal(
     Math.max(
       0,
       grouped().flat.findIndex(it => it.current)
     )
   )
-  createEffect(on(filtered, () => setSel(0), { defer: true }))
+  createEffect(on([query, showAll, live], () => setSel(0), { defer: true }))
+
+  /** Cycle the chip strip (Tab/Shift+Tab; ←/→ on an empty query): provider
+   *  tabs in registered order, then the trailing All, wrapping both ways. */
+  const cycleTab = (dir: 1 | -1) => {
+    const order: (string | undefined)[] = [...tabs(), undefined]
+    if (order.length <= 1) return
+    const at = order.indexOf(tab())
+    setActiveTab(order[(at + dir + order.length) % order.length])
+    setSel(
+      Math.max(
+        0,
+        grouped().flat.findIndex(it => it.current)
+      )
+    )
+  }
 
   const win = createMemo(() => visibleRows(grouped().rows, sel(), MAX_ROWS))
 
@@ -134,6 +217,19 @@ export function Picker(props: {
     if (key.name === 'down' || (key.ctrl && key.name === 'n')) {
       key.preventDefault()
       if (count) setSel(s => (s + 1) % count)
+      return
+    }
+    // Tab strip cycling (v2.2): Tab is FREE inside the picker (the composer's
+    // completion-accept Tab is unmounted while an overlay replaces it); ←/→
+    // only cycle on an EMPTY query — with text they stay native cursor moves.
+    if (key.name === 'tab' && tabs().length) {
+      key.preventDefault()
+      cycleTab(key.shift ? -1 : 1)
+      return
+    }
+    if ((key.name === 'left' || key.name === 'right') && tabs().length && !query()) {
+      key.preventDefault()
+      cycleTab(key.name === 'left' ? -1 : 1)
       return
     }
     if (key.ctrl && key.name === 'u') {
@@ -179,6 +275,12 @@ export function Picker(props: {
           <text fg={theme().color.muted}>refreshing…</text>
         </Show>
       </box>
+      <Show when={tabs().length > 0}>
+        <TabChips
+          labels={[...tabs(), 'All']}
+          active={tab() === undefined ? tabs().length : tabs().indexOf(tab() as string)}
+        />
+      </Show>
       <Show when={win().above > 0}>
         <text fg={theme().color.muted}>{`  ↑ ${win().above} more`}</text>
       </Show>
@@ -217,7 +319,7 @@ export function Picker(props: {
         <text fg={theme().color.muted}>{`  ↓ ${win().below} more`}</text>
       </Show>
       <text fg={theme().color.muted}>
-        {`↑↓ select · Enter pick${
+        {`↑↓ select · Enter pick${tabs().length ? ' · Tab provider' : ''}${
           hasUnavailable() ? ` · Ctrl+U ${showAll() ? 'hide' : 'show'} unconfigured` : ''
         }${canRefreshPicker() ? ' · Ctrl+R refresh' : ''} · Esc close`}
       </text>
