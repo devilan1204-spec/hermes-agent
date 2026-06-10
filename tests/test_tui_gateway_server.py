@@ -6587,3 +6587,41 @@ def test_tool_complete_derives_error_from_result_convention(monkeypatch):
         json.dumps({"results": [1, 2], "error": None}),
     )
     assert "error" not in events[-1][2]
+
+
+def test_session_list_reports_scan_cap_truncation(monkeypatch):
+    # The bounded multi-source scan must say so when the 10k safety cap stops
+    # it with the requested window unfilled — an empty page past the cap is
+    # "truncated", not "no more sessions".
+    class _DenyAllDB:
+        def __init__(self):
+            self.offsets = []
+
+        def list_sessions_rich(self, source=None, limit=20, offset=0, **kw):
+            self.offsets.append(offset)
+            return [
+                {"id": f"s{offset}-{i}", "source": "tool", "title": "", "preview": "",
+                 "started_at": 1, "message_count": 1}
+                for i in range(limit)
+            ]
+
+    db = _DenyAllDB()
+    monkeypatch.setattr(server, "_get_db", lambda: db)
+    resp = server.handle_request(
+        {"id": "1", "method": "session.list", "params": {"sources": ["tui", "cli"], "limit": 5}}
+    )
+    result = resp["result"]
+    assert result["sessions"] == []
+    assert result["truncated"] is True
+    assert max(db.offsets) <= 10_000
+
+
+def test_session_list_truncated_false_on_normal_paths(monkeypatch):
+    db = _picker_db()
+    monkeypatch.setattr(server, "_get_db", lambda: db)
+    legacy = server.handle_request({"id": "1", "method": "session.list", "params": {}})
+    assert legacy["result"]["truncated"] is False
+    filtered = server.handle_request(
+        {"id": "2", "method": "session.list", "params": {"sources": ["tui"], "limit": 5}}
+    )
+    assert filtered["result"]["truncated"] is False

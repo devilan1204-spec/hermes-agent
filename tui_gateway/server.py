@@ -3354,6 +3354,7 @@ def _(rid, params: dict) -> dict:
                 for s in db.list_sessions_rich(source=None, limit=fetch_limit)
                 if (s.get("source") or "").strip().lower() not in deny
             ][:limit]
+            list_truncated = False
         else:
             # Filtered/paginated path. Single source pushes into SQL; the
             # deny-list and multi-source filter run gateway-side, so keep
@@ -3372,7 +3373,14 @@ def _(rid, params: dict) -> dict:
             collected: list = []
             db_offset = 0
             page = max(wanted * 2, 200)
-            while len(collected) < wanted and db_offset < 10_000:
+            scan_capped = False
+            while len(collected) < wanted:
+                if db_offset >= 10_000:
+                    # Safety cap hit with the window still unfilled — report it
+                    # honestly (``truncated``) so the client can say "results
+                    # truncated" instead of silently serving an empty page.
+                    scan_capped = True
+                    break
                 batch = db.list_sessions_rich(
                     source=source_arg,
                     limit=page,
@@ -3387,6 +3395,7 @@ def _(rid, params: dict) -> dict:
                     break
                 db_offset += page
             rows = collected[offset : offset + limit]
+            list_truncated = scan_capped and len(collected) < wanted
 
         return _ok(
             rid,
@@ -3409,7 +3418,11 @@ def _(rid, params: dict) -> dict:
                         "model": s.get("model") or None,
                     }
                     for s in rows
-                ]
+                ],
+                # True when the bounded multi-source scan hit its safety cap
+                # before filling the requested window — the client should show
+                # "results truncated" instead of treating the page as final.
+                "truncated": list_truncated,
             },
         )
     except Exception as e:
