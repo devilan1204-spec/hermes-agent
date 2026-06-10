@@ -1044,6 +1044,10 @@ def test_make_tui_argv_dev_prebuilds_hermes_ink(monkeypatch, main_mod, tmp_path)
     monkeypatch.setattr(main_mod, "_tui_need_npm_install", lambda _tui_dir: False)
     monkeypatch.delenv("HERMES_TUI_DIR", raising=False)
     monkeypatch.setattr(main_mod.shutil, "which", lambda bin_name: f"/usr/bin/{bin_name}")
+    # _make_tui_argv now dispatches on the TUI engine first; resolving "opentui"
+    # availability probes `node --version` (a subprocess.run this test would
+    # otherwise record). Pin the Ink engine — this test covers the Ink dev path.
+    monkeypatch.setattr(main_mod, "_resolve_tui_engine", lambda: "ink")
 
     calls = []
 
