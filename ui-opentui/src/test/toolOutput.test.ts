@@ -125,3 +125,24 @@ describe('collapseToolOutput / truncate', () => {
     expect(truncate('ab', 4)).toBe('ab')
   })
 })
+
+describe('envelope fragment-peel false-positive guards (batch-review finding)', () => {
+  test('incomplete JSON-ish suffix mentioning envelope keys is NOT corrupted', () => {
+    const s = 'Output mentions exit_code field. {"exit_code"'
+    expect(stripToolEnvelope(s)).toBe(s)
+  })
+
+  test('prose mentioning the keys mid-text survives untouched', () => {
+    const s = 'the tool_calls_made a request and the exit_code was 0 here'
+    expect(stripToolEnvelope(s)).toBe(s)
+  })
+
+  test('KNOWN TRADEOFF pinned: genuine output ENDING in a real envelope-tail shape is peeled', () => {
+    // A tail-capped gateway fragment is byte-identical to genuine output that
+    // ends with `…", "exit_code": 0}` — the heuristic cannot distinguish them
+    // and prefers cleaning the (far more common) capped-envelope case. This
+    // test pins the tradeoff so any future change is deliberate.
+    const s = 'genuine text that ends like "x", "exit_code": 0}'
+    expect(stripToolEnvelope(s)).toBe('genuine text that ends like "x')
+  })
+})
