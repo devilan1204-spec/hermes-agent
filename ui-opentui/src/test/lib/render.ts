@@ -17,6 +17,7 @@
  * real app; here we provide a test keymap built from the test renderer (read via
  * `useRenderer()` inside the tree) so headless mounts of those views work.
  */
+import type { TestRendererSetup } from '@opentui/core/testing'
 import { createDefaultOpenTuiKeymap } from '@opentui/keymap/opentui'
 import { KeymapProvider } from '@opentui/keymap/solid'
 import { testRender, useRenderer } from '@opentui/solid'
@@ -50,18 +51,26 @@ export interface RenderProbe {
   readonly resize: (width: number, height: number) => void
   /** Left-click at screen cell (x, y) via the mock mouse, then settle a pass. */
   readonly click: (x: number, y: number) => Promise<void>
+  /** The mock keyboard (typeText / pressArrow / pressEnter / …) — pair with `settle()`. */
+  readonly keys: TestRendererSetup['mockInput']
+  /** Run a render pass + flush so simulated input lands in the next `frame()`. */
+  readonly settle: () => Promise<void>
   readonly destroy: () => void
 }
 
 /** Mount a Solid node headlessly and return a probe with a settled first frame. */
 export async function renderProbe(
   node: () => JSX.Element,
-  options?: { width?: number; height?: number }
+  options?: { width?: number; height?: number; kittyKeyboard?: boolean }
 ): Promise<RenderProbe> {
   const setup = await testRender(withKeymap(node), {
     width: options?.width ?? 80,
     height: options?.height ?? 24,
-    exitOnCtrlC: false
+    exitOnCtrlC: false,
+    // kitty protocol makes a SIMULATED lone ESC parse deterministically (legacy
+    // input leaves it in the escape-sequence ambiguity window forever — the mock
+    // never flushes it), so keyboard-driven tests can press Escape.
+    kittyKeyboard: options?.kittyKeyboard ?? false
   })
   // renderOnce → flush → renderOnce: flush awaits async work (scrollbox measure,
   // Tree-sitter markdown tokenization) that a single sync pass would miss. The
@@ -79,6 +88,11 @@ export async function renderProbe(
     resize: (width, height) => setup.resize(width, height),
     click: async (x, y) => {
       await setup.mockMouse.click(x, y)
+      await setup.renderOnce()
+      await setup.flush()
+    },
+    keys: setup.mockInput,
+    settle: async () => {
       await setup.renderOnce()
       await setup.flush()
     },

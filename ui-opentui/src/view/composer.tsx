@@ -8,8 +8,12 @@
  *
  * Completions: `onContentChange` reports the text → `onType` (entry boundary)
  * queries `complete.slash` and fills `completions()`. The textarea owns key input
- * (so live-refine-by-typing works), so we use Tab to accept the top match and Esc
- * to dismiss (arrow-nav would fight the textarea's cursor; a polish item).
+ * (so live-refine-by-typing works); menu keys are routed by the pure
+ * `routeMenuKey` table (Epic 8): Tab accepts / Esc dismisses any open menu, and
+ * for the SLASH menu (first char `/`) Up/Down move a themed highlight (wrapping)
+ * and Enter accepts it — `key.preventDefault()` keeps the consumed key out of
+ * the textarea (cursor moves / its `submit` binding). Path/@-mention menus keep
+ * Tab-only accept so arrows/Enter retain history/cursor/submit meanings.
  * `onSubmit`/`onType` are plain callbacks wired by the entry — no Effect here.
  *
  * Always-active input (item 2): the textarea focuses on mount, on click
@@ -21,8 +25,9 @@
  */
 import { type PasteEvent, type TextareaRenderable } from '@opentui/core'
 import { useKeyboard } from '@opentui/solid'
-import { For, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, For, on, onMount, Show } from 'solid-js'
 
+import { MENU_MAX, routeMenuKey } from '../logic/completionMenu.ts'
 import type { CompletionItem } from '../logic/store.ts'
 import type { PromptHistory } from '../logic/history.ts'
 import { type PasteStore, shouldPlaceholder } from '../logic/pastes.ts'
@@ -93,12 +98,40 @@ export function Composer(props: {
   let ta: TextareaRenderable | undefined
   let submitting = false
   const completions = () => props.completions?.() ?? []
+  /** The visible dropdown rows (the menu is capped, selection wraps within it). */
+  const menuItems = () => completions().slice(0, MENU_MAX)
+  // Highlighted dropdown row (Epic 8). New candidates (every refine keystroke
+  // swaps the array) reset it to the top match.
+  const [selected, setSelected] = createSignal(0)
+  createEffect(
+    on(
+      () => props.completions?.(),
+      () => setSelected(0)
+    )
+  )
+  // Whether the composer text starts with `/` (slash menu vs path menu) — a
+  // signal so the dropdown hint stays reactive; the key handler re-checks
+  // `ta.plainText` directly.
+  const [slashText, setSlashText] = createSignal(false)
 
   /** Replace the textarea content and park the cursor at the end (history recall). */
   const setBuffer = (text: string) => {
     if (!ta) return
     ta.setText(text)
     ta.cursorOffset = text.length
+  }
+
+  /** Splice the n-th candidate into the buffer (Tab/Enter accept). Only the token
+   *  being completed is replaced — `completionFrom` is the gateway's
+   *  `replace_from` / token start — then the trailing space lets arg-completion
+   *  continue (setText fires onContentChange → onType re-queries). */
+  const acceptCompletion = (index: number) => {
+    const item = menuItems()[index] ?? menuItems()[0]
+    if (!item || !ta) return
+    const from = props.completionFrom?.() ?? 0
+    const before = ta.plainText.slice(0, Math.min(Math.max(0, from), ta.plainText.length))
+    setBuffer(before + item.text + ' ')
+    props.onDismiss?.()
   }
 
   const submit = () => {
@@ -117,21 +150,30 @@ export function Composer(props: {
   }
 
   useKeyboard(key => {
-    // 1) completion accept (Tab) / dismiss (Esc) while the dropdown is open
-    if (completions().length > 0) {
-      if (key.name === 'tab') {
-        const top = completions()[0]
-        if (top && ta) {
-          // splice only the token being completed (slash-arg / @-mention), not the
-          // whole line — `completionFrom` is the gateway's replace_from / token start.
-          const from = props.completionFrom?.() ?? 0
-          const before = ta.plainText.slice(0, Math.min(Math.max(0, from), ta.plainText.length))
-          setBuffer(before + top.text + ' ')
-          props.onDismiss?.()
-        }
+    // 1) completion-menu keys while the dropdown is open (Epic 8): Tab accept /
+    // Esc dismiss for ANY menu (the pre-existing semantics — Esc stays exactly
+    // "dismiss if open, else fall through"), plus Up/Down/Enter for the SLASH
+    // menu only (routeMenuKey's precedence table). preventDefault keeps a
+    // consumed arrow/Enter from also reaching the textarea (cursor move / its
+    // `submit` keybinding); Tab/Esc stay un-prevented as before.
+    const menu = menuItems()
+    if (menu.length > 0) {
+      const action = routeMenuKey(key.name, key.ctrl || key.meta || key.option, {
+        count: menu.length,
+        selected: selected(),
+        slashMenu: (ta?.plainText ?? '').startsWith('/')
+      })
+      if (action.kind === 'move') {
+        setSelected(action.selected)
+        key.preventDefault()
         return
       }
-      if (key.name === 'escape') {
+      if (action.kind === 'accept') {
+        acceptCompletion(action.index)
+        if (key.name === 'return') key.preventDefault()
+        return
+      }
+      if (action.kind === 'dismiss') {
         props.onDismiss?.()
         return
       }
@@ -180,17 +222,25 @@ export function Composer(props: {
         >
           {/* the completion dropdown is transient input chrome (menu rows + the
               key-hint) — not transcript content — so it's excluded from mouse
-              selection (item 4). */}
-          <For each={completions().slice(0, 8)}>
+              selection (item 4). The highlighted row tracks `selected()` (Epic 8)
+              with the THEMED completionCurrentBg — Up/Down move it on the slash
+              menu; on path menus it stays on the top match (Tab's target). */}
+          <For each={menuItems()}>
             {(c, i) => (
-              <text selectable={false} fg={i() === 0 ? theme().color.accent : theme().color.text}>
-                {c.display || c.text}
-                {c.meta ? `  ${c.meta}` : ''}
-              </text>
+              <box
+                style={{
+                  backgroundColor: i() === selected() ? theme().color.completionCurrentBg : theme().color.completionBg
+                }}
+              >
+                <text selectable={false} fg={i() === selected() ? theme().color.accent : theme().color.text}>
+                  {c.display || c.text}
+                  {c.meta ? `  ${c.meta}` : ''}
+                </text>
+              </box>
             )}
           </For>
           <text selectable={false} fg={theme().color.muted}>
-            Tab complete · Esc dismiss
+            {slashText() ? '↑/↓ select · Enter/Tab accept · Esc dismiss' : 'Tab complete · Esc dismiss'}
           </text>
         </box>
       </Show>
@@ -232,7 +282,11 @@ export function Composer(props: {
             }
             // small pastes fall through to the textarea's native insert
           }}
-          onContentChange={() => props.onType?.(ta?.plainText ?? '')}
+          onContentChange={() => {
+            const text = ta?.plainText ?? ''
+            setSlashText(text.startsWith('/'))
+            props.onType?.(text)
+          }}
         />
       </box>
     </box>

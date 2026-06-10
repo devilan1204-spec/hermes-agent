@@ -54,6 +54,17 @@ export default defineConfig({
     ]
   },
   test: {
-    include: ['src/test/**/*.test.{ts,tsx}']
+    include: ['src/test/**/*.test.{ts,tsx}'],
+    server: {
+      deps: {
+        // Inline solid-js/store so ITS bare `import 'solid-js'` goes through the
+        // alias above (client build). Externalized, Node's `node` export condition
+        // would hand it the SSR `server.js` — a SECOND, non-tracking reactive
+        // runtime, so post-mount store updates would never repaint test frames
+        // (@opentui/solid itself deep-imports `solid-js/dist/solid.js`, which is
+        // exactly where the alias points — one shared runtime).
+        inline: [/solid-js[/\\]store/]
+      }
+    }
   }
 })
