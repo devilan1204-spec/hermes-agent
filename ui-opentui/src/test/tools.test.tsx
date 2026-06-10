@@ -1,16 +1,20 @@
 /**
- * Tool renderer tests (Epic 2.2). Headless frames through the real App tree:
- * the registry's default renderer turns args into LABELED FIELDS — the
+ * Tool renderer tests (Epics 2.2 + 2.4). Headless frames through the real App
+ * tree: the registry's default renderer turns args into LABELED FIELDS — the
  * acceptance gate asserts NO raw JSON syntax (`{"` / `":`) ever reaches the
- * frame for tool parts, collapsed or expanded — and delegate_task carries the
- * Ink-parity "(/agents to monitor)" hint. Expansion goes through the REAL
- * mouse path: mockMouse clicks the header row (found by scanning the frame).
+ * frame for tool parts, collapsed or expanded — delegate_task carries the
+ * Ink-parity "(/agents to monitor)" hint, and the bash renderer shows the
+ * command verbatim collapsed + the full (EXPANDED_MAX-capped) output expanded.
+ * Expansion goes through the REAL mouse path: mockMouse clicks the header row
+ * (found by scanning the frame). The long-output cap is asserted at the Body
+ * level (a tall frame would otherwise hide the trailing note).
  */
 import { describe, expect, test } from 'vitest'
 
-import { createSessionStore } from '../logic/store.ts'
+import { createSessionStore, type ToolPartState } from '../logic/store.ts'
 import { App } from '../view/App.tsx'
 import { ThemeProvider } from '../view/theme.tsx'
+import { BashToolBody } from '../view/tools/bashTool.tsx'
 import { renderProbe, type RenderProbe } from './lib/render.ts'
 
 type Store = ReturnType<typeof createSessionStore>
@@ -111,6 +115,120 @@ describe('tool renderer registry — labeled-args default (Epic 2.2)', () => {
       expect(frame).toContain('delegate_task')
       expect(frame).toContain('research opentui') // primary-arg preview still leads
       expect(frame).not.toContain('{"') // hint or not — still no raw JSON
+    } finally {
+      probe.destroy()
+    }
+  })
+})
+
+describe('bash tool renderer — command + full output (Epic 2.4)', () => {
+  test('collapsed header shows the invoked command VERBATIM (args win over the gateway preview)', async () => {
+    const store = createSessionStore()
+    seedTool(
+      store,
+      // the gateway's one-line preview is truncated — args.command is the truth
+      { tool_id: 'b1', name: 'terminal', context: 'grep -rn needle' },
+      {
+        tool_id: 'b1',
+        name: 'terminal',
+        args: { command: 'grep -rn needle src/ | head -5', timeout: 60 },
+        duration_s: 0.2,
+        result_text: 'a.ts:1:needle\nb.ts:2:needle\nc.ts:3:needle'
+      }
+    )
+
+    const probe = await mountApp(store)
+    try {
+      const frame = await probe.waitForFrame(f => f.includes('grep -rn needle src/ | head -5'))
+      expect(frame).toContain('terminal')
+      expect(frame).toContain('grep -rn needle src/ | head -5') // verbatim, not the preview
+      expect(frame).toContain('(3 lines)') // output stays behind the expand affordance
+      expect(frame).not.toContain('a.ts:1:needle') // collapsed → no output shown
+    } finally {
+      probe.destroy()
+    }
+  })
+
+  test('expanded shows the $ command and the FULL (short) output', async () => {
+    const store = createSessionStore()
+    seedTool(
+      store,
+      { tool_id: 'b2', name: 'terminal' },
+      {
+        tool_id: 'b2',
+        name: 'terminal',
+        args: { command: 'ls' },
+        result_text: 'alpha.txt\nbeta.txt\ngamma.txt'
+      }
+    )
+
+    const probe = await mountApp(store)
+    try {
+      await clickHeader(probe, 'terminal')
+      const expanded = await probe.waitForFrame(f => f.includes('alpha.txt'))
+      expect(expanded).toContain('$ ls') // the invocation, prompt-prefixed
+      expect(expanded).toContain('output') // section label
+      expect(expanded).toContain('alpha.txt') // full output…
+      expect(expanded).toContain('beta.txt')
+      expect(expanded).toContain('gamma.txt') // …down to the last line
+    } finally {
+      probe.destroy()
+    }
+  })
+
+  test('long output is capped to EXPANDED_MAX with an honest "+N more lines" note', async () => {
+    const lines = Array.from({ length: 250 }, (_, i) => `line-${String(i + 1).padStart(3, '0')}`)
+    const part: ToolPartState = {
+      type: 'tool',
+      id: 'b3',
+      name: 'execute_code',
+      state: 'complete',
+      args: { code: 'for i in range(250): print(i)' },
+      resultText: lines.join('\n')
+    }
+    // Body-level mount (tall frame so the trailing note row is on screen).
+    const probe = await renderProbe(
+      () => (
+        <ThemeProvider>
+          <BashToolBody part={part} width={70} />
+        </ThemeProvider>
+      ),
+      { width: 80, height: 210 }
+    )
+    try {
+      const frame = await probe.waitForFrame(f => f.includes('+50 more lines'))
+      expect(frame).toContain('$ for i in range(250): print(i)')
+      expect(frame).toContain('line-001') // the cap keeps the HEAD of the output
+      expect(frame).toContain('line-200') // …up to EXPANDED_MAX
+      expect(frame).not.toContain('line-201') // the rest is honestly elided
+      expect(frame).toContain('… +50 more lines')
+    } finally {
+      probe.destroy()
+    }
+  })
+
+  test('a gateway-capped result renders the tidy omitted note', async () => {
+    const part: ToolPartState = {
+      type: 'tool',
+      id: 'b4',
+      name: 'terminal',
+      state: 'complete',
+      args: { command: 'cat big.log' },
+      resultText: 'tail line one\ntail line two',
+      omittedNote: '120 lines / 9001 chars'
+    }
+    const probe = await renderProbe(
+      () => (
+        <ThemeProvider>
+          <BashToolBody part={part} width={70} />
+        </ThemeProvider>
+      ),
+      { width: 80, height: 12 }
+    )
+    try {
+      const frame = await probe.waitForFrame(f => f.includes('omitted'))
+      expect(frame).toContain('tail line one')
+      expect(frame).toContain('… omitted 120 lines / 9001 chars')
     } finally {
       probe.destroy()
     }

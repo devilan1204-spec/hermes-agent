@@ -219,6 +219,18 @@ function readOptNum(payload: { readonly [k: string]: unknown }, key: string): nu
   return typeof v === 'number' ? v : undefined
 }
 
+/** Render a raw tool `result` for display: strings as-is, anything else pretty
+ *  JSON — both then go through the same envelope-strip pipeline as result_text. */
+function stringifyResult(v: unknown): string | undefined {
+  if (typeof v === 'string') return v
+  if (v === null || v === undefined) return undefined
+  try {
+    return JSON.stringify(v, null, 2)
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Fold a `session.info` / `session.create.info` payload into a partial SessionInfo.
  * The loose wire JSON is decoded ONCE via `SessionInfoPatchSchema` (decode-at-
@@ -629,9 +641,14 @@ export function createSessionStore() {
         const name = readStr(event.payload, 'name')
         const error = readStr(event.payload, 'error')
         const summary = readStr(event.payload, 'summary')
-        // Peel the gateway's "[showing verbose tail; omitted …]" label (item 2) before
+        // `result_text` is verbose-gated, but the raw `result` is ALWAYS sent —
+        // when the verbose text is absent, derive the display body from `result`
+        // (so e.g. bash output still renders in non-verbose sessions). Then peel
+        // the gateway's "[showing verbose tail; omitted …]" label (item 2) before
         // envelope-stripping, so the body is clean and the note renders tidily.
-        const { body: rawBody, omittedNote } = stripOmittedNote(readStr(event.payload, 'result_text') ?? summary ?? '')
+        const { body: rawBody, omittedNote } = stripOmittedNote(
+          readStr(event.payload, 'result_text') ?? stringifyResult(event.payload['result']) ?? summary ?? ''
+        )
         const resultText = stripToolEnvelope(rawBody)
         const lineCount = resultText ? resultText.replace(/\s+$/, '').split('\n').length : 0
         // `args` (full dict) is always sent; stringify as the expanded-view args

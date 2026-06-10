@@ -17,6 +17,7 @@
 import type { Component } from 'solid-js'
 
 import type { ToolPartState } from '../../logic/store.ts'
+import { bashRenderer } from './bashTool.tsx'
 import { defaultRenderer } from './defaultTool.tsx'
 
 /** Props every tool Body receives: the part + usable content columns. */
@@ -40,7 +41,11 @@ export interface ToolRenderer {
 const TOOLS: Record<string, ToolRenderer> = {
   // delegate_task: default labeled fields + the Ink-parity monitor hint
   // (ui-tui/src/components/thinking.tsx — "(/agents to monitor)").
-  delegate_task: { ...defaultRenderer, hint: () => '(/agents to monitor)' }
+  delegate_task: { ...defaultRenderer, hint: () => '(/agents to monitor)' },
+  // shell-ish tools (Epic 2.4): collapsed = the command verbatim; expanded = full output.
+  execute_code: bashRenderer,
+  process: bashRenderer,
+  terminal: bashRenderer
 }
 
 /** Resolve the renderer for a tool name (default = labeled-fields fallback). */

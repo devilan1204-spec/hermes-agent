@@ -166,6 +166,40 @@ describe('session store — ordered parts (Phase 2b)', () => {
     expect(tool.argsText).toContain('"query"') // stringified fallback still kept
   })
 
+  test('derives resultText from the raw `result` when result_text is absent (non-verbose sessions)', () => {
+    const store = createSessionStore()
+    store.apply({ type: 'message.start' })
+    store.apply({ type: 'tool.start', payload: { tool_id: 'nv', name: 'terminal' } })
+    // non-verbose: no result_text — only the raw envelope-string `result`
+    store.apply({
+      type: 'tool.complete',
+      payload: { tool_id: 'nv', result: '{"output":"hi there\\nline two","exit_code":0,"error":null}' }
+    })
+    const tool = store.state.messages.at(-1)!.parts![0]!
+    if (tool.type !== 'tool') throw new Error('expected a tool part')
+    expect(tool.resultText).toBe('hi there\nline two') // envelope stripped, same pipeline
+    expect(tool.lineCount).toBe(2)
+  })
+
+  test('an object `result` is unwrapped too; result_text keeps precedence when present', () => {
+    const store = createSessionStore()
+    store.apply({ type: 'message.start' })
+    store.apply({ type: 'tool.start', payload: { tool_id: 'o1', name: 'terminal' } })
+    store.apply({ type: 'tool.complete', payload: { tool_id: 'o1', result: { output: 'obj out', exit_code: 0 } } })
+    store.apply({ type: 'tool.start', payload: { tool_id: 'o2', name: 'terminal' } })
+    store.apply({
+      type: 'tool.complete',
+      payload: { tool_id: 'o2', result: 'raw fallback', result_text: 'verbose text' }
+    })
+
+    const parts = store.state.messages.at(-1)!.parts!
+    const first = parts[0]!
+    const second = parts[1]!
+    if (first.type !== 'tool' || second.type !== 'tool') throw new Error('expected tool parts')
+    expect(first.resultText).toBe('obj out') // object envelope → its output
+    expect(second.resultText).toBe('verbose text') // result_text still wins when sent
+  })
+
   test('setCatalog maps the loose startup.catalog response defensively (item 9)', () => {
     const store = createSessionStore()
     store.setCatalog({
