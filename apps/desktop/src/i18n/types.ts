@@ -219,6 +219,16 @@ export interface Translations {
       technicalDesc: string
       themeTitle: string
       themeDesc: string
+      themeProfileNote: (profile: string) => string
+      installTitle: string
+      installDesc: string
+      installPlaceholder: string
+      installButton: string
+      installing: string
+      installError: string
+      installed: (name: string) => string
+      removeTheme: string
+      importedBadge: string
     }
     fieldLabels: Record<string, string>
     fieldDescriptions: Record<string, string>
@@ -533,6 +543,17 @@ export interface Translations {
     settings: string
     changeTheme: string
     changeColorMode: string
+    installTheme: {
+      title: string
+      placeholder: string
+      loading: string
+      error: string
+      empty: string
+      install: string
+      installing: string
+      installed: string
+      installs: (count: string) => string
+    }
     settingsFields: string
     mcpServers: string
     archivedChats: string
@@ -831,12 +852,14 @@ export interface Translations {
       export: string
       rename: string
       archive: string
+      newWindow: string
       copyIdFailed: string
       actionsFor: (title: string) => string
       sessionActions: string
       sessionRunning: string
       needsInput: string
       waitingForAnswer: string
+      handoffOrigin: (platform: string) => string
       renamed: string
       renameFailed: string
       renameTitle: string
@@ -1131,6 +1154,8 @@ export interface Translations {
       branch: (branch: string) => string
       closeCommandCenter: string
       openCommandCenter: string
+      showTerminal: string
+      hideTerminal: string
       gateway: string
       gatewayReady: string
       gatewayNeedsSetup: string
@@ -1186,8 +1211,7 @@ export interface Translations {
     tryAgain: string
     loadingTree: string
     loadingFiles: string
-    terminalFocus: string
-    terminalSplit: string
+    terminalHide: string
     addToChat: string
   }
 
@@ -1291,6 +1315,7 @@ export interface Translations {
       restoreNext: string
       goForward: string
       sendEdited: string
+      attachingFile: string
     }
     approval: {
       gatewayDisconnected: string

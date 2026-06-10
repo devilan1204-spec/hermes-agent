@@ -352,6 +352,9 @@ class TestSlackNativeSlashes:
         # The pinned priority aliases are guaranteed to survive the clamp.
         assert "btw" in names
         assert "bg" in names
+        # And at least one alias is surfaced as an alias entry (description
+        # carries the "Alias for /…" marker), proving the alias pass ran.
+        assert any(d.startswith("Alias for /") for _n, d, _h in slashes)
 
     def test_telegram_parity(self):
         """Every Telegram bot command must be registerable on Slack too.
