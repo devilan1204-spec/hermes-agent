@@ -216,7 +216,10 @@ export const ja = defineLocale({
       technicalDesc: '生のツール引数、結果、低レベルの詳細を含めます。',
       themeTitle: 'テーマ',
       themeDesc: 'デスクトップ専用のパレットです。選択したモードの上に適用されます。',
-      themeProfileNote: profile => `「${profile}」プロファイルに保存されます。プロファイルごとに個別のテーマを保持します。`
+      themeProfileNote: profile => `「${profile}」プロファイルに保存されます。プロファイルごとに個別のテーマを保持します。`,
+      completionSoundTitle: '完了サウンド',
+      completionSoundDesc: 'エージェントのターン終了時に再生されます。プリセットを選んでここで試聴できます。',
+      completionSoundPreview: '試聴'
     },
     fieldLabels: defineFieldCopy({
       model: 'デフォルトモデル',

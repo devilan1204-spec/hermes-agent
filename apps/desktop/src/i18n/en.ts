@@ -293,7 +293,10 @@ export const en: Translations = {
       technicalDesc: 'Include raw tool args/results and low-level details.',
       themeTitle: 'Theme',
       themeDesc: 'Desktop palettes only. The selected mode is applied on top.',
-      themeProfileNote: profile => `Saved for the ${profile} profile — each profile keeps its own theme.`
+      themeProfileNote: profile => `Saved for the ${profile} profile — each profile keeps its own theme.`,
+      completionSoundTitle: 'Completion Sound',
+      completionSoundDesc: 'Plays when an agent turn finishes. Pick a preset and preview it here.',
+      completionSoundPreview: 'Preview'
     },
     fieldLabels: FIELD_LABELS,
     fieldDescriptions: FIELD_DESCRIPTIONS,

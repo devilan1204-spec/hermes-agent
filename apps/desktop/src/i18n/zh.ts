@@ -288,7 +288,10 @@ export const zh: Translations = {
       technicalDesc: '包含原始工具参数/结果及底层细节。',
       themeTitle: '主题',
       themeDesc: '仅桌面端调色板。所选模式叠加其上。',
-      themeProfileNote: profile => `已为「${profile}」配置文件保存——每个配置文件保留各自的主题。`
+      themeProfileNote: profile => `已为「${profile}」配置文件保存——每个配置文件保留各自的主题。`,
+      completionSoundTitle: '完成提示音',
+      completionSoundDesc: '智能体回合结束时播放。可在此选择预设并预览。',
+      completionSoundPreview: '预览'
     },
     fieldLabels: defineFieldCopy({
       model: '默认模型',

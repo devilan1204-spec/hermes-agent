@@ -210,7 +210,10 @@ export const zhHant = defineLocale({
       technicalDesc: '包含原始工具參數、結果與底層細節。',
       themeTitle: '主題',
       themeDesc: '僅限桌面端的調色盤。所選模式會套用在其上。',
-      themeProfileNote: profile => `已為「${profile}」設定檔儲存——每個設定檔保留各自的主題。`
+      themeProfileNote: profile => `已為「${profile}」設定檔儲存——每個設定檔保留各自的主題。`,
+      completionSoundTitle: '完成提示音',
+      completionSoundDesc: '代理回合結束時播放。可在此選擇預設並預覽。',
+      completionSoundPreview: '預覽'
     },
     fieldLabels: defineFieldCopy({
       model: '預設模型',
