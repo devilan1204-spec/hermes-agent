@@ -17,6 +17,7 @@
  * real app; here we provide a test keymap built from the test renderer (read via
  * `useRenderer()` inside the tree) so headless mounts of those views work.
  */
+import type { CapturedFrame } from '@opentui/core'
 import type { TestRendererSetup } from '@opentui/core/testing'
 import { createDefaultOpenTuiKeymap } from '@opentui/keymap/opentui'
 import { KeymapProvider } from '@opentui/keymap/solid'
@@ -47,6 +48,9 @@ function withKeymap(node: () => JSX.Element): () => JSX.Element {
 
 export interface RenderProbe {
   readonly frame: () => string
+  /** Styled spans of the current frame (per-span fg/bg/attributes) — for
+   *  asserting COLOR, e.g. the composer's slash-token highlight (Epic 6). */
+  readonly spans: () => CapturedFrame
   readonly waitForFrame: (predicate: (frame: string) => boolean) => Promise<string>
   readonly resize: (width: number, height: number) => void
   /** Left-click at screen cell (x, y) via the mock mouse, then settle a pass. */
@@ -84,6 +88,7 @@ export async function renderProbe(
 
   return {
     frame: () => setup.captureCharFrame(),
+    spans: () => setup.captureSpans(),
     waitForFrame: predicate => setup.waitForFrame(predicate),
     resize: (width, height) => setup.resize(width, height),
     click: async (x, y) => {

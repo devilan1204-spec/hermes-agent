@@ -16,6 +16,20 @@
  * Tab-only accept so arrows/Enter retain history/cursor/submit meanings.
  * `onSubmit`/`onType` are plain callbacks wired by the entry — no Effect here.
  *
+ * Skill highlighting + one-edit autocorrect (Epic 6): standalone `/name` tokens
+ * whose name exactly matches a valid command/skill name get a native textarea
+ * highlight (editBuffer.addHighlightByCharRange + a SyntaxStyle — the same
+ * range-styling seam the extmarks demo uses, WITHOUT ExtmarksController's
+ * cursor monkey-patching, so the token stays normally editable). The catalog of
+ * valid names is LEARNED from the slash-completion batches the gateway already
+ * sends (module-level, survives composer remounts) — the completion flow is the
+ * source of truth, nothing is hardcoded. When the message is EXACTLY a bare
+ * lead token one edit away from one valid name (`/comit`) and the gateway menu
+ * is empty, a synthetic "did you mean" row rides the SAME dropdown (same
+ * routeMenuKey routing/accept path; Esc dismisses it until the text changes).
+ * Anti-jank: a `/` mid-prose never completes or autocorrects — exact tokens get
+ * highlight-only, everything else gets nothing (see logic/skillMatch.ts).
+ *
  * Always-active input (item 2): the textarea focuses on mount, on click
  * (onMouseDown), and reclaims focus on the next PRINTABLE keystroke if focus ever
  * drifted off (e.g. the transcript scrollbox grabbed it on a mouse-scroll). Nav
@@ -23,11 +37,12 @@
  * the prompt focused via a reactive effect; here a keystroke net is enough since
  * the composer remounts+refocuses whenever an overlay closes).
  */
-import { type PasteEvent, type TextareaRenderable } from '@opentui/core'
+import { SyntaxStyle, type PasteEvent, type TextareaRenderable } from '@opentui/core'
 import { useKeyboard } from '@opentui/solid'
-import { createEffect, createSignal, For, on, onMount, Show } from 'solid-js'
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 
 import { MENU_MAX, routeMenuKey } from '../logic/completionMenu.ts'
+import { analyzeSlash, learnableNames, nativeCharOffset } from '../logic/skillMatch.ts'
 import type { CompletionItem } from '../logic/store.ts'
 import type { PromptHistory } from '../logic/history.ts'
 import { type PasteStore, shouldPlaceholder } from '../logic/pastes.ts'
@@ -35,6 +50,16 @@ import { useDimensions } from './dimensions.tsx'
 import { useTheme } from './theme.tsx'
 
 const GUTTER = 2
+
+/** Valid command/skill names learned from gateway slash-completion batches
+ *  (Epic 6). Module-level so the catalog survives composer remounts (overlays
+ *  REPLACE the composer); it only ever holds names the gateway itself offered. */
+const LEARNED_NAMES = new Set<string>()
+
+/** Test hook: reset the learned catalog between cases. */
+export function resetLearnedNames(): void {
+  LEARNED_NAMES.clear()
+}
 
 /** Keys that must NOT steal focus back to the composer (scroll/edit/nav). */
 const NAV_KEYS = new Set([
@@ -103,8 +128,95 @@ export function Composer(props: {
   let ta: TextareaRenderable | undefined
   let submitting = false
   const completions = () => props.completions?.() ?? []
-  /** The visible dropdown rows (the menu is capped, selection wraps within it). */
-  const menuItems = () => completions().slice(0, MENU_MAX)
+  /** The gateway's dropdown rows (capped; selection wraps within them). */
+  const storeItems = () => completions().slice(0, MENU_MAX)
+
+  // ── skill highlighting + one-edit autocorrect (Epic 6) ────────────────
+  // The composer text as a signal (onContentChange keeps it current) so the
+  // token analysis is reactive; `namesRev` bumps when the learned catalog grows
+  // (completion batches arrive async, after the text changed).
+  const [bufText, setBufText] = createSignal('')
+  const [namesRev, setNamesRev] = createSignal(0)
+  // Esc on the suggestion row parks it for THIS exact text; any edit re-arms.
+  const [dismissedFor, setDismissedFor] = createSignal<string | undefined>(undefined)
+  // Learn names from slash-completion batches (bare `/…` lead token only —
+  // after a space the gateway completes ARGS, not names; see learnableNames).
+  createEffect(
+    on(
+      () => props.completions?.(),
+      items => {
+        let grew = false
+        for (const name of learnableNames(bufText(), items ?? [])) {
+          if (!LEARNED_NAMES.has(name)) {
+            LEARNED_NAMES.add(name)
+            grew = true
+          }
+        }
+        if (grew) setNamesRev(r => r + 1)
+      }
+    )
+  )
+  const analysis = createMemo(() => {
+    namesRev() // re-analyze when the catalog grows
+    return analyzeSlash(bufText(), LEARNED_NAMES)
+  })
+  /** The one-edit autocorrect, gated anti-jank: only while the gateway menu is
+   *  EMPTY (a live prefix menu always wins) and not Esc-dismissed for this text. */
+  const suggested = () => {
+    const s = analysis().suggestion
+    return s && dismissedFor() !== bufText() ? s : undefined
+  }
+  /** The visible dropdown rows: the gateway menu, else the synthetic suggestion. */
+  const menuItems = (): CompletionItem[] => {
+    const items = storeItems()
+    if (items.length > 0) return items
+    const s = suggested()
+    return s ? [{ display: `/${s.name}`, meta: 'did you mean? (Tab/Enter to accept)', text: s.name }] : []
+  }
+
+  // Native highlight plumbing: one SyntaxStyle per mount holding the token
+  // style; ranges are recomputed from `analysis()` on every change (clear+add —
+  // the same recompute model ExtmarksController uses). Best-effort: a native
+  // styling failure must never take the composer down.
+  let syntax: SyntaxStyle | undefined
+  let tokenStyleId = 0
+  onMount(() => {
+    try {
+      const style = SyntaxStyle.create()
+      tokenStyleId = style.registerStyle('slash-token', { bold: true, fg: theme().color.accent })
+      if (ta) ta.syntaxStyle = style
+      syntax = style
+    } catch {
+      syntax = undefined
+    }
+  })
+  onCleanup(() => {
+    try {
+      if (ta && !ta.isDestroyed) ta.syntaxStyle = null
+      syntax?.destroy()
+    } catch {
+      /* teardown is best-effort */
+    }
+    syntax = undefined
+  })
+  createEffect(() => {
+    const a = analysis()
+    if (!ta || !syntax || ta.isDestroyed) return
+    try {
+      const text = bufText()
+      ta.editBuffer.clearAllHighlights()
+      for (const t of a.highlights) {
+        ta.editBuffer.addHighlightByCharRange({
+          end: nativeCharOffset(text, t.end),
+          start: nativeCharOffset(text, t.start),
+          styleId: tokenStyleId
+        })
+      }
+      ta.requestRender()
+    } catch {
+      /* highlight is cosmetic — never crash on a native hiccup */
+    }
+  })
   // Highlighted dropdown row (Epic 8). New candidates (every refine keystroke
   // swaps the array) reset it to the top match.
   const [selected, setSelected] = createSignal(0)
@@ -133,7 +245,10 @@ export function Composer(props: {
   const acceptCompletion = (index: number) => {
     const item = menuItems()[index] ?? menuItems()[0]
     if (!item || !ta) return
-    const from = props.completionFrom?.() ?? 0
+    // A synthetic suggestion row (gateway menu empty) replaces from just past
+    // the `/` (its own `from`); gateway rows keep the store's replace_from.
+    const synthetic = storeItems().length === 0
+    const from = synthetic ? (suggested()?.from ?? 1) : (props.completionFrom?.() ?? 0)
     const before = ta.plainText.slice(0, Math.min(Math.max(0, from), ta.plainText.length))
     setBuffer(before + item.text + ' ')
     props.onDismiss?.()
@@ -179,6 +294,9 @@ export function Composer(props: {
         return
       }
       if (action.kind === 'dismiss') {
+        // also park the synthetic suggestion for this exact text (Esc must not
+        // re-open it on the next analysis pass); any edit re-arms it.
+        setDismissedFor(ta?.plainText ?? '')
         props.onDismiss?.()
         return
       }
@@ -241,7 +359,7 @@ export function Composer(props: {
 
   return (
     <box style={{ flexDirection: 'column', flexShrink: 0 }}>
-      <Show when={completions().length > 0}>
+      <Show when={menuItems().length > 0}>
         <box
           style={{
             backgroundColor: theme().color.completionBg,
@@ -315,6 +433,7 @@ export function Composer(props: {
           onContentChange={() => {
             const text = ta?.plainText ?? ''
             setSlashText(text.startsWith('/'))
+            setBufText(text) // drives the token analysis (highlight + suggestion)
             props.onType?.(text)
           }}
         />
