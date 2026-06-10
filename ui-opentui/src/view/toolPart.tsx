@@ -101,7 +101,9 @@ export function ToolPart(props: { part: ToolPartState }) {
   // Per-tool renderer (re-dispatches if the name settles on tool.complete).
   const renderer = () => rendererFor(props.part.name)
   const bodyWidth = () => Math.max(20, dims().width - GUTTER - 4)
-  const lines = () => resultLines(props.part)
+  // "(N lines)" counts what the renderer's body will actually show (per-tool
+  // `lines`, e.g. read_file's content), not the raw resultText.
+  const lines = () => renderer().lines?.(props.part) ?? resultLines(props.part)
   const running = () => props.part.state === 'running'
   // Expandable when the renderer says there's a body to reveal beyond the header.
   const collapsible = () => !running() && renderer().expandable(props.part)

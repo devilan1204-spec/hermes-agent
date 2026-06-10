@@ -65,6 +65,40 @@ describe('stripToolEnvelope', () => {
     // real output that merely mentions exit_code is NOT mangled
     expect(stripToolEnvelope('the exit_code was 0 here')).toBe('the exit_code was 0 here')
   })
+  test('unwraps the execute_code envelope — REAL wire shape from the v6fix live capture (item 6)', () => {
+    // {"status", "output", "tool_calls_made", "duration_seconds"} — the stdout
+    // lives under `output`, with leading keys before it (unlike terminal's).
+    expect(
+      stripToolEnvelope(
+        '{"status": "success", "output": "1\\n4\\n9\\n16\\n25\\n", "tool_calls_made": 0, "duration_seconds": 0.23}'
+      )
+    ).toBe('1\n4\n9\n16\n25\n')
+    // error runs append the honest [error] suffix
+    expect(
+      stripToolEnvelope(
+        '{"status": "error", "output": "boom", "tool_calls_made": 0, "duration_seconds": 0.5, "error": "Script exited with code 1"}'
+      )
+    ).toBe('boom\n[error] Script exited with code 1')
+  })
+  test('peels a TAIL-capped execute_code envelope fragment (item 6 — resume/finite-cap path)', () => {
+    // gateway tail-cap cut the head: the surviving fragment ends with the
+    // execute_code envelope close (real shape: tool_calls_made + duration_seconds)
+    expect(
+      stripToolEnvelope(
+        'metric_row_119 = 1547\\nmetric_row_120 = 1560\\n", "tool_calls_made": 0, "duration_seconds": 0.21}'
+      )
+    ).toBe('metric_row_119 = 1547\nmetric_row_120 = 1560\n')
+    // …with a trailing error string too
+    expect(
+      stripToolEnvelope(
+        'tail line\\n", "tool_calls_made": 2, "duration_seconds": 1.5, "error": "Script exited with code 1"}'
+      )
+    ).toBe('tail line\n')
+    // head survived, tail cut → strip the execute_code prefix up to the output
+    expect(stripToolEnvelope('{"status": "success", "output": "line1\nline2')).toBe('line1\nline2')
+    // real output that merely mentions tool_calls_made is NOT mangled
+    expect(stripToolEnvelope('made 3 tool_calls_made: 0 mentions here')).toBe('made 3 tool_calls_made: 0 mentions here')
+  })
   test('un-double-escapes literal \\n when they dominate (item 7 verbose tail)', () => {
     // double-escaped output (literal backslash-n) → real newlines
     expect(stripToolEnvelope('a\\nb\\nc')).toBe('a\nb\nc')

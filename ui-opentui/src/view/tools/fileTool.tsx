@@ -1,13 +1,15 @@
 /**
- * FileTool — renderer for the file tools `write_file`, `patch`, `read_file` and
- * `skill_manage` (Epic 2.3). Collapsed: the file path RELATIVE to the session
- * cwd, plus a themed `+N −M` change summary (rendered by the shell from
- * `stats`). Expanded: the FULL unified diff (gateway `diff_unified`, 512KB-
- * capped) through the NATIVE `<diff>` renderable — unified view (the transcript
- * is column-constrained), word-wrapped, line-numbered, themed. Multi-file diffs
- * are split per file (DiffRenderable parses only the FIRST file of a multi-file
- * diff) with a path label above each section. `read_file` (or any run without a
- * diff) falls back to the default labeled fields + output body.
+ * FileTool — renderer for the file-EDIT tools `write_file`, `patch` and
+ * `skill_manage` (Epic 2.3; `read_file` has its own renderer, readTool.tsx).
+ * Collapsed: the file path RELATIVE to the session cwd, plus a themed `+N −M`
+ * change summary (rendered by the shell from `stats`). Expanded: the FULL
+ * unified diff (gateway `diff_unified`, 512KB-capped) through the NATIVE
+ * `<diff>` renderable — unified view (the transcript is column-constrained),
+ * word-wrapped, line-numbered, themed. Multi-file diffs are split per file
+ * (DiffRenderable parses only the FIRST file of a multi-file diff) with a path
+ * label above each section. A run without a diff falls back to the default
+ * labeled fields + output body — except write_file, whose `content` arg shows
+ * as a highlighted CodeBlock (item 7).
  *
  * Arg keys verified against the Python tool schemas (tools/file_tools.py
  * READ_FILE_SCHEMA / WRITE_FILE_SCHEMA / PATCH_SCHEMA: `path`;
@@ -25,6 +27,7 @@ import { type DiffFileSection, relativizePath, splitUnifiedDiff } from '../../lo
 import type { ToolPartState } from '../../logic/store.ts'
 import { syntaxStyleFor } from '../markdown.tsx'
 import { useTheme } from '../theme.tsx'
+import { CodeBlock } from './codeBlock.tsx'
 import { DefaultToolBody, defaultRenderer, defaultSubtitle, structuredArgs, ToolOutputBlock } from './defaultTool.tsx'
 import type { ToolBodyProps, ToolRenderer } from './registry.tsx'
 
@@ -169,12 +172,35 @@ function DiffNotes(props: { notes: Array<[string, string]> }) {
   )
 }
 
-/** Expanded body: per-file native diffs (+ non-redundant output), else default. */
+/** write_file's `content` arg, when it's a real string (structuredArgs first). */
+function writeContentOf(part: ToolPartState): string | undefined {
+  if (part.name !== 'write_file') return undefined
+  const c = structuredArgs(part)?.['content']
+  return typeof c === 'string' && c.trim() ? c : undefined
+}
+
+/** No-diff fallback body: write_file shows its CONTENT highlighted (item 7 —
+ *  the labeled-field flattening was useless for source); others stay default. */
+function FileFallbackBody(props: ToolBodyProps) {
+  const content = createMemo(() => writeContentOf(props.part))
+  return (
+    <Show when={content()} fallback={<DefaultToolBody part={props.part} width={props.width} />}>
+      {c => (
+        <box style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
+          <CodeBlock content={c().replace(/\s+$/, '')} filetype={pathToFiletype(filePathOf(props.part))} />
+          <ToolOutputBlock part={props.part} width={props.width} label />
+        </box>
+      )}
+    </Show>
+  )
+}
+
+/** Expanded body: per-file native diffs (+ non-redundant output), else fallback. */
 export function FileToolBody(props: ToolBodyProps) {
   const files = createMemo(() => (props.part.diffUnified ? splitUnifiedDiff(props.part.diffUnified) : []))
   const plan = createMemo(() => diffOutputPlan(props.part))
   return (
-    <Show when={files().length > 0} fallback={<DefaultToolBody part={props.part} width={props.width} />}>
+    <Show when={files().length > 0} fallback={<FileFallbackBody {...props} />}>
       <box style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
         <For each={files()}>{file => <FileDiff file={file} label={files().length > 1} cwd={props.cwd} />}</For>
         <Show when={notesOf(plan())}>{notes => <DiffNotes notes={notes()} />}</Show>

@@ -18,7 +18,7 @@ import { App } from '../view/App.tsx'
 import { reasoningLabelStyle } from '../view/reasoningPart.tsx'
 import { ThemeProvider } from '../view/theme.tsx'
 import { toolNameStyle } from '../view/toolPart.tsx'
-import { BashToolBody, commandOf } from '../view/tools/bashTool.tsx'
+import { BashToolBody, commandFitsHeader, commandOf } from '../view/tools/bashTool.tsx'
 import { diffOutputPlan, FileToolBody } from '../view/tools/fileTool.tsx'
 import { renderProbe, type RenderProbe } from './lib/render.ts'
 
@@ -154,7 +154,7 @@ describe('bash tool renderer — command + full output (Epic 2.4)', () => {
     }
   })
 
-  test('expanded shows the $ command and the FULL (short) output', async () => {
+  test('one-liner that fits the header: expanded body SKIPS the $ echo — just the output (item 3)', async () => {
     const store = createSessionStore()
     seedTool(
       store,
@@ -171,14 +171,57 @@ describe('bash tool renderer — command + full output (Epic 2.4)', () => {
     try {
       await clickHeader(probe, 'terminal')
       const expanded = await probe.waitForFrame(f => f.includes('alpha.txt'))
-      expect(expanded).toContain('$ ls') // the invocation, prompt-prefixed
-      expect(expanded).toContain('output') // section label
+      expect(expanded).toContain('ls') // the command stays visible — in the HEADER
+      expect(expanded).not.toContain('$ ls') // …so the body does NOT echo it (item 3)
+      expect(expanded).not.toContain('output') // no section label without an echo above it
       expect(expanded).toContain('alpha.txt') // full output…
       expect(expanded).toContain('beta.txt')
       expect(expanded).toContain('gamma.txt') // …down to the last line
     } finally {
       probe.destroy()
     }
+  })
+
+  test('multi-line command: expanded body KEEPS the $ echo (the header could not show it)', async () => {
+    const store = createSessionStore()
+    seedTool(
+      store,
+      { tool_id: 'b2m', name: 'terminal' },
+      {
+        tool_id: 'b2m',
+        name: 'terminal',
+        args: { command: 'for f in *.txt; do\n  wc -l "$f"\ndone' },
+        result_text: '3 alpha.txt'
+      }
+    )
+
+    const probe = await mountApp(store)
+    try {
+      await clickHeader(probe, 'terminal')
+      const expanded = await probe.waitForFrame(f => f.includes('3 alpha.txt'))
+      expect(expanded).toContain('$ for f in *.txt; do') // first command line, prompt-prefixed
+      expect(expanded).toContain('wc -l "$f"') // continuation line
+      expect(expanded).toContain('output') // section label separates echo from output
+      expect(expanded).toContain('3 alpha.txt')
+    } finally {
+      probe.destroy()
+    }
+  })
+
+  test('commandFitsHeader: single-line within width fits; truncated / multi-line / failed do not', () => {
+    const part = (over: Partial<ToolPartState>): ToolPartState => ({
+      type: 'tool',
+      id: 'cf',
+      name: 'terminal',
+      state: 'complete',
+      ...over
+    })
+    // header columns = width - name.length (see view/toolPart.tsx subWidth math)
+    expect(commandFitsHeader(part({ args: { command: 'ls -la' } }), 40)).toBe(true)
+    expect(commandFitsHeader(part({ args: { command: 'x'.repeat(40) } }), 40)).toBe(false) // truncated
+    expect(commandFitsHeader(part({ args: { command: 'a\nb' } }), 40)).toBe(false) // multi-line
+    // a failed header shows the ERROR, not the command → body must echo it
+    expect(commandFitsHeader(part({ args: { command: 'false' }, error: 'exit 1' }), 40)).toBe(false)
   })
 
   test('long output with an explicit =200 cap restored gets the honest "+N more lines" note', async () => {
@@ -205,7 +248,6 @@ describe('bash tool renderer — command + full output (Epic 2.4)', () => {
     )
     try {
       const frame = await probe.waitForFrame(f => f.includes('+50 more lines'))
-      expect(frame).toContain('$ for i in range(250): print(i)')
       expect(frame).toContain('line-001') // the cap keeps the HEAD of the output
       expect(frame).toContain('line-200') // …up to the restored cap
       expect(frame).not.toContain('line-201') // the rest is honestly elided
@@ -280,7 +322,7 @@ describe('file tool renderer — relative path + diff stats (Epic 2.3)', () => {
     }
   })
 
-  test('read_file gets NO diff body — expanded falls back to labeled fields + output', async () => {
+  test('read_file: relpath subtitle; expanded = CONTENT only — limit/offset suppressed (items 1+7)', async () => {
     const store = createSessionStore()
     store.apply({ type: 'session.info', payload: { cwd: '/home/u/proj' } })
     seedTool(
@@ -289,22 +331,31 @@ describe('file tool renderer — relative path + diff stats (Epic 2.3)', () => {
       {
         tool_id: 'f2',
         name: 'read_file',
-        args: { path: '/home/u/proj/notes.md', limit: 50 },
-        result_text: '1|# Notes\n2|hello'
+        args: { limit: 50, offset: 1, path: '/home/u/proj/notes.py' },
+        // REAL wire shape (v6fix capture): a dict result whose `content`
+        // carries the `N|`-prefixed lines; result_text mirrors it as JSON.
+        result: { content: '1|# Notes\n2|hello = 1', file_size: 18, total_lines: 2, truncated: false },
+        result_text: '{"content": "1|# Notes\\n2|hello = 1", "total_lines": 2, "file_size": 18, "truncated": false}'
       }
     )
 
     const probe = await mountApp(store)
     try {
       const collapsed = await probe.waitForFrame(f => f.includes('read_file'))
-      expect(collapsed).toContain('notes.md') // relpath subtitle
+      expect(collapsed).toContain('notes.py') // relpath subtitle
       expect(collapsed).not.toContain('+0') // no diff → no stats summary
+      expect(collapsed).toContain('(2 lines)') // honest count: the CONTENT lines
 
       await clickHeader(probe, 'read_file')
-      const expanded = await probe.waitForFrame(f => f.includes('limit'))
-      expect(expanded).toContain('path') // default labeled fields…
-      expect(expanded).toContain('50')
-      expect(expanded).toContain('# Notes') // …and the output body
+      const expanded = await probe.waitForFrame(f => f.includes('# Notes'))
+      expect(expanded).toContain('# Notes') // the content, through the native <code>
+      expect(expanded).toContain('hello = 1')
+      expect(expanded).not.toContain('1|') // line-number prefixes stripped
+      expect(expanded).not.toContain('limit') // noise arg-fields suppressed…
+      expect(expanded).not.toContain('offset')
+      expect(expanded).not.toContain('50')
+      expect(expanded).not.toContain('total_lines') // …and never the JSON envelope
+      expect(expanded).not.toContain('{"')
       expect(expanded).not.toContain('@@') // never a diff
     } finally {
       probe.destroy()

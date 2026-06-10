@@ -45,6 +45,13 @@ export interface ToolPartState {
   argsText?: string
   /** Structured args from `tool.complete` (always sent) — the per-tool renderers read these. */
   args?: Record<string, unknown>
+  /** Structured RESULT object from `tool.complete` (dict results only) — per-tool
+   *  renderers extract payload fields (read_file `content`, search `matches`,
+   *  clarify Q&A, skill_view name/description). The display string `resultText`
+   *  can't serve this: `normalizeOutput` un-escapes literal `\n` inside JSON
+   *  string values, so a stringified dict result no longer JSON.parses. Same
+   *  raw-result redaction tradeoff as the unlimited-cap substitution above. */
+  result?: Record<string, unknown>
   /** Tool wall-clock seconds (gateway `duration_s`), shown dim in the header. */
   duration?: number
   /** Local Date.now() stamped on `tool.start` — drives the live elapsed tick
@@ -791,6 +798,11 @@ export function createSessionStore() {
               part.diffUnified = diffUnified
               part.diffStats = diffStats(diffUnified)
             }
+            // structured dict results feed the per-tool renderers (read_file
+            // content, search matches, clarify Q&A, skill_view description).
+            const resultObj = event.payload['result']
+            if (resultObj && typeof resultObj === 'object' && !Array.isArray(resultObj))
+              part.result = resultObj as Record<string, unknown>
             // argsPreview (from tool.start `context`) is intentionally NOT overwritten.
             if (argsObj && typeof argsObj === 'object') {
               // structured args feed the per-tool renderers (labeled fields, bash command).

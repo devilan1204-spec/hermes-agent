@@ -56,15 +56,21 @@ export function normalizeOutput(text: string): string {
  * failed); otherwise return `raw` unchanged. (Gotcha §8 — strip the envelope.)
  */
 /**
- * When the gateway tail-caps a LARGE result it serialises the whole
- * `{"output": "...", "exit_code": 0, "error": null}` envelope first, so the
- * surviving tail ends mid-string with the envelope close (`…", "exit_code": 0,
- * "error": null}`) — and, if the head survived, opens with `{"output": "`. The
- * fragment can't be JSON.parsed, so peel those affixes off conservatively (only
- * the exact gateway shape; real output won't end this way). Item 2 polish.
+ * When the gateway tail-caps a LARGE result it serialises the whole envelope
+ * first, so the surviving tail ends mid-string with the envelope close — and,
+ * if the head survived, opens with the envelope's prefix up to `"output": "`.
+ * The fragment can't be JSON.parsed, so peel those affixes off conservatively
+ * (only the exact gateway shapes; real output won't end this way). Two shapes
+ * observed live (v6fix wire capture):
+ *   terminal/process: `{"output": "…", "exit_code": 0, "error": null}`
+ *   execute_code:     `{"status": "success", "output": "…",
+ *                       "tool_calls_made": 0, "duration_seconds": 0.21[, "error": "…"]}`
+ * The tail anchors on the first trailing key (`exit_code`/`tool_calls_made`)
+ * then allows the remaining envelope keys in any order. Items 2 + 6.
  */
-const ENVELOPE_HEAD = /^\s*\{\s*"output"\s*:\s*"/
-const ENVELOPE_TAIL = /"\s*,\s*"exit_code"\s*:\s*-?\d+(?:\s*,\s*"error"\s*:\s*(?:null|"(?:[^"\\]|\\.)*"))?\s*\}\s*$/
+const ENVELOPE_HEAD = /^\s*\{\s*(?:"status"\s*:\s*"[^"]*"\s*,\s*)?"output"\s*:\s*"/
+const ENVELOPE_TAIL =
+  /"\s*,\s*"(?:exit_code|tool_calls_made)"\s*:\s*-?\d+(?:\s*,\s*"(?:error|status|duration_seconds|exit_code|tool_calls_made)"\s*:\s*(?:null|-?\d+(?:\.\d+)?|"(?:[^"\\]|\\.)*"))*\s*\}\s*$/
 
 function unwrapEnvelopeFragment(s: string): string {
   const tail = ENVELOPE_TAIL.test(s)

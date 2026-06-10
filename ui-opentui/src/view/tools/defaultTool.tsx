@@ -60,6 +60,28 @@ export function structuredArgs(part: ToolPartState): Record<string, unknown> | u
   return part.args
 }
 
+/**
+ * The tool's structured RESULT object — `part.result` (the raw dict shipped on
+ * tool.complete, captured by the store) first; falls back to parsing
+ * `part.resultText` when it still looks like intact JSON (covers resumed
+ * sessions, which hydrate result_text only). NOTE the fallback is best-effort:
+ * the store's normalizeOutput un-escapes literal `\n` inside JSON string
+ * values, so multi-line payloads (read_file content, skill_view content) only
+ * survive via `part.result`.
+ */
+export function structuredResult(part: ToolPartState): Record<string, unknown> | undefined {
+  if (part.result) return part.result
+  const s = (part.resultText ?? '').trim()
+  if (!s.startsWith('{')) return undefined
+  try {
+    const o: unknown = JSON.parse(s)
+    if (o && typeof o === 'object' && !Array.isArray(o)) return o as Record<string, unknown>
+  } catch {
+    /* capped/mangled JSON — no structured result */
+  }
+  return undefined
+}
+
 function isPrimitive(v: unknown): v is string | number | boolean {
   return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
 }
@@ -77,11 +99,18 @@ function fieldValue(v: unknown): string {
   return `(${n} field${n === 1 ? '' : 's'})`
 }
 
-/** Labeled key→value rows for the expanded args (NEVER raw JSON). */
-export function argFields(part: ToolPartState): Array<[string, string]> {
+/**
+ * Labeled key→value rows for the expanded args (NEVER raw JSON). `omit` is the
+ * per-tool NOISE-FIELD suppression hook (items 1 + 2): a renderer passes the
+ * arg keys its expanded view shouldn't repeat (read_file's limit/offset,
+ * search_files' context/output_mode, keys already shown as the subtitle).
+ */
+export function argFields(part: ToolPartState, omit?: readonly string[]): Array<[string, string]> {
   const obj = structuredArgs(part)
   if (!obj) return []
-  const entries = Object.entries(obj).map(([k, v]): [string, string] => [k, fieldValue(v)])
+  const entries = Object.entries(obj)
+    .filter(([k]) => !omit?.includes(k))
+    .map(([k, v]): [string, string] => [k, fieldValue(v)])
   // A single field whose value is already the header's primary-arg preview adds
   // nothing over the header (e.g. terminal's `command`) — hide it (kept from
   // the pre-registry render's redundancy rule).
@@ -141,10 +170,11 @@ export function ToolOutputBlock(props: { part: ToolPartState; width: number; lab
   )
 }
 
-/** Expanded body: labeled arg fields, then the (capped) output block. */
-export function DefaultToolBody(props: ToolBodyProps) {
+/** Expanded body: labeled arg fields, then the (capped) output block.
+ *  `omitFields` = the per-tool noise-field suppression list (see argFields). */
+export function DefaultToolBody(props: ToolBodyProps & { omitFields?: readonly string[] }) {
   const theme = useTheme()
-  const fields = createMemo(() => argFields(props.part))
+  const fields = createMemo(() => argFields(props.part, props.omitFields))
   return (
     <box style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
       <Show when={fields().length > 0}>

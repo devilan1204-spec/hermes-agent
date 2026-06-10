@@ -19,8 +19,12 @@ import type { Component } from 'solid-js'
 import type { DiffStats } from '../../logic/diff.ts'
 import type { ToolPartState } from '../../logic/store.ts'
 import { bashRenderer } from './bashTool.tsx'
+import { clarifyRenderer } from './clarifyTool.tsx'
 import { defaultRenderer } from './defaultTool.tsx'
 import { fileRenderer } from './fileTool.tsx'
+import { readRenderer } from './readTool.tsx'
+import { searchRenderer } from './searchTool.tsx'
+import { skillRenderer } from './skillTool.tsx'
 
 /** Props every tool Body receives: the part + usable content columns. */
 export interface ToolBodyProps {
@@ -40,23 +44,39 @@ export interface ToolRenderer {
   stats?: (part: ToolPartState) => DiffStats | undefined
   /** Whether the part has expandable content beyond the header (when settled). */
   expandable: (part: ToolPartState) => boolean
+  /** The lines the expanded body will actually show — drives the honest
+   *  "(N lines)" header count. Defaults to the raw resultText lines. */
+  lines?: (part: ToolPartState) => string[]
   /** The expanded body, rendered inside the shared left-bordered frame. */
   Body: Component<ToolBodyProps>
 }
 
 const TOOLS: Record<string, ToolRenderer> = {
+  // clarify (item 4): collapsed = `question: answer`; expanded = `User
+  // answered:` + `· q: a` rows — NEVER the raw JSON result.
+  clarify: clarifyRenderer,
   // delegate_task: default labeled fields + the Ink-parity monitor hint
   // (ui-tui/src/components/thinking.tsx — "(/agents to monitor)").
   delegate_task: { ...defaultRenderer, hint: () => '(/agents to monitor)' },
-  // shell-ish tools (Epic 2.4): collapsed = the command verbatim; expanded = full output.
+  // shell-ish tools (Epic 2.4): collapsed = the command verbatim; expanded =
+  // full output (+ the command echo only when the header truncated it, item 3;
+  // execute_code's code arg is Tree-sitter highlighted, item 7).
   execute_code: bashRenderer,
   process: bashRenderer,
   terminal: bashRenderer,
-  // file tools (Epic 2.3): collapsed = cwd-relative path + `+N −M`; expanded =
-  // the FULL native diff (write_file/patch/skill_manage) or labeled fields (read_file).
+  // file-edit tools (Epic 2.3): collapsed = cwd-relative path + `+N −M`;
+  // expanded = the FULL native diff.
   patch: fileRenderer,
-  read_file: fileRenderer,
+  // read_file (items 1 + 7): collapsed = relpath; expanded = highlighted
+  // content only (limit/offset suppressed).
+  read_file: readRenderer,
+  // search_files (item 2): collapsed = the pattern; expanded = grep-style
+  // result lines only (context/output_mode/… suppressed).
+  search_files: searchRenderer,
   skill_manage: fileRenderer,
+  // skill_view (item 5): WHICH skill was loaded (+ one-line description) —
+  // never the full skill contents.
+  skill_view: skillRenderer,
   write_file: fileRenderer
 }
 
