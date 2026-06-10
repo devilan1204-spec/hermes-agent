@@ -234,7 +234,6 @@ export function Composer(props: {
   // Whether the composer text starts with `/` (slash menu vs path menu) — a
   // signal so the dropdown hint stays reactive; the key handler re-checks
   // `ta.plainText` directly.
-  const [slashText, setSlashText] = createSignal(false)
 
   /** Replace the textarea content and park the cursor at the end (history recall). */
   const setBuffer = (text: string) => {
@@ -416,7 +415,7 @@ export function Composer(props: {
             )}
           </For>
           <text selectable={false} fg={theme().color.muted}>
-            {slashText() ? '↑/↓ select · Enter/Tab accept · Esc dismiss' : 'Tab complete · Esc dismiss'}
+            {'↑/↓ select · Enter/Tab accept · Esc dismiss'}
           </text>
         </box>
       </Show>
@@ -460,7 +459,6 @@ export function Composer(props: {
           }}
           onContentChange={() => {
             const text = ta?.plainText ?? ''
-            setSlashText(text.startsWith('/'))
             setBufText(text) // drives the token analysis (highlight + suggestion)
             props.onType?.(text)
           }}

@@ -47,9 +47,17 @@ describe('routeMenuKey — key-routing precedence table', () => {
     ['Esc dismisses', 'escape', false, ctx({ selected: 2 }), { kind: 'dismiss' }],
     // NOT the slash menu (path/@-mention dropdown): arrows + Enter keep their
     // existing meanings (history / cursor / textarea submit) …
-    ['Down on a path menu passes', 'down', false, ctx({ slashMenu: false }), { kind: 'pass' }],
-    ['Up on a path menu passes', 'up', false, ctx({ slashMenu: false }), { kind: 'pass' }],
-    ['Enter on a path menu passes (submits as today)', 'return', false, ctx({ slashMenu: false }), { kind: 'pass' }],
+    // glitch 2026-06-10: ANY open menu owns plain arrows/Enter (path/arg menus
+    // navigate like the slash menu; Esc hands the cursor keys back).
+    ['Down on a path menu moves', 'down', false, ctx({ slashMenu: false }), { kind: 'move', selected: 1 }],
+    ['Up on a path menu moves (wraps)', 'up', false, ctx({ slashMenu: false }), { kind: 'move', selected: 2 }],
+    [
+      'Enter on a path menu accepts the highlighted item',
+      'return',
+      false,
+      ctx({ slashMenu: false }),
+      { index: 0, kind: 'accept' }
+    ],
     // … but Tab/Esc keep working on ANY menu (pre-Epic-8 semantics)
     ['Tab on a path menu still accepts', 'tab', false, ctx({ slashMenu: false }), { index: 0, kind: 'accept' }],
     ['Esc on a path menu still dismisses', 'escape', false, ctx({ slashMenu: false }), { kind: 'dismiss' }],

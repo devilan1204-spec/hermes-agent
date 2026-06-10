@@ -47,12 +47,17 @@ function clampSelected(ctx: MenuKeyContext): number {
  * Route one key press against the open menu. `modified` is Ctrl/Alt/Option —
  * modified arrows/Enter never belong to the menu (Tab/Esc keep their
  * pre-existing modifier-blind accept/dismiss semantics).
+ *
+ * ANY open menu owns plain arrows/Enter (glitch, 2026-06-10): @-path and
+ * arg menus navigate exactly like the slash menu — standard editor-
+ * autocomplete behavior; Esc dismisses to hand the cursor keys back.
+ * (`ctx.slashMenu` still feeds the hint text + suggestion rows.)
  */
 export function routeMenuKey(name: string, modified: boolean, ctx: MenuKeyContext): MenuKeyAction {
   if (ctx.count <= 0) return PASS
   if (name === 'tab') return { index: clampSelected(ctx), kind: 'accept' }
   if (name === 'escape') return { kind: 'dismiss' }
-  if (modified || !ctx.slashMenu) return PASS
+  if (modified) return PASS
   const sel = clampSelected(ctx)
   if (name === 'up') return { kind: 'move', selected: (sel - 1 + ctx.count) % ctx.count }
   if (name === 'down') return { kind: 'move', selected: (sel + 1) % ctx.count }
