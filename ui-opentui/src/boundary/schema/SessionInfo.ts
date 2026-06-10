@@ -10,11 +10,15 @@
  * unset — a stray shape never crashes the reducer.
  *
  * Wire field names are verified against `tui_gateway/server.py`:
- *   - session.info  → `_session_info()` (server.py:~1830): top-level `model`,
- *     `reasoning_effort`, `fast`, `cwd`, `branch`, `running`, plus a nested
- *     `usage` (`_get_usage()`, server.py:~1698) carrying `context_used`,
- *     `context_max`, `context_percent`, `compressions` (context_* only present
- *     when the compressor knows a context length).
+ *   - session.info  → `_session_info()` (server.py:~1798): top-level `model`,
+ *     `reasoning_effort`, `fast`, `cwd`, `branch`, `running`, `profile_name`,
+ *     `update_behind` (Optional[int] — null until the prefetched check lands),
+ *     `update_command`, `mcp_servers` (list of {name,transport,connected,tools}
+ *     dicts from `get_mcp_status()`), plus a nested `usage` (`_get_usage()`,
+ *     server.py:~1683) carrying `context_used`, `context_max`,
+ *     `context_percent`, `compressions` (context_* only present when the
+ *     compressor knows a context length) and `cost_usd` (only when the pricing
+ *     estimate succeeds).
  *   - startup.catalog → `@method("startup.catalog")` (server.py:~8521):
  *     `{ tools:{total, toolsets:[{name,count,enabled,tools}]},
  *        skills:{total, categories:[{name,count}]}, mcp:{servers:[]} }`.
@@ -38,7 +42,8 @@ const UsageSchema = Schema.Struct({
   context_used: opt(Num),
   context_max: opt(Num),
   context_percent: opt(Num),
-  compressions: opt(Num)
+  compressions: opt(Num),
+  cost_usd: opt(Num)
 })
 
 export const SessionInfoPatchSchema = Schema.Struct({
@@ -48,6 +53,12 @@ export const SessionInfoPatchSchema = Schema.Struct({
   cwd: opt(Str),
   branch: opt(Str),
   running: opt(Bool),
+  // status-bar chrome extras (Epic 1.3): update banner, profile badge, MCP count.
+  // `update_behind` is null on the wire until the async update check resolves.
+  update_behind: opt(Schema.NullOr(Num)),
+  update_command: opt(Str),
+  profile_name: opt(Str),
+  mcp_servers: opt(Schema.Array(Schema.Unknown)),
   // top-level context fallback (used when there's no nested `usage`)
   context_used: opt(Num),
   context_max: opt(Num),

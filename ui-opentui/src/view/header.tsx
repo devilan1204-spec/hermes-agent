@@ -1,8 +1,9 @@
 /**
- * Header — the top chrome line (spec v4 §2 `view/header.tsx`). Phase 2 skeleton:
+ * Header — the top chrome line (spec v4 §2 `view/header.tsx`). Variant A
+ * (v6 Epic 1.3, signed off): the header STAYS this minimal brand line —
  * brand · engine · ready/connecting, fully themed (`useTheme()`, NO hardcoded
- * styles — §7.5). Model / cwd / context% / cost land in Phase 5b once
- * `session.info` + `Usage` are wired.
+ * styles — §7.5). All session chrome (model/context/cost/duration/profile/mcp/
+ * cwd) lives in the dense bottom status bar (`statusBar.tsx`).
  */
 import { Show } from 'solid-js'
 

@@ -164,6 +164,21 @@ export interface SessionInfo {
   contextMax?: number
   contextPercent?: number
   compressions?: number
+  /** Estimated session cost in USD (`usage.cost_usd` — only when the gateway's
+   *  pricing estimate succeeds; absent otherwise). */
+  costUsd?: number
+  /** Commits behind the remote (`update_behind`) — null/absent until the async
+   *  update check resolves; >0 drives the transient update notice in the bar. */
+  updateBehind?: number
+  /** The recommended update command (`update_command`), paired with updateBehind. */
+  updateCommand?: string
+  /** Active profile name (`profile_name`); the bar badges it when non-default. */
+  profileName?: string
+  /** Count of configured MCP servers (`mcp_servers.length`) for the bar's `N mcp`. */
+  mcpServers?: number
+  /** Epoch ms when this TUI session started (set once at store creation; never
+   *  patched from the wire) — drives the status-bar session duration. */
+  startedAt?: number
 }
 
 /** Startup catalog (tools/skills/MCP) for the home-screen panel (item 9 / banner parity). */
@@ -287,6 +302,12 @@ function infoPatchFrom(d: SessionInfoPatchDecoded): Partial<SessionInfo> {
   if (pct !== undefined) patch.contextPercent = pct
   const comp = d.usage?.compressions ?? d.compressions
   if (comp !== undefined) patch.compressions = comp
+  if (d.usage?.cost_usd !== undefined) patch.costUsd = d.usage.cost_usd
+  // null = "update check not resolved yet" — leave the prior value alone.
+  if (typeof d.update_behind === 'number') patch.updateBehind = d.update_behind
+  if (d.update_command) patch.updateCommand = d.update_command
+  if (d.profile_name) patch.profileName = d.profile_name
+  if (d.mcp_servers) patch.mcpServers = d.mcp_servers.length
   return patch
 }
 
@@ -365,7 +386,9 @@ export function createSessionStore() {
     dashboard: false,
     dashboardAgent: undefined,
     status: undefined,
-    info: {},
+    // startedAt is set ONCE here (store creation ≈ session start) — the status
+    // bar's session-duration segment ticks from it; wire patches never carry it.
+    info: { startedAt: Date.now() },
     hint: undefined,
     catalog: undefined,
     modelItems: undefined,
