@@ -1,0 +1,13 @@
+{
+  "name": "@hermes/bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TUI benchmark suite: Ink (ui-tui) vs OpenTUI (ui-opentui) over a real PTY with a fake gateway. Methodology: docs/plans/opentui-bench-suite.md.",
+  "scripts": {
+    "check": "node --check fake-gateway.mjs && node --check fixture-stream.mjs && node --check harness.mjs && node --check run.mjs && node --check render.mjs"
+  },
+  "dependencies": {
+    "node-pty": "^1.1.0"
+  }
+}
