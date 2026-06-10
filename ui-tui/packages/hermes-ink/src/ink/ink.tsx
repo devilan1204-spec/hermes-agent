@@ -28,6 +28,7 @@ import { dispatchClick, dispatchHover, dispatchMouse } from './hit-test.js'
 import { applyHyperlinkHoverHighlight } from './hyperlinkHover.js'
 import instances from './instances.js'
 import { LogUpdate } from './log-update.js'
+import { maybeStartMemSampler } from './memSampler.js'
 import { nodeCache } from './node-cache.js'
 import { optimize } from './optimizer.js'
 import Output from './output.js'
@@ -177,6 +178,8 @@ export default class Ink {
   }
   // Ignore last render after unmounting a tree to prevent empty output before exit
   private isUnmounted = false
+  // Bench-only node-count sampler stopper (no-op unless HERMES_TUI_MEMSAMPLE_FD)
+  private readonly stopMemSampler: () => void
   private isPaused = false
   private readonly container: FiberRoot
   private rootNode: dom.DOMElement
@@ -391,6 +394,9 @@ export default class Ink {
     }
 
     this.rootNode = dom.createNode('ink-root')
+    // Bench-only node-count sampler — inert unless HERMES_TUI_MEMSAMPLE_FD is
+    // set (see memSampler.ts). Dark by default in production.
+    this.stopMemSampler = maybeStartMemSampler(this.rootNode)
     this.focusManager = new FocusManager((target, event) => dispatcher.dispatchDiscrete(target, event))
     this.rootNode.focusManager = this.focusManager
     this.renderer = createRenderer(this.rootNode, this.stylePool)
@@ -2425,6 +2431,8 @@ export default class Ink {
     }
 
     this.isUnmounted = true
+
+    this.stopMemSampler()
 
     // Cancel any pending throttled renders to prevent accessing freed Yoga nodes
     this.scheduleRender.cancel?.()
