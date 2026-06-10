@@ -603,7 +603,7 @@ describe('tool lifecycle states — running / done / failed (Epic 2.5)', () => {
     }
   })
 
-  test('settled success keeps the ▶/▼ + duration contract (glyph never error-colored ✗)', async () => {
+  test('settled success shows the PER-TOOL glyph ($) collapsed, ▼ expanded + duration (never ✗)', async () => {
     const store = createSessionStore()
     seedTool(
       store,
@@ -615,7 +615,7 @@ describe('tool lifecycle states — running / done / failed (Epic 2.5)', () => {
     try {
       const frame = await probe.waitForFrame(f => f.includes('terminal'))
       const row = frame.split('\n').find(line => line.includes('terminal')) ?? ''
-      expect(row).toContain('▶ terminal') // head-glyph position, after the ⚕ gutter
+      expect(row).toContain('$ terminal') // per-tool glyph in the head position (design pass)
       expect(row).toContain('· 0.3s')
       expect(row).not.toContain('✗')
       expect(row).not.toContain('⚡')
@@ -800,8 +800,8 @@ describe('HERMES_TUI_TOOL_OUTPUT_LINES — expanded-output line cap (TUI-only en
 describe('tool-name emphasis + thought styling (feedback: undifferentiated muted rows)', () => {
   const color = DEFAULT_THEME.color
 
-  test('toolNameStyle: settled name is PRIMARY (text color + bold); subtitle stays muted by the shell', () => {
-    expect(toolNameStyle({ failed: false, running: false }, color)).toEqual({ bold: true, fg: color.text })
+  test('toolNameStyle: settled name is muted-BRIGHT (statusFg + bold) — machinery, never the answer color', () => {
+    expect(toolNameStyle({ failed: false, running: false }, color)).toEqual({ bold: true, fg: color.statusFg })
     expect(color.text).not.toBe(color.muted) // the emphasis is real, not a no-op
   })
 

@@ -421,11 +421,15 @@ export function Composer(props: {
       </Show>
       {/* prompt glyph + textarea — the glyph (item 3) marks the input line so the
           composer is distinguished by structure (glyph + the status-bar rule above),
-          not a background tint. */}
+          not a background tint. PRIMARY BOLD: the idle view's one bright action
+          (design pass — gold sits on the newest answer and on the ❯ waiting for
+          the next command, nowhere else). */}
       <box style={{ flexDirection: 'row', flexShrink: 0 }}>
         <box style={{ flexShrink: 0, width: GUTTER }}>
           <text selectable={false}>
-            <span style={{ fg: theme().color.prompt }}>{theme().brand.prompt}</span>
+            <span style={{ fg: theme().color.primary }}>
+              <b>{theme().brand.prompt}</b>
+            </span>
           </text>
         </box>
         <textarea

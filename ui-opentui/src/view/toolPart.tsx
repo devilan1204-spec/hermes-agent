@@ -6,14 +6,19 @@
  * registry (`view/tools/registry.tsx`, Epic 2.2):
  *
  *   ⚡ terminal  sleep 8  · 12s                   ← running (elapsed ticks live)
- *   ▶ terminal  ls -la src  · 0.3s  (12 lines)   ← collapsed (default)
+ *   $ terminal  ls -la src  · 0.3s  (12 lines)   ← collapsed (default; per-tool glyph)
  *   ▼ terminal  ls -la src  · 0.3s               ← expanded header
  *   │ <renderer body>                            ← labeled fields / output / …
  *   ✗ terminal  ✗ exit 1  · 0.1s  (3 lines)      ← failed (error-colored glyph)
  *
- * Lifecycle is legible from the HEAD GLYPH alone (Epic 2.5): `⚡` running (with
- * a live `· Ns` elapsed off the shared 1s tick in `elapsed.ts` — never a timer
- * per part), `▶`/`▼` settled-expandable, `✗` failed (theme error color).
+ * Lifecycle + identity are legible from the HEAD GLYPH alone (Epic 2.5 + the
+ * visual-hierarchy design pass): `⚡` running in accent heat (with a live `· Ns`
+ * elapsed off the shared 1s tick in `elapsed.ts` — never a timer per part), the
+ * PER-TOOL glyph (`glyphFor` — `$`/`◇`/`◆`/`○`/…) in machinery BLUE
+ * (`shellDollar`) when settled, `▼` (blue) only while expanded, `✗` failed
+ * (theme error color). Tools are the machinery tier: the whole part nests +2
+ * columns under the turn, the name is muted-bright (statusFg) bold — never the
+ * full-bright answer color — and args/durations/counts stay muted grey.
  * Clicking an expandable header toggles it (wrapped in useScrollAnchor so
  * expanding never yanks the viewport); running parts have no expand
  * affordance. The header row is chrome (selectable=false) — a free-form drag
@@ -25,15 +30,17 @@ import { useDimensions } from './dimensions.tsx'
 import { useDisplay } from './display.tsx'
 import { createSignal, Show } from 'solid-js'
 
-import { truncate } from '../logic/toolOutput.ts'
+import { argsCapColumns, truncate } from '../logic/toolOutput.ts'
 import { elapsedSeconds, useElapsedTick } from './elapsed.ts'
 import { useScrollAnchor } from './scrollAnchor.tsx'
 import { useSessionInfo } from './sessionInfo.tsx'
 import { useTheme } from './theme.tsx'
 import { resultLines } from './tools/defaultTool.tsx'
-import { rendererFor } from './tools/registry.tsx'
+import { glyphFor, rendererFor } from './tools/registry.tsx'
 
 const GUTTER = 2
+/** Machinery-tier nesting (design pass): tools indent +2 under the turn. */
+const INDENT = 2
 
 function fmtDuration(s: number): string {
   if (s < 10) return `${s.toFixed(1)}s`
@@ -52,13 +59,15 @@ function fmtElapsed(s: number): string {
 }
 
 /**
- * Header tool-NAME style — the name is the PRIMARY cue for what a settled tool
- * IS, so it renders in the primary text color + BOLD (the transcript otherwise
- * reads as undifferentiated muted rows). The failed state's error coloring
- * wins (still bold — failures should be unmistakable alongside the ✗ glyph);
- * a running part keeps its current muted treatment (the ⚡ glyph + live
- * elapsed already carry the running signal). Exported so tests can pin the
- * selection logic (char frames carry no color/attribute info).
+ * Header tool-NAME style — the name says what a settled tool IS, but a tool is
+ * MACHINERY, not the answer: it renders muted-BRIGHT (the statusFg silver — one
+ * step up from muted grey) + BOLD, demoted from the full-bright answer color so
+ * the eye lands on prose, not tool names (visual-hierarchy design pass). The
+ * failed state's error coloring wins (still bold — failures should be
+ * unmistakable alongside the ✗ glyph); a running part keeps its muted
+ * treatment (the ⚡ glyph + live elapsed already carry the running signal).
+ * Exported so tests can pin the selection logic (char frames carry no
+ * color/attribute info).
  */
 export function toolNameStyle(
   state: { failed: boolean; running: boolean },
@@ -66,7 +75,7 @@ export function toolNameStyle(
 ): { fg: string; bold: boolean } {
   if (state.failed) return { bold: true, fg: color.error }
   if (state.running) return { bold: false, fg: color.muted }
-  return { bold: true, fg: color.text }
+  return { bold: true, fg: color.statusFg }
 }
 
 /**
@@ -100,7 +109,7 @@ export function ToolPart(props: { part: ToolPartState }) {
 
   // Per-tool renderer (re-dispatches if the name settles on tool.complete).
   const renderer = () => rendererFor(props.part.name)
-  const bodyWidth = () => Math.max(20, dims().width - GUTTER - 4)
+  const bodyWidth = () => Math.max(20, dims().width - GUTTER - INDENT - 4)
   // "(N lines)" counts what the renderer's body will actually show (per-tool
   // `lines`, e.g. read_file's content), not the raw resultText.
   const lines = () => renderer().lines?.(props.part) ?? resultLines(props.part)
@@ -113,21 +122,31 @@ export function ToolPart(props: { part: ToolPartState }) {
   // Optional `+N −M` change summary (file tools) — themed, settled parts only.
   const stats = () => (running() || props.part.error ? undefined : renderer().stats?.(props.part))
 
-  // Failed parts are legible from the glyph alone: `✗` in the head position
-  // (error-colored), regardless of expandability — `(N lines)` still marks an
-  // expandable body. `error` only lands on tool.complete, so running stays ⚡.
+  // Head glyph = lifecycle + identity (design pass): `✗` failed (error), `⚡`
+  // running (accent heat), `▼` only while expanded, else the PER-TOOL glyph
+  // (`$`/`◇`/`◆`/`○`/… — the vocabulary survives the default collapsed view).
+  // `error` only lands on tool.complete, so running stays ⚡.
   const failed = () => !running() && Boolean(props.part.error)
-  const headGlyph = () => (failed() ? '✗' : collapsible() ? (expanded() ? '▼' : '▶') : '⚡')
-  // accent glyph MARKS the tool (draws the eye); the NAME is primary (bold text
-  // via toolNameStyle) so WHAT the tool is reads at a glance; subtitle/metadata
-  // stay muted — the secondary tier below the bright assistant answer.
-  const headColor = () => (failed() ? theme().color.error : theme().color.accent)
+  const headGlyph = () =>
+    failed() ? '✗' : running() ? '⚡' : collapsible() && expanded() ? '▼' : glyphFor(props.part.name)
+  // Settled machinery is BLUE (`shellDollar` — "blue is the hum of machinery");
+  // running is accent heat; failed is error. The NAME is muted-bright bold (see
+  // toolNameStyle); subtitle/metadata stay muted grey — the machinery tier
+  // below the bright assistant answer.
+  const headColor = () =>
+    failed() ? theme().color.error : running() ? theme().color.accent : theme().color.shellDollar
   const subWidth = () => Math.max(1, bodyWidth() - props.part.name.length - 2)
+  // Args are context, not content: cap the collapsed args preview to ~half the
+  // pane (argsCapColumns) so a long command/path can never become the loudest
+  // mass on screen. Error subtitles keep the full row — failures must stay
+  // readable.
+  const subCap = () => (props.part.error ? subWidth() : Math.max(1, Math.min(subWidth(), argsCapColumns(dims().width))))
 
   return (
     // Spacing between parts is owned by the parts column (gap), not per-part
     // margins — so a tool appearing mid-stream doesn't shift the layout.
-    <box style={{ flexDirection: 'column', flexShrink: 0 }}>
+    // marginLeft nests the machinery tier +2 under the turn (answers at base).
+    <box style={{ flexDirection: 'column', flexShrink: 0, marginLeft: INDENT }}>
       {/* header — clickable to toggle when there's an expandable body */}
       <box style={{ flexDirection: 'row', flexShrink: 0 }} onMouseDown={() => collapsible() && toggle()}>
         <box style={{ flexShrink: 0, width: GUTTER }}>
@@ -141,8 +160,9 @@ export function ToolPart(props: { part: ToolPartState }) {
               free-form drag over a tool yields only the expanded body content,
               never the header label. */}
           <text selectable={false}>
-            {/* the NAME is the primary cue (text + bold; error when failed;
-                muted while running) — see toolNameStyle. Subtitle stays muted. */}
+            {/* the NAME identifies the machinery (muted-bright + bold; error
+                when failed; muted while running) — see toolNameStyle. Subtitle
+                stays muted. */}
             <span style={toolNameStyle({ failed: failed(), running: running() }, theme().color)}>
               {props.part.name}
             </span>
@@ -151,7 +171,7 @@ export function ToolPart(props: { part: ToolPartState }) {
                 sleep 8 · 12s`, Ink parity. */}
             <Show when={subtitle()}>
               <span style={{ fg: props.part.error ? theme().color.error : theme().color.muted }}>
-                {`  ${truncate(subtitle(), subWidth())}`}
+                {`  ${truncate(subtitle(), subCap())}`}
               </span>
             </Show>
             <Show when={stats()}>
@@ -186,12 +206,13 @@ export function ToolPart(props: { part: ToolPartState }) {
 
       {/* expanded body — the per-tool renderer's Body, inside a single
           left-bordered column (a `│` rule, not a bg fill — opencode's BlockTool
-          style; also renders faithfully and reads cleaner). */}
+          style; also renders faithfully and reads cleaner). The rule is
+          machinery blue (error wins) — same family as the head glyph. */}
       <Show when={collapsible() && expanded()}>
         <box
           style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0, marginLeft: GUTTER, paddingLeft: 1 }}
           border={['left']}
-          borderColor={props.part.error ? theme().color.error : theme().color.border}
+          borderColor={props.part.error ? theme().color.error : theme().color.shellDollar}
         >
           {(() => {
             const Body = renderer().Body

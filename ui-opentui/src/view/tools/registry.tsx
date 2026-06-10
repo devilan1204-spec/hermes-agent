@@ -51,6 +51,39 @@ export interface ToolRenderer {
   Body: Component<ToolBodyProps>
 }
 
+/**
+ * Per-tool head-glyph vocabulary (visual-hierarchy design pass, Appendix C).
+ * The glyph IS the tool's identity in the default (collapsed) view — settled
+ * rows show it in machinery blue (`shellDollar`); only the expanded header
+ * swaps to `▼`. Running stays `⚡` (accent heat) and failure `✗` (error) —
+ * lifecycle owns those two; this map owns WHAT the tool is:
+ *   terminal `$` · read `◇` · write/patch `◆` · search `○` · web `●` ·
+ *   clarify `?` · skill `▲` · delegate `⚕` (the one whimsy) · MCP/unknown `◦`
+ */
+export const TOOL_GLYPHS: Record<string, string> = {
+  clarify: '?',
+  delegate_task: '⚕',
+  execute_code: '$',
+  patch: '◆',
+  process: '$',
+  read_file: '◇',
+  search_files: '○',
+  skill_manage: '▲',
+  skill_view: '▲',
+  terminal: '$',
+  web_extract: '●',
+  web_search: '●',
+  write_file: '◆'
+}
+
+/** Fallback glyph for MCP/unmapped tools. */
+export const DEFAULT_TOOL_GLYPH = '◦'
+
+/** The settled head glyph for a tool name (vocabulary survives the default view). */
+export function glyphFor(name: string): string {
+  return TOOL_GLYPHS[name] ?? DEFAULT_TOOL_GLYPH
+}
+
 const TOOLS: Record<string, ToolRenderer> = {
   // clarify (item 4): collapsed = `question: answer`; expanded = `User
   // answered:` + `· q: a` rows — NEVER the raw JSON result.

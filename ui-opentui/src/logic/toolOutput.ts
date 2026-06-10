@@ -116,6 +116,17 @@ export function stripOmittedNote(text: string): { body: string; omittedNote?: st
 }
 
 /**
+ * Width cap for a collapsed tool header's ARGS preview (design pass): args are
+ * context, not content — they get at most ~half the pane, so a long command or
+ * path can never become the loudest mass on screen. Shared by the header
+ * truncation (toolPart) and the bash body's "did the header already show the
+ * whole command" echo check (bashTool) so the two stay mirrored.
+ */
+export function argsCapColumns(totalWidth: number): number {
+  return Math.max(8, Math.floor(totalWidth / 2))
+}
+
+/**
  * Collapse text to at most `maxLines` lines, each capped to `width` columns. The
  * view renders an overflow marker from `hiddenLines`; this stays pure (no marker).
  */

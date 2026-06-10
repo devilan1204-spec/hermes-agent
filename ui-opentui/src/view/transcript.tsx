@@ -15,7 +15,7 @@
  * to hold the viewport in place so expanding doesn't yank to the bottom (#4).
  */
 import type { ScrollBoxRenderable } from '@opentui/core'
-import { createSignal, For, Show } from 'solid-js'
+import { createMemo, createSignal, For, Show } from 'solid-js'
 
 import type { SessionStore } from '../logic/store.ts'
 import { DisplayProvider } from './display.tsx'
@@ -29,6 +29,15 @@ export function Transcript(props: { store: SessionStore }) {
   const theme = useTheme()
   const dropped = () => props.store.state.dropped
   const sid = () => props.store.state.sessionId
+  // The NEWEST assistant answer's index — gold is earned (design pass): only
+  // that turn's `⚕` glyph stays primary; older answers demote to grey.
+  const latestAssistant = createMemo(() => {
+    const messages = props.store.state.messages
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === 'assistant') return i
+    }
+    return -1
+  })
   return (
     <box style={{ flexGrow: 1, minHeight: 0 }}>
       <scrollbox ref={setScroll} style={{ flexGrow: 1, minHeight: 0 }} stickyScroll stickyStart="bottom">
@@ -48,7 +57,9 @@ export function Transcript(props: { store: SessionStore }) {
                 {`⤒ ${dropped()} earlier message${dropped() === 1 ? '' : 's'} — scroll-back capped; full transcript on the dashboard${sid() ? ` · session ${sid()}` : ''}`}
               </text>
             </Show>
-            <For each={props.store.state.messages}>{message => <MessageLine message={message} />}</For>
+            <For each={props.store.state.messages}>
+              {(message, i) => <MessageLine message={message} latest={i() === latestAssistant()} />}
+            </For>
           </DisplayProvider>
         </ScrollAnchorProvider>
       </scrollbox>

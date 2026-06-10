@@ -22,6 +22,10 @@ export interface ThemeColors {
   border: string
   text: string
   muted: string
+  /** Root canvas background (design pass: the view is a dark room — true black
+   *  by default; skins may override via `ui_bg`). CSS names are valid OpenTUI
+   *  ColorInput, so the defaults use `black`/`white`, not invented hexes. */
+  bg: string
   completionBg: string
   completionCurrentBg: string
   completionMetaBg: string
@@ -252,7 +256,13 @@ export const DARK_THEME: Theme = {
     accent: '#FFBF00',
     border: '#CD7F32',
     text: '#FFF8DC',
-    muted: '#CC9B1F',
+    // TRUE NEUTRAL (design pass precondition): muted was `#CC9B1F` — itself
+    // gold — so "dim" read as "darker gold" and the hero color was the
+    // wallpaper. Re-pointed to the statusFg `#C0C0C0` (silver) family's darker
+    // step, CSS `gray` — no invented hexes. Grey = everything that merely
+    // happened; gold stays earned.
+    muted: '#808080',
+    bg: 'black',
     completionBg: '#1a1a2e',
     completionCurrentBg: '#333355',
     completionMetaBg: '#1a1a2e',
@@ -264,8 +274,9 @@ export const DARK_THEME: Theme = {
     warn: '#ffa726',
 
     prompt: '#FFF8DC',
-    sessionLabel: '#CC9B1F',
-    sessionBorder: '#CC9B1F',
+    // session chrome rides the same neutral muted family (was gold #CC9B1F).
+    sessionLabel: '#808080',
+    sessionBorder: '#808080',
 
     statusBg: '#1a1a2e',
     statusFg: '#C0C0C0',
@@ -294,7 +305,10 @@ export const LIGHT_THEME: Theme = {
     accent: '#A0651C',
     border: '#7A4F1F',
     text: '#3D2F13',
-    muted: '#7A5A0F',
+    // same disease as dark: muted was `#7A5A0F` (gold-brown). True neutral —
+    // the statusFg `#333333` family's lighter step, CSS `dimgray`.
+    muted: '#696969',
+    bg: 'white',
     completionBg: '#F5F5F5',
     completionCurrentBg: mix('#F5F5F5', '#A0651C', 0.25),
     completionMetaBg: '#F5F5F5',
@@ -306,8 +320,8 @@ export const LIGHT_THEME: Theme = {
     warn: '#E65100',
 
     prompt: '#2B2014',
-    sessionLabel: '#7A5A0F',
-    sessionBorder: '#7A5A0F',
+    sessionLabel: '#696969',
+    sessionBorder: '#696969',
 
     statusBg: '#F5F5F5',
     statusFg: '#333333',
@@ -449,6 +463,8 @@ export function fromSkin(
         border: c('ui_border') ?? c('banner_border') ?? d.color.border,
         text: c('ui_text') ?? c('banner_text') ?? d.color.text,
         muted,
+        // root canvas — skins may override (`ui_bg`); default true black/white.
+        bg: c('ui_bg') ?? d.color.bg,
         completionBg,
         completionCurrentBg,
         completionMetaBg,

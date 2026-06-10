@@ -163,7 +163,8 @@ export function ToolOutputBlock(props: { part: ToolPartState; width: number; lab
       </Show>
       <Show when={body().hiddenLines > 0 && !props.part.omittedNote}>
         <text selectable={false}>
-          <span style={{ fg: theme().color.accent }}>{`… +${body().hiddenLines} more lines`}</span>
+          {/* counts are muted (design pass) — chrome never spends warm ink */}
+          <span style={{ fg: theme().color.muted }}>{`… +${body().hiddenLines} more lines`}</span>
         </text>
       </Show>
     </Show>
@@ -191,7 +192,7 @@ export function DefaultToolBody(props: ToolBodyProps & { omitFields?: readonly s
         <Show when={fields().length > FIELDS_MAX}>
           {/* overflow annotation — chrome, not content */}
           <text selectable={false}>
-            <span style={{ fg: theme().color.accent }}>{`… +${fields().length - FIELDS_MAX} more`}</span>
+            <span style={{ fg: theme().color.muted }}>{`… +${fields().length - FIELDS_MAX} more`}</span>
           </text>
         </Show>
       </Show>

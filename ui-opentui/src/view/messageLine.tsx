@@ -5,13 +5,23 @@
  * User/system rows (and settled/resumed assistant rows with no parts) render flat
  * `text`. Fully themed; rich text via <b>/<span>, never an attributes bitmask (§8 #1).
  *
+ * Visual hierarchy (design pass, Appendix C): the view is a dark room and gold
+ * is the single lamp — it sits on the NEWEST answer's `⚕` and the user's `❯`,
+ * nowhere else (older assistant glyphs demote to grey: they merely happened).
+ * The user's prompt BODY is muted (your words are context; the answer is the
+ * reward) and the turn is set off by MORE blank space than the parts inside a
+ * turn (turn boundary > part gap — see `turnSpacing`). Once a turn settles,
+ * interstitial narration text demotes to muted and only the FINAL text block
+ * keeps the full-bright answer color (see `lastTextId`).
+ *
  * Stable `id` per part as the <For> key so a new tool part below a streaming text
- * part doesn't remount it. Native <markdown> for text parts lands in 2b-ii.
+ * part doesn't remount it.
  */
 import { For, Match, Show, Switch } from 'solid-js'
 
 import { collapseHiddenParts, hiddenRunLabel } from '../logic/details.ts'
-import type { Message } from '../logic/store.ts'
+import type { Message, Part } from '../logic/store.ts'
+import type { ThemeColors } from '../logic/theme.ts'
 import { useDisplay } from './display.tsx'
 import { Markdown } from './markdown.tsx'
 import { ReasoningPart } from './reasoningPart.tsx'
@@ -20,27 +30,73 @@ import { ToolPart } from './toolPart.tsx'
 
 const GUTTER = 2
 
-export function MessageLine(props: { message: Message }) {
+/**
+ * Per-turn vertical margins (pure — table-tested). Turn boundary > part gap:
+ * a USER turn gets a blank line above AND below (top 2 + bottom 1; with the
+ * next turn's own top 1 the boundary around a prompt is 2 rows vs the 1-row
+ * part gap), so prompts read as section breaks from across the room. /compact
+ * collapses everything to 0.
+ */
+export function turnSpacing(role: Message['role'], compact: boolean): { top: number; bottom: number } {
+  if (compact) return { bottom: 0, top: 0 }
+  if (role === 'user') return { bottom: 1, top: 2 }
+  return { bottom: 0, top: 1 }
+}
+
+/**
+ * Role-glyph color (pure — table-tested). Gold is EARNED: the user's `❯` and
+ * the NEWEST answer's `⚕` are primary; an older assistant glyph demotes to
+ * grey (it merely happened); system notes stay dim.
+ */
+export function glyphColor(role: Message['role'], latest: boolean, color: ThemeColors): string {
+  if (role === 'user') return color.primary
+  if (role === 'assistant') return latest ? color.primary : color.muted
+  return color.muted
+}
+
+/**
+ * Flat-body color (pure — table-tested). The assistant's answer is the ONLY
+ * full-bright prose; the user's words are context (muted), system notes dim.
+ */
+export function bodyColor(role: Message['role'], color: ThemeColors): string {
+  return role === 'assistant' ? color.text : color.muted
+}
+
+/**
+ * The id of a turn's FINAL text part — the answer that keeps full-bright text
+ * once the turn settles; earlier (interstitial) text parts were play-by-play
+ * scaffolding and demote to muted. Pure — exported for tests.
+ */
+export function lastTextId(parts: readonly Part[] | undefined): string | undefined {
+  if (!parts) return undefined
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]
+    if (p && p.type === 'text') return p.id
+  }
+  return undefined
+}
+
+export function MessageLine(props: { message: Message; latest?: boolean }) {
   const theme = useTheme()
   const display = useDisplay()
   const m = () => props.message
   const glyph = () => (m().role === 'assistant' ? theme().brand.icon : m().role === 'user' ? theme().brand.prompt : '·')
-  // Role-distinct color IS the hierarchy (Ink model): the human's turn is tinted
-  // GOLD (label), the agent's answer is BRIGHT (text), system notes are DIM (muted).
-  const glyphFg = () =>
-    m().role === 'user' ? theme().color.label : m().role === 'assistant' ? theme().color.accent : theme().color.muted
-  const bodyFg = () =>
-    m().role === 'user' ? theme().color.label : m().role === 'system' ? theme().color.muted : theme().color.text
+  const glyphFg = () => glyphColor(m().role, props.latest ?? false, theme().color)
+  const bodyFg = () => bodyColor(m().role, theme().color)
   const hasParts = () => (m().parts?.length ?? 0) > 0
+  const spacing = () => turnSpacing(m().role, display().compact)
   // /details hidden: fold each run of tool/reasoning parts into ONE muted line
   // (the parts stay in the store — flipping the mode back restores them).
   const displayParts = () => (display().details === 'hidden' ? collapseHiddenParts(m().parts ?? []) : (m().parts ?? []))
+  // Settled-turn narration demotion: once the turn stops streaming, every text
+  // part EXCEPT the final answer drops to muted.
+  const textFg = (id: string) =>
+    !m().streaming && id !== lastTextId(m().parts) ? theme().color.muted : theme().color.text
 
   return (
-    // One blank line above every turn so user / assistant / tool blocks read as
-    // distinct turns (item: spacing); /compact collapses it so long sessions
-    // read denser. The gold-vs-bright color split does the rest.
-    <box style={{ flexDirection: 'row', flexShrink: 0, marginTop: display().compact ? 0 : 1 }}>
+    // Turn-boundary spacing > part gap (see turnSpacing); /compact collapses it
+    // so long sessions read denser. The earned-gold glyphs do the rest.
+    <box style={{ flexDirection: 'row', flexShrink: 0, marginTop: spacing().top, marginBottom: spacing().bottom }}>
       <box style={{ flexShrink: 0, width: GUTTER }}>
         {/* the role glyph is decorative — exclude it from mouse selection (item 4).
             Bold so the user `❯` / assistant `⚕` turn boundaries pop (item 8). */}
@@ -53,7 +109,7 @@ export function MessageLine(props: { message: Message }) {
       {/* gap owns ALL inter-part spacing (item 5) — uniform 1 line between text /
           reasoning / tool regardless of order or stream timing, so blank lines
           don't pop in and out as parts are created/merged mid-stream. /compact
-          drops the gap along with the per-turn margin above. */}
+          drops the gap along with the per-turn margins above. */}
       <box style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0, gap: display().compact ? 0 : 1 }}>
         <Show
           when={m().role === 'assistant' && hasParts()}
@@ -99,8 +155,15 @@ export function MessageLine(props: { message: Message }) {
                   {/* ONE stable native <markdown> fed the growing text in place (no
                       per-delta remount → no scrollbar flicker, #2); it renders GFM
                       tables natively (#3). Leading/trailing blanks stripped so the
-                      column `gap` is the sole inter-part spacing (item 5). */}
-                  {t => <Markdown text={t().text.replace(/^\n+|\n+$/g, '')} streaming={m().streaming ?? false} />}
+                      column `gap` is the sole inter-part spacing (item 5).
+                      Interstitial narration demotes to muted once settled. */}
+                  {t => (
+                    <Markdown
+                      text={t().text.replace(/^\n+|\n+$/g, '')}
+                      streaming={m().streaming ?? false}
+                      fg={textFg(t().id)}
+                    />
+                  )}
                 </Match>
               </Switch>
             )}

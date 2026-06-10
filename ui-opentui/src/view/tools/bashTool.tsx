@@ -23,7 +23,8 @@
 import { createMemo, For, Show } from 'solid-js'
 
 import type { ToolPartState } from '../../logic/store.ts'
-import { truncate } from '../../logic/toolOutput.ts'
+import { argsCapColumns, truncate } from '../../logic/toolOutput.ts'
+import { useDimensions } from '../dimensions.tsx'
 import { useTheme } from '../theme.tsx'
 import { CodeBlock } from './codeBlock.tsx'
 import { defaultSubtitle, resultLines, structuredArgs, ToolOutputBlock } from './defaultTool.tsx'
@@ -52,24 +53,29 @@ export function commandOf(part: ToolPartState): string {
  * True when the collapsed header already shows the WHOLE command (item 3) —
  * single line AND untruncated. Mirrors the header math in `view/toolPart.tsx`:
  * the subtitle gets `bodyWidth - name - 2` columns while the Body gets
- * `bodyWidth - 2`, so the header's subtitle width is `width - name.length`.
- * A failed part's header shows the ERROR instead of the command, so the body
- * must echo it again.
+ * `bodyWidth - 2`, so the header's subtitle width is `width - name.length` —
+ * ALSO capped to ~half the pane (`argsCapColumns`, the design pass's args
+ * width cap) when `headerCap` is given, keeping this check mirrored with the
+ * header's actual truncation. A failed part's header shows the ERROR instead
+ * of the command, so the body must echo it again.
  */
-export function commandFitsHeader(part: ToolPartState, width: number): boolean {
+export function commandFitsHeader(part: ToolPartState, width: number, headerCap?: number): boolean {
   if (part.error) return false
   const cmd = commandOf(part)
   if (cmd.includes('\n')) return false
   const flat = cmd.replace(/\s+/g, ' ').trim()
-  return flat.length <= Math.max(1, width - part.name.length)
+  return flat.length <= Math.min(Math.max(1, width - part.name.length), headerCap ?? Number.POSITIVE_INFINITY)
 }
 
 /** Expanded body: the command echo (only when the header truncated it), then
  *  the full (capped) output. */
 export function BashToolBody(props: ToolBodyProps) {
   const theme = useTheme()
+  const dims = useDimensions()
   const command = createMemo(() => commandOf(props.part).replace(/\s+$/, ''))
-  const echo = createMemo(() => Boolean(command()) && !commandFitsHeader(props.part, props.width))
+  const echo = createMemo(
+    () => Boolean(command()) && !commandFitsHeader(props.part, props.width, argsCapColumns(dims().width))
+  )
   return (
     <box style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
       <Show when={echo()}>
@@ -79,9 +85,10 @@ export function BashToolBody(props: ToolBodyProps) {
             <For each={command().split('\n')}>
               {(line, i) => (
                 <box style={{ flexDirection: 'row', flexShrink: 0 }}>
-                  {/* `$ ` prompt glyph (continuation lines indent under it) — chrome */}
+                  {/* `$ ` prompt glyph (continuation lines indent under it) — chrome;
+                      machinery BLUE (design pass: all tool glyphs ride shellDollar) */}
                   <text selectable={false}>
-                    <span style={{ fg: theme().color.accent }}>{i() === 0 ? '$ ' : '  '}</span>
+                    <span style={{ fg: theme().color.shellDollar }}>{i() === 0 ? '$ ' : '  '}</span>
                   </text>
                   {/* the command itself is copyable content */}
                   <text selectionBg={theme().color.selectionBg}>

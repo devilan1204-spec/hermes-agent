@@ -36,8 +36,11 @@ function buildSyntaxStyle(theme: Theme): SyntaxStyle {
   const c = theme.color
   return SyntaxStyle.fromStyles({
     default: { fg: rgba(c.text) },
-    'markup.heading': { bold: true, fg: rgba(c.primary) },
-    'markup.heading.1': { bold: true, fg: rgba(c.primary) },
+    // headings/links ride ACCENT, inline code LABEL (design pass): gold
+    // `primary` is reserved for the earned lamp (newest answer glyph, `❯`) —
+    // prose structure is warm but never the hero color.
+    'markup.heading': { bold: true, fg: rgba(c.accent) },
+    'markup.heading.1': { bold: true, fg: rgba(c.accent) },
     'markup.heading.2': { bold: true, fg: rgba(c.accent) },
     'markup.heading.3': { bold: true, fg: rgba(c.accent) },
     'markup.bold': { bold: true, fg: rgba(c.text) },

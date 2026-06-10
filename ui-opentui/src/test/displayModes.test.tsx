@@ -55,9 +55,9 @@ describe('/details — global detail mode drives default expansion (frame)', () 
       // default: collapsed — tool body lines stay hidden, Thought folded.
       // (Markdown BODY text never paints in the headless char frame — a known
       // harness limitation, see render.test.tsx — so assertions stick to the
-      // plain-text renderables: tool output lines + the ▶/▼ headers.)
+      // plain-text renderables: tool output lines + the ◐/▼ headers.)
       const collapsed = await probe.waitForFrame(f => f.includes('terminal'))
-      expect(collapsed).toContain('▶ Thought: Plan')
+      expect(collapsed).toContain('◐ Thought: Plan')
       expect(collapsed).not.toContain('beta.txt')
 
       // /details expanded → tool body + reasoning preview default-open (no clicks)
@@ -70,7 +70,7 @@ describe('/details — global detail mode drives default expansion (frame)', () 
       store.setDetails('collapsed')
       const back = await probe.waitForFrame(f => !f.includes('beta.txt'))
       expect(back).toContain('terminal')
-      expect(back).toContain('▶ Thought: Plan')
+      expect(back).toContain('◐ Thought: Plan')
     } finally {
       probe.destroy()
     }
@@ -94,7 +94,7 @@ describe('/details — global detail mode drives default expansion (frame)', () 
       // restore — flipping the mode back brings the rows straight back
       store.setDetails('collapsed')
       const restored = await probe.waitForFrame(f => f.includes('terminal'))
-      expect(restored).toContain('▶ Thought: Plan')
+      expect(restored).toContain('◐ Thought: Plan')
       expect(restored).not.toContain('hidden — /details')
     } finally {
       probe.destroy()
@@ -115,7 +115,9 @@ describe('/compact — transcript spacing (frame line-count)', () => {
       const a = rows.findIndex(r => r.includes('alpha-line'))
       const b = rows.findIndex(r => r.includes('beta-line'))
       expect(a).toBeGreaterThanOrEqual(0)
-      expect(b - a).toBe(2) // one blank line between turns
+      // user turns are set off by MORE space than the part gap (design pass:
+      // turn boundary > part gap): top 2 + bottom 1 around each prompt.
+      expect(b - a).toBe(4)
 
       store.setCompact(true)
       await probe.settle()
@@ -129,7 +131,7 @@ describe('/compact — transcript spacing (frame line-count)', () => {
       const again = probe.frame().split('\n')
       const a3 = again.findIndex(r => r.includes('alpha-line'))
       const b3 = again.findIndex(r => r.includes('beta-line'))
-      expect(b3 - a3).toBe(2)
+      expect(b3 - a3).toBe(4)
     } finally {
       probe.destroy()
     }

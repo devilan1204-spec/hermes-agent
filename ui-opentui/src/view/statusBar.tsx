@@ -315,7 +315,9 @@ export function StatusBar(props: { store: SessionStore }) {
             </Show>
             <Show when={profileText()}>
               <span style={{ fg: theme().color.border }}>{SEP}</span>
-              <span style={{ fg: theme().color.accent }}>{profileText()}</span>
+              {/* statusFg, not accent — persistent chrome spends no warm ink
+                  (design pass); the navy fill is the bar's one blue surface. */}
+              <span style={{ fg: theme().color.statusFg }}>{profileText()}</span>
             </Show>
             {/* `N bg` would slot here (segs().bg) — no store data feeds it yet (see header). */}
             <Show when={mcpText()}>
