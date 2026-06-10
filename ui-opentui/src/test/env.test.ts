@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { envFlag, envOutputLines, envOutputLinesSet, TOOL_OUTPUT_LINES_DEFAULT } from '../logic/env.ts'
+import { envFlag, envOutputLines, envOutputUnlimited } from '../logic/env.ts'
 
 describe('envFlag', () => {
   test('recognizes truthy values regardless of case/whitespace', () => {
@@ -31,37 +31,38 @@ describe('envFlag', () => {
 })
 
 describe('envOutputLines (HERMES_TUI_TOOL_OUTPUT_LINES)', () => {
-  test('unset → the 200-line default (today’s behavior)', () => {
-    expect(TOOL_OUTPUT_LINES_DEFAULT).toBe(200)
-    expect(envOutputLines(undefined)).toBe(200)
-    expect(envOutputLines('')).toBe(200)
-    expect(envOutputLines('   ')).toBe(200)
+  test('unset → Infinity (UNLIMITED by default — the env var RESTORES a cap)', () => {
+    expect(envOutputLines(undefined)).toBe(Number.POSITIVE_INFINITY)
+    expect(envOutputLines('')).toBe(Number.POSITIVE_INFINITY)
+    expect(envOutputLines('   ')).toBe(Number.POSITIVE_INFINITY)
   })
 
   test('a positive integer → that cap (whitespace-tolerant)', () => {
     expect(envOutputLines('50')).toBe(50)
     expect(envOutputLines(' 50 ')).toBe(50)
     expect(envOutputLines('1')).toBe(1)
+    expect(envOutputLines('200')).toBe(200)
     expect(envOutputLines('1000')).toBe(1000)
   })
 
-  test('"0" → Infinity (UNLIMITED — show the entire output)', () => {
+  test('"0" → Infinity too (back-compat with the old opt-in "unlimited" value)', () => {
     expect(envOutputLines('0')).toBe(Number.POSITIVE_INFINITY)
   })
 
-  test('garbage → the 200-line default', () => {
-    expect(envOutputLines('unlimited')).toBe(200)
-    expect(envOutputLines('-5')).toBe(200)
-    expect(envOutputLines('1.5')).toBe(200)
-    expect(envOutputLines('50 lines')).toBe(200)
+  test('garbage → Infinity (unrecognized ≙ no cap asked for)', () => {
+    expect(envOutputLines('unlimited')).toBe(Number.POSITIVE_INFINITY)
+    expect(envOutputLines('-5')).toBe(Number.POSITIVE_INFINITY)
+    expect(envOutputLines('1.5')).toBe(Number.POSITIVE_INFINITY)
+    expect(envOutputLines('50 lines')).toBe(Number.POSITIVE_INFINITY)
   })
 
-  test('envOutputLinesSet: set means any non-empty value, even garbage', () => {
-    expect(envOutputLinesSet(undefined)).toBe(false)
-    expect(envOutputLinesSet('')).toBe(false)
-    expect(envOutputLinesSet('   ')).toBe(false)
-    expect(envOutputLinesSet('0')).toBe(true)
-    expect(envOutputLinesSet('50')).toBe(true)
-    expect(envOutputLinesSet('garbage')).toBe(true)
+  test('envOutputUnlimited: true unless an explicit finite cap was asked for', () => {
+    expect(envOutputUnlimited(undefined)).toBe(true)
+    expect(envOutputUnlimited('')).toBe(true)
+    expect(envOutputUnlimited('   ')).toBe(true)
+    expect(envOutputUnlimited('0')).toBe(true)
+    expect(envOutputUnlimited('garbage')).toBe(true)
+    expect(envOutputUnlimited('50')).toBe(false)
+    expect(envOutputUnlimited('200')).toBe(false)
   })
 })

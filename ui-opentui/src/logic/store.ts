@@ -23,7 +23,7 @@ import {
 } from '../boundary/schema/SessionInfo.ts'
 import type { DetailsMode } from './details.ts'
 import { diffStats, type DiffStats } from './diff.ts'
-import { envOutputLinesSet } from './env.ts'
+import { envOutputUnlimited } from './env.ts'
 import { stripAnsi, stripOmittedNote, stripToolEnvelope } from './toolOutput.ts'
 import { DEFAULT_THEME, type Theme, themeFromSkin } from './theme.ts'
 
@@ -744,17 +744,18 @@ export function createSessionStore() {
         let { body: rawBody, omittedNote } = stripOmittedNote(
           readStr(event.payload, 'result_text') ?? stringifyResult(event.payload['result']) ?? summary ?? ''
         )
-        // HERMES_TUI_TOOL_OUTPUT_LINES set → the user explicitly controls how much
-        // output the expanded view shows, but a gateway-capped `result_text`
-        // (omittedNote) is only a TAIL — substituting the always-full raw `result`
-        // is the only way flag=0 (unlimited) can actually show everything. Same
-        // display pipeline (envelope strip) — and the same raw-result redaction
-        // tradeoff — as the existing non-verbose stringifyResult fallback above.
-        // The omitted note no longer applies to the full body; "+N more lines"
-        // (view-side) stays honest for caps below the full length. File-edit JSON
+        // The view cap is UNLIMITED (HERMES_TUI_TOOL_OUTPUT_LINES unset/0 — the
+        // default), but a gateway-capped `result_text` (omittedNote) is only a
+        // TAIL — substituting the always-full raw `result` is the only way the
+        // uncapped view can actually show everything. Same display pipeline
+        // (envelope strip) — and the same raw-result redaction tradeoff — as the
+        // existing non-verbose stringifyResult fallback above. The omitted note
+        // no longer applies to the full body. With an explicit FINITE cap the
+        // gateway tail + note are kept (the user asked for a bounded view; the
+        // view-side "+N more lines" stays honest below that). File-edit JSON
         // results stay parseable, so fileTool's diffOutputPlan still suppresses
         // the diff echo. The redacted-argsText precedence is untouched.
-        if (omittedNote && envOutputLinesSet(process.env.HERMES_TUI_TOOL_OUTPUT_LINES)) {
+        if (omittedNote && envOutputUnlimited(process.env.HERMES_TUI_TOOL_OUTPUT_LINES)) {
           const full = stringifyResult(event.payload['result'])
           if (full !== undefined) {
             rawBody = full

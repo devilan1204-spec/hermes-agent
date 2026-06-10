@@ -2,9 +2,9 @@
  * BashTool — renderer for the shell-ish tools `terminal`, `execute_code` and
  * `process` (Epic 2.4). Collapsed: the COMMAND BEING INVOKED, verbatim, on one
  * line (the shell truncates to width; expanding reveals the rest). Expanded:
- * the full command (`$ `-prefixed, multi-line safe) and the FULL output, kept
- * to the expanded-lines cap (HERMES_TUI_TOOL_OUTPUT_LINES; default 200, 0 →
- * unlimited) with the honest omitted / "+N more lines" notes from
+ * the full command (`$ `-prefixed, multi-line safe) and the FULL output —
+ * uncapped by default (HERMES_TUI_TOOL_OUTPUT_LINES restores a cap, e.g.
+ * `=200`) with the honest omitted / "+N more lines" notes from
  * `logic/toolOutput.ts` (via the shared ToolOutputBlock).
  *
  * Arg keys verified against the Python tool schemas:

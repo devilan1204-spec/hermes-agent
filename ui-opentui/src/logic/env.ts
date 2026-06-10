@@ -15,28 +15,29 @@ export function envFlag(value: string | undefined, fallback: boolean): boolean {
   return fallback
 }
 
-/** Default cap on output lines shown by an EXPANDED tool body. */
-export const TOOL_OUTPUT_LINES_DEFAULT = 200
-
 /**
  * Parse `HERMES_TUI_TOOL_OUTPUT_LINES` (a TUI-only env var — deliberately NOT
  * a config.yaml knob): how many output lines an expanded tool body shows.
- * Unset/garbage → 200 (the long-standing default); a positive integer → that
- * cap; `0` → Infinity (UNLIMITED — show the entire output).
+ * UNSET → Infinity (UNLIMITED — expanded tool output is uncapped by default;
+ * setting the var is how you RESTORE a cap, e.g. `=200`). A positive integer
+ * → that cap. `0` → Infinity too (back-compat: it was the old opt-in
+ * "unlimited" value). Garbage → Infinity (unrecognized ≙ no cap asked for —
+ * the semantic is "cap only when the user asked for one").
  */
 export function envOutputLines(value: string | undefined): number {
   const v = value?.trim() ?? ''
-  if (!/^\d+$/.test(v)) return TOOL_OUTPUT_LINES_DEFAULT
+  if (!/^\d+$/.test(v)) return Number.POSITIVE_INFINITY
   const n = Number.parseInt(v, 10)
   return n === 0 ? Number.POSITIVE_INFINITY : n
 }
 
 /**
- * Whether `HERMES_TUI_TOOL_OUTPUT_LINES` was EXPLICITLY set (any non-empty
- * value, even an unparseable one). When it is, the store prefers the
- * always-full raw `result` over a gateway tail-capped `result_text` — see
- * store.ts tool.complete.
+ * Whether NO line cap applies (unset / `0` / unparseable). When unlimited,
+ * the store prefers the always-full raw `result` over a gateway tail-capped
+ * `result_text` — an "unlimited" view of a tail would still be missing its
+ * head — see store.ts tool.complete. With an explicit finite cap the gateway
+ * tail (+ honest omitted note) is kept: the user asked for a bounded view.
  */
-export function envOutputLinesSet(value: string | undefined): boolean {
-  return (value?.trim() ?? '') !== ''
+export function envOutputUnlimited(value: string | undefined): boolean {
+  return envOutputLines(value) === Number.POSITIVE_INFINITY
 }

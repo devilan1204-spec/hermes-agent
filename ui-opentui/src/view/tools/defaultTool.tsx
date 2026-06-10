@@ -8,9 +8,9 @@
  *     `(N fields)` / `(N items)` (opencode's primitive-only `input()` idea)
  * A single field whose value already equals the header's primary-arg preview is
  * hidden (it adds nothing over the header). The output body keeps the store's
- * envelope-stripped text, capped to the expanded-lines cap (the
- * HERMES_TUI_TOOL_OUTPUT_LINES env var; default 200, 0 → unlimited) with the
- * honest omitted / "+N more lines" notes. `ToolOutputBlock` is shared with the
+ * envelope-stripped text, UNCAPPED by default (the HERMES_TUI_TOOL_OUTPUT_LINES
+ * env var restores a cap, e.g. `=200`) with the honest omitted / "+N more
+ * lines" notes when a cap applies. `ToolOutputBlock` is shared with the
  * per-tool renderers (bash, …). Fully themed; labels/notes are chrome
  * (selectable=false).
  */
@@ -24,11 +24,13 @@ import type { ToolBodyProps, ToolRenderer } from './registry.tsx'
 
 /**
  * Max output lines shown when expanded — `HERMES_TUI_TOOL_OUTPUT_LINES` (a
- * TUI-only env var, not a config.yaml knob): unset/garbage → 200 (a sane cap
- * to avoid huge renders), positive int → that cap, `0` → Infinity (unlimited).
- * Memory note: this is safe to lift — tool rows mount collapsed (no body), and
- * the rolling HERMES_TUI_MAX_MESSAGES cap bounds the transcript's Yoga-node
- * high-water mark; an expanded body's nodes free on collapse/unmount.
+ * TUI-only env var, not a config.yaml knob): unset/garbage/`0` → Infinity
+ * (UNLIMITED, the default — all tool output is viewable), positive int →
+ * restore that cap.
+ * Memory note: unlimited-by-default is safe — tool rows mount collapsed (no
+ * body), bodies only exist while EXPANDED, and the rolling
+ * HERMES_TUI_MAX_MESSAGES cap bounds the transcript's Yoga-node high-water
+ * mark; an expanded body's nodes free on collapse/unmount.
  */
 export function expandedMaxLines(): number {
   return envOutputLines(process.env.HERMES_TUI_TOOL_OUTPUT_LINES)

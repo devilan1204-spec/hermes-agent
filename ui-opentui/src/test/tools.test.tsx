@@ -4,7 +4,8 @@
  * acceptance gate asserts NO raw JSON syntax (`{"` / `":`) ever reaches the
  * frame for tool parts, collapsed or expanded — delegate_task carries the
  * Ink-parity "(/agents to monitor)" hint, and the bash renderer shows the
- * command verbatim collapsed + the full (EXPANDED_MAX-capped) output expanded.
+ * command verbatim collapsed + the FULL output expanded (uncapped by default;
+ * HERMES_TUI_TOOL_OUTPUT_LINES restores a cap).
  * Expansion goes through the REAL mouse path: mockMouse clicks the header row
  * (found by scanning the frame). The long-output cap is asserted at the Body
  * level (a tall frame would otherwise hide the trailing note).
@@ -180,7 +181,10 @@ describe('bash tool renderer — command + full output (Epic 2.4)', () => {
     }
   })
 
-  test('long output is capped to EXPANDED_MAX with an honest "+N more lines" note', async () => {
+  test('long output with an explicit =200 cap restored gets the honest "+N more lines" note', async () => {
+    // Output is UNCAPPED by default now — restore the old 200-line cap explicitly.
+    const prev = process.env.HERMES_TUI_TOOL_OUTPUT_LINES
+    process.env.HERMES_TUI_TOOL_OUTPUT_LINES = '200'
     const lines = Array.from({ length: 250 }, (_, i) => `line-${String(i + 1).padStart(3, '0')}`)
     const part: ToolPartState = {
       type: 'tool',
@@ -203,11 +207,13 @@ describe('bash tool renderer — command + full output (Epic 2.4)', () => {
       const frame = await probe.waitForFrame(f => f.includes('+50 more lines'))
       expect(frame).toContain('$ for i in range(250): print(i)')
       expect(frame).toContain('line-001') // the cap keeps the HEAD of the output
-      expect(frame).toContain('line-200') // …up to EXPANDED_MAX
+      expect(frame).toContain('line-200') // …up to the restored cap
       expect(frame).not.toContain('line-201') // the rest is honestly elided
       expect(frame).toContain('… +50 more lines')
     } finally {
       probe.destroy()
+      if (prev === undefined) delete process.env.HERMES_TUI_TOOL_OUTPUT_LINES
+      else process.env.HERMES_TUI_TOOL_OUTPUT_LINES = prev
     }
   })
 
@@ -620,7 +626,7 @@ describe('HERMES_TUI_TOOL_OUTPUT_LINES — expanded-output line cap (TUI-only en
     })
   })
 
-  test('flag unset: the same 250-line output still caps at 200 + the honest note (default unchanged)', async () => {
+  test('flag unset: the same 250-line output renders ALL lines (UNLIMITED is the default now)', async () => {
     await withFlag(undefined, async () => {
       const lines = Array.from({ length: 250 }, (_, i) => `row-${String(i + 1).padStart(3, '0')}`)
       const part: ToolPartState = {
@@ -640,17 +646,48 @@ describe('HERMES_TUI_TOOL_OUTPUT_LINES — expanded-output line cap (TUI-only en
         { width: 80, height: 260 }
       )
       try {
-        const frame = await probe.waitForFrame(f => f.includes('+50 more lines'))
-        expect(frame).toContain('row-200')
-        expect(frame).not.toContain('row-201')
-        expect(frame).toContain('… +50 more lines')
+        const frame = await probe.waitForFrame(f => f.includes('row-250'))
+        expect(frame).toContain('row-001')
+        expect(frame).toContain('row-201') // beyond the old 200-line default…
+        expect(frame).toContain('row-250') // …down to the very last line
+        expect(frame).not.toContain('more lines') // and no truncation note
       } finally {
         probe.destroy()
       }
     })
   })
 
-  test('store: flag set + gateway tail-cap (omittedNote) + full raw result → body derived from the raw result', async () => {
+  test('flag=50: an explicit cap is RESTORED — 50 lines + the honest "+200 more lines" note', async () => {
+    await withFlag('50', async () => {
+      const lines = Array.from({ length: 250 }, (_, i) => `row-${String(i + 1).padStart(3, '0')}`)
+      const part: ToolPartState = {
+        type: 'tool',
+        id: 'u3',
+        name: 'terminal',
+        state: 'complete',
+        args: { command: 'seq 1 250' },
+        resultText: lines.join('\n')
+      }
+      const probe = await renderProbe(
+        () => (
+          <ThemeProvider>
+            <BashToolBody part={part} width={70} />
+          </ThemeProvider>
+        ),
+        { width: 80, height: 260 }
+      )
+      try {
+        const frame = await probe.waitForFrame(f => f.includes('+200 more lines'))
+        expect(frame).toContain('row-050')
+        expect(frame).not.toContain('row-051')
+        expect(frame).toContain('… +200 more lines')
+      } finally {
+        probe.destroy()
+      }
+    })
+  })
+
+  test('store: unlimited cap + gateway tail-cap (omittedNote) + full raw result → body derived from the raw result', async () => {
     const full = Array.from({ length: 250 }, (_, i) => `full-${i + 1}`).join('\n')
     const cappedTail = ['full-241', 'full-242', 'full-243'].join('\n') // what the gateway kept
     const payload = {
@@ -675,8 +712,19 @@ describe('HERMES_TUI_TOOL_OUTPUT_LINES — expanded-output line cap (TUI-only en
       expect(part?.omittedNote).toBeUndefined() // the note no longer applies
     })
 
-    // flag UNSET → today's behavior: the gateway tail + the tidy omitted note
+    // flag UNSET → unlimited is the DEFAULT now: the full raw result wins too
     await withFlag(undefined, () => {
+      const store = createSessionStore()
+      seedTool(store, { tool_id: 'p1', name: 'terminal' }, payload)
+      const part = partOf(store)
+      expect(part?.resultText).toContain('full-1\n')
+      expect(part?.resultText).toContain('full-250')
+      expect(part?.omittedNote).toBeUndefined()
+    })
+
+    // an explicit FINITE cap (=50) → the user asked for a bounded view: keep
+    // the gateway tail + the honest omitted note (the view caps further)
+    await withFlag('50', () => {
       const store = createSessionStore()
       seedTool(store, { tool_id: 'p1', name: 'terminal' }, payload)
       const part = partOf(store)
@@ -685,7 +733,7 @@ describe('HERMES_TUI_TOOL_OUTPUT_LINES — expanded-output line cap (TUI-only en
       expect(part?.omittedNote).toBe('240 lines / 2000 chars')
     })
 
-    // flag set but NO raw result on the wire → keep the tail + note (no crash)
+    // unlimited but NO raw result on the wire → keep the tail + note (no crash)
     await withFlag('0', () => {
       const store = createSessionStore()
       const withoutRaw: Record<string, unknown> = { ...payload }
