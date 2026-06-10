@@ -40,6 +40,8 @@ export interface ToolPartState {
   argsPreview?: string
   /** Full args (pretty JSON) for the expanded view — `args_text` (redacted) or stringified `args`. */
   argsText?: string
+  /** Structured args from `tool.complete` (always sent) — the per-tool renderers read these. */
+  args?: Record<string, unknown>
   /** Tool wall-clock seconds (gateway `duration_s`), shown dim in the header. */
   duration?: number
   /** Tidy note when the gateway truncated output (e.g. "5 lines / 234 chars"). */
@@ -653,11 +655,15 @@ export function createSessionStore() {
             if (duration !== undefined) part.duration = duration
             if (omittedNote) part.omittedNote = omittedNote
             // argsPreview (from tool.start `context`) is intentionally NOT overwritten.
-            if (!part.argsText && argsObj && typeof argsObj === 'object') {
-              try {
-                part.argsText = JSON.stringify(argsObj, null, 2)
-              } catch {
-                /* unstringifiable args — leave unset */
+            if (argsObj && typeof argsObj === 'object') {
+              // structured args feed the per-tool renderers (labeled fields, bash command).
+              if (!Array.isArray(argsObj)) part.args = argsObj as Record<string, unknown>
+              if (!part.argsText) {
+                try {
+                  part.argsText = JSON.stringify(argsObj, null, 2)
+                } catch {
+                  /* unstringifiable args — leave unset */
+                }
               }
             }
           })

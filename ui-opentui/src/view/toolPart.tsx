@@ -1,31 +1,30 @@
 /**
  * ToolPart — one tool call, rendered COLLAPSED by default with a clear expand
- * affordance (items 2 + 7). The header shows the tool's PRIMARY ARG inline so
- * you can read what it did without expanding (item 2 — "I don't see tool args"):
+ * affordance. This is the SHARED SHELL: the header (glyph + name + subtitle +
+ * duration + line count + optional hint) and the expand/collapse mechanics —
+ * what's INSIDE varies per tool and is dispatched through the tool renderer
+ * registry (`view/tools/registry.tsx`, Epic 2.2):
  *
  *   ▶ terminal  ls -la src  · 0.3s  (12 lines)   ← collapsed (default)
  *   ▼ terminal  ls -la src  · 0.3s               ← expanded header
- *   │ args   { … }                               ← full args (when present)
- *   │ output …                                   ← envelope-stripped body
- *   │ … omitted 5 lines / 234 chars              ← tidy note (no raw label)
+ *   │ <renderer body>                            ← labeled fields / output / …
  *
- * `▶`/`▼` marks expandable tools; clicking the header toggles it. Running tools
- * show `name …`. `resultText`/`omittedNote` are already cleaned by the store.
- * Fully themed (no hardcoded styles); decorative glyphs are selectable={false}.
+ * `▶`/`▼` marks expandable tools; clicking the header toggles it (wrapped in
+ * useScrollAnchor so expanding never yanks the viewport). Running tools show
+ * `name …`. The header row is chrome (selectable=false) — a free-form drag
+ * copies only the expanded body content. Fully themed (no hardcoded styles).
  */
 import { type ToolPartState } from '../logic/store.ts'
 import { useDimensions } from './dimensions.tsx'
-import { createMemo, createSignal, For, Show } from 'solid-js'
+import { createSignal, Show } from 'solid-js'
 
-import { collapseToolOutput, truncate } from '../logic/toolOutput.ts'
+import { truncate } from '../logic/toolOutput.ts'
 import { useScrollAnchor } from './scrollAnchor.tsx'
 import { useTheme } from './theme.tsx'
+import { resultLines } from './tools/defaultTool.tsx'
+import { rendererFor } from './tools/registry.tsx'
 
 const GUTTER = 2
-/** Max output lines shown when expanded (a sane cap to avoid huge renders). */
-const EXPANDED_MAX = 200
-/** Max args lines shown when expanded. */
-const ARGS_MAX = 16
 
 function fmtDuration(s: number): string {
   if (s < 10) return `${s.toFixed(1)}s`
@@ -42,47 +41,16 @@ export function ToolPart(props: { part: ToolPartState }) {
   const [expanded, setExpanded] = createSignal(false)
   const toggle = () => anchor(() => setExpanded(e => !e))
 
+  // Per-tool renderer (re-dispatches if the name settles on tool.complete).
+  const renderer = () => rendererFor(props.part.name)
   const bodyWidth = () => Math.max(20, dims().width - GUTTER - 4)
-  const result = () => (props.part.resultText ?? '').replace(/\s+$/, '')
-  const lines = () => (result() ? result().split('\n') : [])
+  const lines = () => resultLines(props.part)
   const running = () => props.part.state === 'running'
-  const hasOutput = () => lines().length > 0
-  // Parse the args JSON into top-level key→value entries for a tidy key:value
-  // render (no brace noise). Falls back to raw lines when it isn't an object.
-  const argsObj = createMemo<Record<string, unknown> | undefined>(() => {
-    const t = props.part.argsText
-    if (!t) return undefined
-    try {
-      const o: unknown = JSON.parse(t)
-      return o && typeof o === 'object' && !Array.isArray(o) ? (o as Record<string, unknown>) : undefined
-    } catch {
-      return undefined
-    }
-  })
-  const argLine = (k: string, v: unknown) =>
-    `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`.replace(/\s+/g, ' ')
-  const argEntries = createMemo(() => Object.entries(argsObj() ?? {}))
-  // Hide the args block when it adds nothing over the header: a single field
-  // whose value is already the primary-arg preview (item 2 judge nit — terminal's
-  // `command` is redundant). Show it for multi-field tools (edits, reads w/ range).
-  const showArgs = createMemo(() => {
-    const e = argEntries()
-    if (argsObj() === undefined) return !!props.part.argsText // unparsed → show raw
-    if (e.length === 0) return false
-    const only = e.length === 1 ? e[0] : undefined
-    if (only) {
-      const v = only[1]
-      const vs = (typeof v === 'string' ? v : JSON.stringify(v)).trim()
-      return vs !== (props.part.argsPreview ?? '').trim()
-    }
-    return true
-  })
-  // Expandable when there's a body to reveal beyond the header (output or args).
-  const collapsible = () => !running() && (lines().length > 1 || showArgs())
-  // Header subtitle: the primary-arg preview (item 2), else explicit summary, else first line.
-  const subtitle = () =>
-    props.part.error ? `✗ ${props.part.error}` : props.part.argsPreview || props.part.summary || lines()[0] || ''
-  const body = createMemo(() => collapseToolOutput(result(), EXPANDED_MAX, bodyWidth() - 2))
+  // Expandable when the renderer says there's a body to reveal beyond the header.
+  const collapsible = () => !running() && renderer().expandable(props.part)
+  // Header subtitle: errors win; otherwise the renderer's collapsed summary.
+  const subtitle = () => (props.part.error ? `✗ ${props.part.error}` : renderer().subtitle(props.part))
+  const hint = () => renderer().hint?.(props.part)
 
   const headGlyph = () => (collapsible() ? (expanded() ? '▼' : '▶') : '⚡')
   // accent glyph MARKS the tool (draws the eye); the rest is muted so tools read
@@ -92,9 +60,9 @@ export function ToolPart(props: { part: ToolPartState }) {
 
   return (
     // Spacing between parts is owned by the parts column (gap), not per-part
-    // margins — so a tool appearing mid-stream doesn't shift the layout (item 5).
+    // margins — so a tool appearing mid-stream doesn't shift the layout.
     <box style={{ flexDirection: 'column', flexShrink: 0 }}>
-      {/* header — clickable to toggle when there's expandable output/args */}
+      {/* header — clickable to toggle when there's an expandable body */}
       <box style={{ flexDirection: 'row', flexShrink: 0 }} onMouseDown={() => collapsible() && toggle()}>
         <box style={{ flexShrink: 0, width: GUTTER }}>
           <text selectable={false}>
@@ -102,10 +70,10 @@ export function ToolPart(props: { part: ToolPartState }) {
           </text>
         </box>
         <box style={{ flexDirection: 'row', flexGrow: 1, minWidth: 0 }}>
-          {/* the whole header row is a collapsed SUMMARY (tool name + args-preview
-              + duration + "(N lines)") — chrome, not the copyable body — so a
-              free-form drag over a tool yields only the expanded output/args
-              content, never the header label (item 4). */}
+          {/* the whole header row is a collapsed SUMMARY (tool name + subtitle +
+              duration + "(N lines)") — chrome, not the copyable body — so a
+              free-form drag over a tool yields only the expanded body content,
+              never the header label. */}
           <text selectable={false}>
             <span style={{ fg: theme().color.muted }}>{props.part.name}</span>
             <Show when={running()}>
@@ -115,6 +83,11 @@ export function ToolPart(props: { part: ToolPartState }) {
               <span style={{ fg: props.part.error ? theme().color.error : theme().color.muted }}>
                 {`  ${truncate(subtitle(), subWidth())}`}
               </span>
+            </Show>
+            <Show when={hint()}>
+              {/* per-tool muted hint (e.g. delegate_task's "(/agents to monitor)") —
+                  shown while running too, Ink parity. */}
+              <span style={{ fg: theme().color.muted }}>{`  ${hint() ?? ''}`}</span>
             </Show>
             <Show when={!running() && props.part.duration !== undefined}>
               <span style={{ fg: theme().color.muted }}>{`  · ${fmtDuration(props.part.duration ?? 0)}`}</span>
@@ -126,77 +99,19 @@ export function ToolPart(props: { part: ToolPartState }) {
         </box>
       </box>
 
-      {/* expanded body — args block (when present) then output block, inside a
-          single left-bordered column (a `│` rule, not a bg fill — opencode's
-          BlockTool style; also renders faithfully and reads cleaner). */}
+      {/* expanded body — the per-tool renderer's Body, inside a single
+          left-bordered column (a `│` rule, not a bg fill — opencode's BlockTool
+          style; also renders faithfully and reads cleaner). */}
       <Show when={collapsible() && expanded()}>
         <box
           style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0, marginLeft: GUTTER, paddingLeft: 1 }}
           border={['left']}
           borderColor={props.part.error ? theme().color.error : theme().color.border}
         >
-          <box style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
-            <Show when={showArgs()}>
-              {/* section label — chrome, not content (item 4) */}
-              <text selectable={false}>
-                <span style={{ fg: theme().color.label }}>args</span>
-              </text>
-              {/* parsed key: value lines (tidy), or raw argsText when unparseable */}
-              <Show
-                when={argsObj() !== undefined}
-                fallback={
-                  <For each={(props.part.argsText ?? '').split('\n').slice(0, ARGS_MAX)}>
-                    {line => (
-                      <text selectionBg={theme().color.selectionBg}>
-                        <span style={{ fg: theme().color.muted }}>{truncate(line, bodyWidth() - 2)}</span>
-                      </text>
-                    )}
-                  </For>
-                }
-              >
-                <For each={argEntries().slice(0, ARGS_MAX)}>
-                  {([k, v]) => (
-                    <text selectionBg={theme().color.selectionBg}>
-                      <span style={{ fg: theme().color.muted }}>{truncate(argLine(k, v), bodyWidth() - 2)}</span>
-                    </text>
-                  )}
-                </For>
-                <Show when={argEntries().length > ARGS_MAX}>
-                  {/* overflow annotation — chrome, not content (item 4) */}
-                  <text selectable={false}>
-                    <span style={{ fg: theme().color.accent }}>{`… +${argEntries().length - ARGS_MAX} more`}</span>
-                  </text>
-                </Show>
-              </Show>
-            </Show>
-            <Show when={showArgs() && hasOutput()}>
-              {/* section label — chrome, not content (item 4) */}
-              <text selectable={false}>
-                <span style={{ fg: theme().color.label }}>output</span>
-              </text>
-            </Show>
-            {/* output body lines are the copyable content → themed selection bar
-                (preserves fg; same token as message text) (item: theme highlight). */}
-            <For each={body().lines}>
-              {line => (
-                <text selectionBg={theme().color.selectionBg}>
-                  <span style={{ fg: theme().color.muted }}>{line}</span>
-                </text>
-              )}
-            </For>
-            {/* truncation annotations — chrome (the "… omitted N" / "… +N more
-                lines" notes are not part of the real output body) (item 4). */}
-            <Show when={props.part.omittedNote}>
-              <text selectable={false}>
-                <span style={{ fg: theme().color.muted }}>{`… omitted ${props.part.omittedNote}`}</span>
-              </text>
-            </Show>
-            <Show when={body().hiddenLines > 0 && !props.part.omittedNote}>
-              <text selectable={false}>
-                <span style={{ fg: theme().color.accent }}>{`… +${body().hiddenLines} more lines`}</span>
-              </text>
-            </Show>
-          </box>
+          {(() => {
+            const Body = renderer().Body
+            return <Body part={props.part} width={bodyWidth() - 2} />
+          })()}
         </box>
       </Show>
     </box>

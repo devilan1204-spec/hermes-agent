@@ -41,6 +41,8 @@ export interface RenderProbe {
   readonly frame: () => string
   readonly waitForFrame: (predicate: (frame: string) => boolean) => Promise<string>
   readonly resize: (width: number, height: number) => void
+  /** Left-click at screen cell (x, y) via the mock mouse, then settle a pass. */
+  readonly click: (x: number, y: number) => Promise<void>
   readonly destroy: () => void
 }
 
@@ -68,6 +70,11 @@ export async function renderProbe(
     frame: () => setup.captureCharFrame(),
     waitForFrame: predicate => setup.waitForFrame(predicate),
     resize: (width, height) => setup.resize(width, height),
+    click: async (x, y) => {
+      await setup.mockMouse.click(x, y)
+      await setup.renderOnce()
+      await setup.flush()
+    },
     destroy: () => setup.renderer.destroy?.()
   }
 }

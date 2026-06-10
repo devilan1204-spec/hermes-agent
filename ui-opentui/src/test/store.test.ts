@@ -152,6 +152,20 @@ describe('session store — ordered parts (Phase 2b)', () => {
     expect(tool.lineCount).toBe(2)
   })
 
+  test('tool.complete captures structured args into part.args (renderer registry feed)', () => {
+    const store = createSessionStore()
+    store.apply({ type: 'message.start' })
+    store.apply({ type: 'tool.start', payload: { tool_id: 'a', name: 'mcp_lookup' } })
+    store.apply({
+      type: 'tool.complete',
+      payload: { tool_id: 'a', args: { query: 'hermes', options: { depth: 2 } }, result_text: 'ok' }
+    })
+    const tool = store.state.messages.at(-1)!.parts![0]!
+    if (tool.type !== 'tool') throw new Error('expected a tool part')
+    expect(tool.args).toEqual({ query: 'hermes', options: { depth: 2 } }) // full structured dict
+    expect(tool.argsText).toContain('"query"') // stringified fallback still kept
+  })
+
   test('setCatalog maps the loose startup.catalog response defensively (item 9)', () => {
     const store = createSessionStore()
     store.setCatalog({
