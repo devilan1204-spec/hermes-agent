@@ -243,22 +243,6 @@ def _kill_tree(proc: "subprocess.Popen", pgid: int | None = None) -> None:
         pass
 
 
-def _spawn_pytest_once(
-    cmd: List[str],
-    repo_root: Path,
-    file_timeout: float,
-    *,
-    timeout_note: str = "per-file timeout",
-) -> Tuple[int, str]:
-    """Run one ``pytest`` subprocess to completion and return ``(rc, output)``.
-
-    Spawns the child in its own process group / session so a hung file and
-    its grandchildren (uvicorn servers, async runtimes, etc.) can be SIGKILL'd
-    as a tree on timeout rather than orphaning onto PID 1. Shared by the
-    primary per-file run and the exit-4 retry loop so the lifecycle/cleanup
-    logic lives in exactly one place.
-    """
-
 def _run_one_file(
     file: Path,
     pytest_args: List[str],
@@ -287,8 +271,7 @@ def _run_one_file(
     On per-file timeout (``file_timeout`` seconds) or any other exception
     during ``communicate()``, we kill the whole process group / process
     tree so grandchildren (uvicorn servers, async runtimes, etc.) do not
-    orphan onto PID 1. The pytest-timeout plugin enforces per-test
-    timeouts inside the subprocess; this outer timeout exists only to
+    orphan onto PID 1. This outer timeout exists only to
     bound a pathologically slow or hung file as a whole.
     """
     cmd = [sys.executable, "-m", "pytest", str(file), *pytest_args]
@@ -354,7 +337,7 @@ def _run_one_file(
         # clean?
         forensics = [f"--- file-not-found forensics for {file} ---"]
         try:
-            forensics.append(f"exists={file.exists()} retries_used={attempt}")
+            forensics.append(f"exists={file.exists()}")
             parent = file.parent
             if parent.exists():
                 names = sorted(p.name for p in parent.iterdir())
