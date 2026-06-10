@@ -6118,3 +6118,43 @@ def test_sniff_image_ext_magic_and_filename():
     assert server._sniff_image_ext(b"unknown") == ".png"  # fallback
     # filename hint wins over magic bytes
     assert server._sniff_image_ext(b"\x89PNG", "photo.jpeg") == ".jpeg"
+
+
+def test_tool_complete_derives_error_from_result_convention(monkeypatch):
+    # The repo convention (agent.display._result_succeeded): a JSON-object
+    # result with a truthy string "error" — or success:false — IS a failure.
+    # The gateway surfaces it as payload["error"] so clients (OpenTUI ✗ state,
+    # Ink trail ✗) don't sniff the convention themselves.
+    events: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(
+        server, "_emit", lambda event_type, sid, payload: events.append((event_type, sid, payload))
+    )
+    monkeypatch.setitem(
+        server._sessions,
+        "err-test",
+        {"tool_progress_mode": "verbose", "tool_started_at": {}, "edit_snapshots": {}},
+    )
+
+    # 1) error-string result → flattened, capped error on the payload
+    server._on_tool_complete(
+        "err-test", "t1", "read_file", {"path": "/nope"},
+        json.dumps({"error": "File not found:\n   /nope"}),
+    )
+    assert events[-1][2]["error"] == "File not found: /nope"
+
+    # 2) success:false without error string → generic failure marker
+    server._on_tool_complete(
+        "err-test", "t2", "patch", {"path": "x"}, json.dumps({"success": False})
+    )
+    assert events[-1][2]["error"] == "tool reported failure"
+
+    # 3) plain-text result → NEVER a failure
+    server._on_tool_complete("err-test", "t3", "terminal", {"command": "ls"}, "file-a\nfile-b")
+    assert "error" not in events[-1][2]
+
+    # 4) JSON result with error: null / no error key → success
+    server._on_tool_complete(
+        "err-test", "t4", "web_search", {"q": "x"},
+        json.dumps({"results": [1, 2], "error": None}),
+    )
+    assert "error" not in events[-1][2]

@@ -2100,8 +2100,37 @@ def _on_tool_start(sid: str, tool_call_id: str, name: str, args: dict):
         _emit("tool.start", sid, payload)
 
 
+def _tool_error_from_result(result: str) -> str | None:
+    """Derive a tool-failure message from the repo's result convention.
+
+    Canon (same as ``agent.display._result_succeeded``): a JSON-object result
+    with a truthy string ``error`` key — or an explicit ``success: false`` —
+    means the tool failed.  Returned flattened + capped for a one-line header.
+    Conservative on purpose: non-JSON / non-dict results are NEVER failures
+    (plain-text output is normal success output).
+    """
+    try:
+        data = json.loads(result)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    err = data.get("error")
+    if isinstance(err, str) and err.strip():
+        return " ".join(err.split())[:300]
+    if data.get("success") is False:
+        return "tool reported failure"
+    return None
+
+
 def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result: str):
     payload = {"tool_id": tool_call_id, "name": name, "args": args}
+    # Failure surfaced explicitly so clients don't have to sniff the result
+    # convention themselves (the TUI's ✗ state and Ink's trail ✗ both key off
+    # payload["error"], which was previously never set on this path).
+    _tool_err = _tool_error_from_result(result)
+    if _tool_err:
+        payload["error"] = _tool_err
     session = _sessions.get(sid)
     snapshot = None
     started_at = None
