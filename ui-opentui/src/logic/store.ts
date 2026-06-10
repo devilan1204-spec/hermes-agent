@@ -228,29 +228,6 @@ function readOptNum(payload: { readonly [k: string]: unknown }, key: string): nu
   return typeof v === 'number' ? v : undefined
 }
 
-/**
- * A failed tool's failure signal, derived from the raw `result`: hermes tools
- * return `{"error": "…"}` JSON on failure, and the gateway never sets a
- * top-level `error` on tool.complete — so this is THE live trigger for the
- * failed lifecycle state (Epic 2.5). Flattened to one line for the header
- * subtitle; absent/empty/non-dict results yield undefined (not failed).
- */
-function resultError(result: unknown): string | undefined {
-  let v: unknown = result
-  if (typeof v === 'string') {
-    try {
-      v = JSON.parse(v)
-    } catch {
-      return undefined
-    }
-  }
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined
-  const e = (v as Record<string, unknown>)['error']
-  if (typeof e !== 'string') return undefined
-  const flat = e.replace(/\s+/g, ' ').trim()
-  return flat ? flat.slice(0, 400) : undefined
-}
-
 /** Render a raw tool `result` for display: strings as-is, anything else pretty
  *  JSON — both then go through the same envelope-strip pipeline as result_text. */
 function stringifyResult(v: unknown): string | undefined {
@@ -673,7 +650,7 @@ export function createSessionStore() {
         const name = readStr(event.payload, 'name')
         // explicit payload error wins; else derive from the `{"error": …}` result
         // convention (the only failure signal the live gateway actually ships).
-        const error = readStr(event.payload, 'error') ?? resultError(event.payload['result'])
+        const error = readStr(event.payload, 'error')
         const summary = readStr(event.payload, 'summary')
         // `result_text` is verbose-gated, but the raw `result` is ALWAYS sent —
         // when the verbose text is absent, derive the display body from `result`

@@ -450,21 +450,25 @@ describe('tool lifecycle states — running / done / failed (Epic 2.5)', () => {
     }
   })
 
-  test('store: a `{"error": …}` result derives part.error (the gateway never ships a top-level error)', () => {
+  test('store: part.error comes ONLY from payload.error (gateway owns the result convention)', () => {
+    // The gateway derives failure from the result convention server-side
+    // (tui_gateway _tool_error_from_result) and ships payload.error; the
+    // client must NOT sniff results itself (false positives on tools whose
+    // legitimate output embeds an "error" key — review finding, Epic 2.5).
     const store = createSessionStore()
     seedTool(
       store,
       { tool_id: 'l2', name: 'read_file' },
-      { tool_id: 'l2', name: 'read_file', result: { error: 'File not found:\n /nope.txt' } }
+      { tool_id: 'l2', name: 'read_file', error: 'File not found: /nope.txt' }
     )
     const last = store.state.messages[store.state.messages.length - 1]
     const part = last?.parts?.find((p): p is ToolPartState => p.type === 'tool' && p.id === 'l2')
-    expect(part?.error).toBe('File not found: /nope.txt') // flattened to one line
-    // …and a clean result stays un-failed
+    expect(part?.error).toBe('File not found: /nope.txt')
+    // a result that EMBEDS an error key, without payload.error, stays un-failed
     seedTool(
       store,
-      { tool_id: 'l3', name: 'terminal' },
-      { tool_id: 'l3', name: 'terminal', result: { exit_code: 0, output: 'ok' } }
+      { tool_id: 'l3', name: 'web_search' },
+      { tool_id: 'l3', name: 'web_search', result: { results: [1], error: 'some shards failed' } }
     )
     const part3 = store.state.messages[store.state.messages.length - 1]?.parts?.find(
       (p): p is ToolPartState => p.type === 'tool' && p.id === 'l3'
