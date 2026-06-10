@@ -219,6 +219,44 @@ def test_tui_verbose_tool_events_omit_details_when_redaction_fails(monkeypatch):
     assert "result_text" not in events[1][2]
 
 
+def test_tool_complete_emits_full_unified_diff(monkeypatch):
+    events: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(
+        server, "_emit", lambda event_type, sid, payload: events.append((event_type, sid, payload))
+    )
+    monkeypatch.setitem(
+        server._sessions,
+        "diff-test",
+        {"tool_progress_mode": "concise", "tool_started_at": {}, "edit_snapshots": {}},
+    )
+
+    diff = "--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-a = 1\n+a = 2\n"
+    result = json.dumps({"success": True, "diff": diff})
+    server._on_tool_complete("diff-test", "tool-1", "patch", {"mode": "replace", "path": "x.py"}, result)
+
+    assert events and events[0][0] == "tool.complete"
+    payload = events[0][2]
+    # the raw unified diff rides alongside the pretty/capped inline_diff
+    assert payload["diff_unified"] == diff
+    assert "inline_diff" in payload
+
+
+def test_cap_diff_unified_truncates_at_line_boundary():
+    line = "+" + "x" * 63  # 64 bytes per line incl. newline
+    diff = "\n".join([line] * 100)
+
+    capped = server._cap_diff_unified(diff, max_bytes=1000)
+
+    body, _, marker = capped.rpartition("\n")
+    assert marker.startswith("# … diff truncated (")
+    assert marker.endswith(" more bytes)")
+    assert len(body.encode("utf-8")) <= 1000
+    # cut on a line boundary: every surviving line is intact
+    assert all(l == line for l in body.split("\n"))
+    # under the cap → untouched
+    assert server._cap_diff_unified("small", max_bytes=1000) == "small"
+
+
 def test_dispatch_rejects_non_object_request():
     resp = server.dispatch([])
 

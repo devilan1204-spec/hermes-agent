@@ -1950,6 +1950,28 @@ def _cap_tui_verbose_text(text: str) -> str:
     return f"{label}{tail}"
 
 
+# The FULL raw unified diff shipped on file-edit tool.complete (`diff_unified`,
+# for clients with a native diff renderer — ui-opentui). Unlike the verbose
+# trail above this is rendered COLLAPSED by default and only on edit tools, so
+# it gets a far larger budget; 512KB is still a hard ceiling so a runaway
+# multi-megabyte edit can't flood the pipe.
+_DIFF_UNIFIED_MAX_BYTES = 512 * 1024
+
+
+def _cap_diff_unified(diff: str, max_bytes: int = _DIFF_UNIFIED_MAX_BYTES) -> str:
+    raw = diff.encode("utf-8")
+    if len(raw) <= max_bytes:
+        return diff
+    head = raw[:max_bytes].decode("utf-8", errors="ignore")
+    # Truncate at a line boundary so the surviving diff stays parseable, then
+    # append an honest marker line (never send more than the cap + marker).
+    cut = head.rfind("\n")
+    if cut > 0:
+        head = head[:cut]
+    omitted = len(raw) - len(head.encode("utf-8"))
+    return f"{head}\n# … diff truncated ({omitted} more bytes)"
+
+
 def _redact_tui_verbose_text(text: str) -> str:
     try:
         from agent.redact import redact_sensitive_text
@@ -2096,7 +2118,23 @@ def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result
             payload["inline_diff"] = "\n".join(rendered)
     except Exception:
         pass
-    if _tool_progress_enabled(sid) or payload.get("inline_diff"):
+    # Alongside the pretty-rendered/capped `inline_diff` (Ink consumes that), ship
+    # the RAW unified diff for clients with a native diff renderer (ui-opentui's
+    # file-tool view). Capped at _DIFF_UNIFIED_MAX_BYTES with an honest marker.
+    try:
+        from agent.display import extract_edit_diff
+
+        diff_unified = extract_edit_diff(
+            name,
+            result,
+            function_args=args,
+            snapshot=snapshot,
+        )
+        if diff_unified:
+            payload["diff_unified"] = _cap_diff_unified(diff_unified)
+    except Exception:
+        pass
+    if _tool_progress_enabled(sid) or payload.get("inline_diff") or payload.get("diff_unified"):
         _emit("tool.complete", sid, payload)
 
 
