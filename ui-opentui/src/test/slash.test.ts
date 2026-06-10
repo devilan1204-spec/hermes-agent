@@ -2,7 +2,7 @@
  * Slash dispatch test (spec §5 Layer 3/4). Pure logic: parse + the dispatch
  * ladder (client → slash.exec → command.dispatch) against a fake SlashContext.
  */
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'vitest'
 
 import {
   dispatchSlash,
@@ -10,13 +10,20 @@ import {
   parseSlash,
   planCompletion,
   readReplaceFrom,
+  registerPickerRefresh,
+  runPickerRefresh,
   type SlashContext
 } from '../logic/slash.ts'
 import type { PickerItem, SessionItem } from '../logic/store.ts'
 
 const FAKE_SESSIONS: SessionItem[] = [{ id: 's1', messageCount: 5, preview: 'hello there', title: 'First chat' }]
 
-/** A `model.options` payload: two authed providers + one unauthenticated. */
+// the picker-refresh seam is module-level state — never leak it across tests
+afterEach(() => registerPickerRefresh(undefined))
+
+/** A `model.options` payload: two authed providers + two unconfigured skeleton
+ *  rows (the gateway sends them with `include_unconfigured=True,
+ *  picker_hints=True`: empty models + `key_env`/`warning` setup hints). */
 const MODEL_OPTIONS = {
   model: 'claude-sonnet-4.6',
   provider: 'anthropic',
@@ -27,8 +34,23 @@ const MODEL_OPTIONS = {
       name: 'Anthropic',
       slug: 'anthropic'
     },
+    {
+      authenticated: false,
+      key_env: 'OPENAI_API_KEY',
+      models: [],
+      name: 'OpenAI API',
+      slug: 'openai-api',
+      warning: 'paste OPENAI_API_KEY to activate'
+    },
     { authenticated: true, models: ['hermes-4-405b'], name: 'Nous Research', slug: 'nous' },
-    { authenticated: false, models: ['gpt-5.4'], name: 'OpenAI', slug: 'openai' }
+    {
+      authenticated: false,
+      key_env: '',
+      models: [],
+      name: 'OpenAI Codex',
+      slug: 'openai-codex',
+      warning: 'run `hermes model` to configure (oauth_external)'
+    }
   ]
 }
 
@@ -215,26 +237,79 @@ describe('dispatchSlash — client commands', () => {
     await dispatchSlash('/model', p.ctx)
     expect(p.pickers).toHaveLength(1)
     expect(p.pickers[0]!.title).toBe('Switch model')
-    // only AUTHENTICATED providers' models; values carry the explicit provider so
-    // a pick under a different provider switches provider+model.
-    expect(p.pickers[0]!.items.map(i => i.value)).toEqual([
+    // authenticated providers' models are the SELECTABLE rows; values carry the
+    // explicit provider so a pick under a different provider switches both.
+    const selectable = p.pickers[0]!.items.filter(i => !i.unavailable)
+    expect(selectable.map(i => i.value)).toEqual([
       'claude-sonnet-4.6 --provider anthropic',
       'claude-opus-4.6 --provider anthropic',
       'hermes-4-405b --provider nous'
     ])
     // grouped by the provider's display (lab) name; slug+lab are fuzzy haystacks
-    expect(p.pickers[0]!.items.map(i => i.group)).toEqual(['Anthropic', 'Anthropic', 'Nous Research'])
-    expect(p.pickers[0]!.items[2]!.haystacks).toEqual(['nous', 'Nous Research'])
+    expect(selectable.map(i => i.group)).toEqual(['Anthropic', 'Anthropic', 'Nous Research'])
+    expect(selectable[2]!.haystacks).toEqual(['nous', 'Nous Research'])
     // current is FLAGGED (not baked into the label, so fuzzy never matches the ✓)
-    expect(p.pickers[0]!.items[0]!.current).toBe(true)
-    expect(p.pickers[0]!.items[0]!.label).toBe('claude-sonnet-4.6')
-    expect(p.pickers[0]!.items[1]!.current).toBeUndefined()
+    expect(selectable[0]!.current).toBe(true)
+    expect(selectable[0]!.label).toBe('claude-sonnet-4.6')
+    expect(selectable[1]!.current).toBeUndefined()
     // picking switches via slash.exec `model <model> --provider <slug>`
     p.pickers[0]!.onPick('claude-opus-4.6 --provider anthropic')
     await new Promise(r => setTimeout(r, 0))
     expect(
       p.calls.some(c => c.method === 'slash.exec' && c.params.command === 'model claude-opus-4.6 --provider anthropic')
     ).toBe(true)
+  })
+
+  test('/model maps UNCONFIGURED providers to dimmed hint rows (key_env → env-var hint, else warning)', async () => {
+    const p = makeCtx(async method => (method === 'model.options' ? MODEL_OPTIONS : { output: 'switched' }))
+    await dispatchSlash('/model', p.ctx)
+    const unavailable = p.pickers[0]!.items.filter(i => i.unavailable)
+    expect(unavailable).toHaveLength(2)
+    // api_key provider → the `no API key — set <ENV_VAR>` hint as the row label
+    expect(unavailable[0]).toEqual({
+      group: 'OpenAI API',
+      haystacks: ['openai-api', 'OpenAI API'],
+      label: 'no API key — set OPENAI_API_KEY',
+      unavailable: true,
+      value: 'openai-api'
+    })
+    // oauth provider (no key_env) → the gateway's own warning text
+    expect(unavailable[1]!.group).toBe('OpenAI Codex')
+    expect(unavailable[1]!.label).toBe('run `hermes model` to configure (oauth_external)')
+    // payload (canonical) order is preserved — unconfigured rows interleave
+    expect(p.pickers[0]!.items.map(i => i.group)).toEqual([
+      'Anthropic',
+      'Anthropic',
+      'OpenAI API',
+      'Nous Research',
+      'OpenAI Codex'
+    ])
+  })
+
+  test('/model with ONLY unconfigured providers keeps the no-models notice', async () => {
+    const p = makeCtx(async () => ({
+      providers: [{ authenticated: false, key_env: 'XAI_API_KEY', models: [], name: 'xAI', slug: 'xai' }]
+    }))
+    await dispatchSlash('/model', p.ctx)
+    expect(p.pickers).toHaveLength(0)
+    expect(p.system).toEqual(['No models available (no authenticated providers).'])
+  })
+
+  test('/model registers the picker refresh seam; running it does ONE RPC and re-syncs the cache', async () => {
+    const p = makeCtx(async method => (method === 'model.options' ? MODEL_OPTIONS : { output: 'switched' }))
+    await dispatchSlash('/model', p.ctx)
+    const opened = p.calls.filter(c => c.method === 'model.options').length // 1 (uncached open)
+    const refreshed = await runPickerRefresh()
+    expect(p.calls.filter(c => c.method === 'model.options')).toHaveLength(opened + 1)
+    expect(refreshed!.filter(i => !i.unavailable)).toHaveLength(3)
+    expect(p.modelCache.value).toEqual(refreshed) // cache re-synced for the next open
+  })
+
+  test('/skills clears the picker refresh seam (Ctrl+R is a no-op there)', async () => {
+    registerPickerRefresh(() => Promise.resolve([]))
+    const p = makeCtx(async () => ({ skills: { General: ['memory'] } }))
+    await dispatchSlash('/skills', p.ctx)
+    expect(runPickerRefresh()).toBeUndefined()
   })
 
   test('/model with a CACHED catalog opens instantly — ZERO RPCs on open', async () => {
@@ -265,7 +340,7 @@ describe('dispatchSlash — client commands', () => {
     const p = makeCtx(async method => (method === 'model.options' ? MODEL_OPTIONS : { output: 'switched' }))
     await dispatchSlash('/model', p.ctx)
     expect(p.calls.filter(c => c.method === 'model.options')).toHaveLength(1)
-    expect(p.modelCache.value).toHaveLength(3) // first open seeded the cache
+    expect(p.modelCache.value).toHaveLength(5) // first open seeded the cache (3 models + 2 unconfigured hints)
     // cross-provider pick: switch lands on the gateway, then a background
     // refresh re-fetches model.options so the cached ✓ stays fresh.
     p.pickers[0]!.onPick('hermes-4-405b --provider nous')

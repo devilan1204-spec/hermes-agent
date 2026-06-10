@@ -208,6 +208,31 @@ describe('buildPickerRows — grouping + traversal order', () => {
     const { rows } = buildPickerRows(sorted, r => r.lab)
     expect(rows[0]).toEqual({ kind: 'header', label: 'OpenAI' })
   })
+
+  test('non-selectable items (picker v2.1 unconfigured rows) render with index -1, stay out of flat', () => {
+    // an unconfigured "provider hint" row sits BETWEEN two configured groups
+    const mixed = [
+      { lab: 'Anthropic', label: 'claude-sonnet-4', provider: 'anthropic' },
+      { lab: 'Mistral', label: 'no API key — set MISTRAL_API_KEY', provider: 'mistral' },
+      { lab: 'OpenAI', label: 'gpt-5', provider: 'openai' }
+    ]
+    const { flat, rows } = buildPickerRows(
+      mixed,
+      r => r.lab,
+      r => !r.label.startsWith('no API key')
+    )
+    // hint row RENDERS (with its header) but is index -1 and absent from flat —
+    // so ↑↓ traversal (which walks flat) skips it entirely.
+    expect(rows.map(r => (r.kind === 'header' ? `# ${r.label}` : `${r.index}:${r.item.label}`))).toEqual([
+      '# Anthropic',
+      '0:claude-sonnet-4',
+      '# Mistral',
+      '-1:no API key — set MISTRAL_API_KEY',
+      '# OpenAI',
+      '1:gpt-5'
+    ])
+    expect(flat.map(f => f.label)).toEqual(['claude-sonnet-4', 'gpt-5'])
+  })
 })
 
 describe('visibleRows — selection-following window', () => {

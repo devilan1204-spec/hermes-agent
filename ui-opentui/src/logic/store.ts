@@ -111,6 +111,10 @@ export interface PickerItem {
   haystacks?: string[]
   /** Marks the currently-active row (rendered with a ✓). */
   current?: boolean
+  /** Unavailable row (e.g. an unconfigured provider's `no API key — set …`
+   *  hint): hidden by default, revealed dimmed + NON-selectable by the
+   *  picker's Ctrl+U toggle; ↑↓ traversal skips it (picker v2.1). */
+  unavailable?: boolean
 }
 
 /** An open generic picker overlay: a titled list whose pick runs `onPick(value)`. */

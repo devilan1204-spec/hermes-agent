@@ -158,13 +158,20 @@ const openSwitcher: ClientHandler = async (_arg, ctx) => {
 }
 
 /**
- * Flatten `model.options` (authenticated providers' models) into grouped picker
- * rows (Epic 7): group = the provider's display ("lab") name, haystacks = slug +
- * lab name (so `oai`/`anthropic` fuzzy-match models), value = the FULL switch
- * arg `<model> --provider <slug>` so picking a model under a different provider
- * actually switches provider+model (the gateway's `_apply_model_switch` parses
- * `--provider` via parse_model_flags). The current model is flagged, not baked
- * into the label, so the fuzzy scorer never matches the ✓.
+ * Flatten `model.options` into grouped picker rows (Epic 7; v2.1 availability):
+ * group = the provider's display ("lab") name, haystacks = slug + lab name (so
+ * `oai`/`copilot`/`anthropic` fuzzy-match the whole group), value = the FULL
+ * switch arg `<model> --provider <slug>` so picking a model under a different
+ * provider actually switches provider+model (the gateway's
+ * `_apply_model_switch` parses `--provider` via parse_model_flags). The current
+ * model is flagged, not baked into the label, so the fuzzy scorer never matches
+ * the ✓.
+ *
+ * UNCONFIGURED providers (`authenticated: false` skeleton rows — the gateway
+ * sends them via `build_models_payload(include_unconfigured=True,
+ * picker_hints=True)`, with `key_env`/`warning` setup hints) become one
+ * `unavailable` hint row each (`no API key — set <ENV_VAR>`): hidden by
+ * default, revealed dimmed + non-selectable by the picker's Ctrl+U toggle.
  */
 export function mapModelOptions(opts: unknown): PickerItem[] {
   if (!opts || typeof opts !== 'object') return []
@@ -174,9 +181,26 @@ export function mapModelOptions(opts: unknown): PickerItem[] {
   const currentProvider = readStr(opts, 'provider')
   const items: PickerItem[] = []
   for (const p of providers) {
-    if (!p || typeof p !== 'object' || (p as { authenticated?: unknown }).authenticated !== true) continue
+    if (!p || typeof p !== 'object') continue
     const slug = readStr(p, 'slug') ?? readStr(p, 'name') ?? ''
     const lab = readStr(p, 'name') ?? slug
+    if ((p as { authenticated?: unknown }).authenticated === false) {
+      // Unconfigured provider → one dimmed hint row under its own group header.
+      // Identity (slug + display name) is the haystack so a provider-name query
+      // still narrows to the group; the hint text itself is not searched.
+      const keyEnv = readStr(p, 'key_env')
+      const item: PickerItem = {
+        group: lab || slug,
+        label: keyEnv ? `no API key — set ${keyEnv}` : (readStr(p, 'warning') ?? 'not configured'),
+        unavailable: true,
+        value: slug || lab
+      }
+      const hay = [slug, lab].filter(Boolean)
+      if (hay.length) item.haystacks = hay
+      items.push(item)
+      continue
+    }
+    if ((p as { authenticated?: unknown }).authenticated !== true) continue
     // The gateway's own normalized "this row is the active provider" flag —
     // more reliable than comparing `provider` to `slug` (the agent's provider
     // string can be the API dialect, e.g. an openai-compatible base_url).
@@ -218,15 +242,40 @@ function mapSkills(result: unknown): PickerItem[] {
   return items
 }
 
-/** Re-fetch `model.options` and update the cached picker rows (fire-and-forget). */
-function refreshModelItems(ctx: SlashContext): Promise<void> {
-  return ctx
-    .request('model.options', { session_id: ctx.sessionId() })
-    .then(opts => {
-      const items = mapModelOptions(opts)
-      if (items.length) ctx.setModelItems(items)
-    })
-    .catch(() => {})
+/** Re-fetch `model.options` and update the cached picker rows. Resolves with
+ *  the fresh rows (the open picker swaps them in live — Ctrl+R, picker v2.1);
+ *  rejections are the CALLER's to handle (background callers fire-and-forget). */
+function refreshModelItems(ctx: SlashContext): Promise<PickerItem[]> {
+  return ctx.request('model.options', { session_id: ctx.sessionId() }).then(opts => {
+    const items = mapModelOptions(opts)
+    if (items.length) ctx.setModelItems(items)
+    return items
+  })
+}
+
+/**
+ * The open picker's manual-refresh seam (picker v2.1 Ctrl+R). Whoever opens a
+ * picker registers (or clears) the catalog re-fetch here; the mounted Picker
+ * triggers it via `runPickerRefresh` and swaps in the resolved rows live. A
+ * module slot rather than a Picker prop because the App→Picker prop plumbing
+ * carries only the PickerState basics; the seam keeps the overlay generic for
+ * the upcoming resume-session picker (register a `session.list` re-fetch).
+ */
+let activePickerRefresh: (() => Promise<PickerItem[]>) | undefined
+
+/** Register (or clear, with `undefined`) the open picker's catalog re-fetch. */
+export function registerPickerRefresh(fn: (() => Promise<PickerItem[]>) | undefined): void {
+  activePickerRefresh = fn
+}
+
+/** Whether a refresh is registered (the picker's footer hint is gated on it). */
+export function canRefreshPicker(): boolean {
+  return activePickerRefresh !== undefined
+}
+
+/** Run the registered catalog re-fetch; undefined when none is registered. */
+export function runPickerRefresh(): Promise<PickerItem[]> | undefined {
+  return activePickerRefresh?.()
 }
 
 /** Switch the model via the server (shared by `/model <name>` and the picker pick).
@@ -235,7 +284,7 @@ async function switchModel(ctx: SlashContext, name: string): Promise<void> {
   try {
     const r = await ctx.request('slash.exec', { command: `model ${name}`, session_id: ctx.sessionId() })
     ctx.pushSystem(readStr(r, 'output') || `→ ${name}`)
-    void refreshModelItems(ctx)
+    void refreshModelItems(ctx).catch(() => {})
   } catch (error) {
     ctx.pushSystem(`/model ${name}: ${error instanceof Error ? error.message : 'switch failed'}`)
   }
@@ -249,15 +298,19 @@ const modelCmd: ClientHandler = async (arg, ctx) => {
     await switchModel(ctx, arg.trim())
     return
   }
-  const open = (items: PickerItem[]) =>
+  const open = (items: PickerItem[]) => {
+    // Ctrl+R in the open picker re-fetches the catalog (and re-syncs the cache).
+    registerPickerRefresh(() => refreshModelItems(ctx))
     ctx.openPicker({ items, onPick: name => void switchModel(ctx, name), title: 'Switch model' })
+  }
   const cached = ctx.modelItems()
   if (cached?.length) {
     open(cached)
     return
   }
   const items = mapModelOptions(await ctx.request('model.options', { session_id: ctx.sessionId() }))
-  if (!items.length) {
+  // Unavailable hint rows alone are not a usable catalog — keep the notice.
+  if (!items.some(i => !i.unavailable)) {
     ctx.pushSystem('No models available (no authenticated providers).')
     return
   }
@@ -272,6 +325,7 @@ const skillsCmd: ClientHandler = async (_arg, ctx) => {
     ctx.pushSystem('No skills found.')
     return
   }
+  registerPickerRefresh(undefined) // no Ctrl+R catalog re-fetch for skills (yet)
   ctx.openPicker({
     items,
     onPick: name =>

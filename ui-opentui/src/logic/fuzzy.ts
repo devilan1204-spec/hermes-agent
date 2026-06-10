@@ -76,7 +76,8 @@ export function fuzzyFilter<T>(query: string, items: readonly T[], fieldsOf: (it
 }
 
 /** A render row of a grouped picker: a non-selectable group header or an item.
- *  `index` is the item's position in the flat ARROW-TRAVERSAL order. */
+ *  `index` is the item's position in the flat ARROW-TRAVERSAL order; `-1` marks
+ *  a non-selectable item row (rendered dimmed, skipped by traversal). */
 export type PickerRow<T> = { kind: 'header'; label: string } | { kind: 'item'; item: T; index: number }
 
 /**
@@ -84,11 +85,14 @@ export type PickerRow<T> = { kind: 'header'; label: string } | { kind: 'item'; i
  * input puts the best group first). Returns the header+item render rows and
  * the flat selectable list in traversal order — arrows walk `flat` and thus
  * cross group boundaries seamlessly; headers are never selectable. Items
- * without a group render headerless (e.g. the skills picker).
+ * without a group render headerless (e.g. the skills picker). Items failing
+ * `selectableOf` (picker v2.1: unconfigured-provider hint rows) still RENDER
+ * (index `-1`) but never enter `flat`, so ↑↓ traversal skips them.
  */
 export function buildPickerRows<T>(
   items: readonly T[],
-  groupOf: (item: T) => string | undefined
+  groupOf: (item: T) => string | undefined,
+  selectableOf: (item: T) => boolean = () => true
 ): { rows: PickerRow<T>[]; flat: T[] } {
   const order: string[] = []
   const buckets = new Map<string, T[]>()
@@ -107,8 +111,12 @@ export function buildPickerRows<T>(
   for (const group of order) {
     if (group) rows.push({ kind: 'header', label: group })
     for (const item of buckets.get(group) ?? []) {
-      rows.push({ index: flat.length, item, kind: 'item' })
-      flat.push(item)
+      if (selectableOf(item)) {
+        rows.push({ index: flat.length, item, kind: 'item' })
+        flat.push(item)
+      } else {
+        rows.push({ index: -1, item, kind: 'item' })
+      }
     }
   }
   return { flat, rows }
