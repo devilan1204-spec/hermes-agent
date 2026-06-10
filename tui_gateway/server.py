@@ -175,6 +175,12 @@ _LONG_HANDLERS = frozenset(
     {
         "browser.manage",
         "cli.exec",
+        # model.options is network-bound (pricing fetch + Nous tier check via
+        # build_models_payload, ~seconds). The native TUI prefetches it right
+        # after session.create; on the main thread that stalls every fast-path
+        # RPC — notably complete.slash, so the first `/` dropdown after launch
+        # took seconds to paint.
+        "model.options",
         "session.branch",
         "session.compress",
         "session.resume",
