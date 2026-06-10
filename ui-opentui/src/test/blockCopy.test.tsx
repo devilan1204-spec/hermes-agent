@@ -1,11 +1,12 @@
 /**
- * Per-block copy affordance (design pass piece 2). Layers:
+ * Per-block copy affordance (design pass piece 2; chrome-v3 geometry). Layers:
  *   1. pure: copyBlock writes the SOURCE through the injectable writer and
  *      flashes "Copied" via the notify seam (the store's hint line).
- *   2. frames: a quiet `⧉` chip trails settled assistant text blocks and user
- *      prompts (never system rows, never a still-streaming block); clicking it
- *      through the real mouse path copies that block's source and the hint
- *      line shows "Copied".
+ *   2. frames: a quiet `⧉ copy` run sits on its own line at the BOTTOM-LEFT of
+ *      settled assistant text blocks and user prompts (never system rows,
+ *      never a still-streaming block) — off the scrollbar's right-edge column;
+ *      clicking it through the real mouse path copies that block's source and
+ *      the hint line shows "Copied".
  */
 import { afterEach, describe, expect, test } from 'vitest'
 
@@ -34,13 +35,18 @@ async function mountApp(store: Store, width = 80, height = 30): Promise<RenderPr
   )
 }
 
-/** Click the `⧉` chip on the frame row that contains `anchor`. */
+/** Click the `⧉ copy` chip on the line BELOW the frame row containing `anchor`. */
 async function clickChipNear(probe: RenderProbe, anchor: string): Promise<void> {
-  const frame = await probe.waitForFrame(f => f.includes(anchor) && f.includes('⧉'))
+  const frame = await probe.waitForFrame(f => f.includes(anchor) && f.includes('⧉ copy'))
   const rows = frame.split('\n')
-  const y = rows.findIndex(line => line.includes(anchor) && line.includes('⧉'))
+  const anchorY = rows.findIndex(line => line.includes(anchor))
+  expect(anchorY).toBeGreaterThanOrEqual(0)
+  const y = rows.findIndex((line, i) => i > anchorY && line.includes('⧉ copy'))
   expect(y).toBeGreaterThanOrEqual(0)
   const x = (rows[y] ?? '').indexOf('⧉')
+  // bottom-LEFT chrome: the chip hugs the content gutter (shell padding +
+  // glyph gutter ≈ col 3), never the scrollbar's right-edge column.
+  expect(x).toBeLessThan(10)
   await probe.click(x, y)
 }
 
@@ -104,11 +110,13 @@ describe('⧉ chip frames — quiet chrome, source-true copy', () => {
     store.apply({ type: 'message.complete' })
     const probe = await mountApp(store)
     try {
-      const frame = await probe.waitForFrame(f => f.includes('⧉'))
-      expect(frame).toContain('⧉')
+      const frame = await probe.waitForFrame(f => f.includes('⧉ copy'))
+      expect(frame).toContain('⧉ copy')
       const rows = frame.split('\n')
-      const y = rows.findIndex(line => line.includes('⧉'))
+      const y = rows.findIndex(line => line.includes('⧉ copy'))
       const x = (rows[y] ?? '').indexOf('⧉')
+      // bottom-left chrome: never in the scrollbar's right-edge column.
+      expect(x).toBeLessThan(10)
       await probe.click(x, y)
       // SOURCE, not the concealed rendered text: the ** markers survive.
       expect(writes).toEqual(['the **bold** answer'])

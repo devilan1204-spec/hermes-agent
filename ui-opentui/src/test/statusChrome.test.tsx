@@ -1,12 +1,14 @@
 /**
- * Epic 1.3 — header/status chrome (Variant A dense single status bar).
+ * Status chrome v3 — ONE left-aligned labeled line at every width.
  * Layers covered:
- *   1. schema: the new SessionInfo wire fields decode (and null/absence is safe)
- *   2. store: applyInfo merges the new usage/chrome fields
- *   3. pure logic: statusSegments width table (priority drop order) + the
- *      ctx/cmp threshold levels + compact formatters
- *   4. frames: the bar renders the dense segment layout with separators, drops
- *      tail segments when narrow, and the update notice borrows the line
+ *   1. schema: the SessionInfo wire fields decode (and null/absence is safe)
+ *   2. store: applyInfo merges the usage/chrome fields
+ *   3. pure logic: statusSegments width table (priority drop order), the
+ *      ctxBarCells gauge ladder, ctx/cmp threshold levels + compact formatters
+ *   4. frames: the bar renders ONE left-flowing labeled row (`ctx:`/`cost:`/
+ *      `up:`/`cmp:`/`mcp:`), drops tail segments whole as the terminal
+ *      narrows (never wraps to a second line), and the update notice borrows
+ *      the line.
  */
 import { Option } from 'effect'
 import { describe, expect, test } from 'vitest'
@@ -14,8 +16,8 @@ import { describe, expect, test } from 'vitest'
 import { decodeSessionInfoPatch } from '../boundary/schema/SessionInfo.ts'
 import { createSessionStore, type SessionStore } from '../logic/store.ts'
 import {
-  chromeMode,
   cmpLevel,
+  ctxBarCells,
   ctxLevel,
   fmtShortDuration,
   fmtTokens,
@@ -27,8 +29,8 @@ import { captureFrame, renderProbe } from './lib/render.ts'
 
 // ── 1. schema ────────────────────────────────────────────────────────────
 
-describe('SessionInfoPatchSchema — Epic 1.3 wire fields', () => {
-  test('decodes the new chrome fields (update/profile/mcp/cost)', () => {
+describe('SessionInfoPatchSchema — chrome wire fields', () => {
+  test('decodes the chrome fields (update/profile/mcp/cost)', () => {
     const decoded = decodeSessionInfoPatch({
       model: 'anthropic/claude-opus-4-8',
       update_behind: 3,
@@ -53,14 +55,14 @@ describe('SessionInfoPatchSchema — Epic 1.3 wire fields', () => {
     if (Option.isSome(decoded)) expect(decoded.value.update_behind).toBeNull()
   })
 
-  test('all new fields absent still decodes (every key optional)', () => {
+  test('all chrome fields absent still decodes (every key optional)', () => {
     expect(Option.isSome(decodeSessionInfoPatch({ model: 'm' }))).toBe(true)
   })
 })
 
 // ── 2. store applyInfo ───────────────────────────────────────────────────
 
-describe('store.applyInfo — Epic 1.3 chrome merge', () => {
+describe('store.applyInfo — chrome merge', () => {
   test('merges cost/update/profile/mcp into SessionInfo', () => {
     const store = createSessionStore()
     store.applyInfo({
@@ -104,41 +106,29 @@ describe('store.applyInfo — Epic 1.3 chrome merge', () => {
 
 // ── 3. pure logic ────────────────────────────────────────────────────────
 
-describe('chromeMode — the responsive width ladder (design pass piece 3)', () => {
-  test('wide ≥140, medium in between, narrow <72 (where ctx detail collapses)', () => {
-    expect(chromeMode(220)).toBe('wide')
-    expect(chromeMode(140)).toBe('wide')
-    expect(chromeMode(139)).toBe('medium')
-    expect(chromeMode(120)).toBe('medium')
-    expect(chromeMode(72)).toBe('medium')
-    expect(chromeMode(71)).toBe('narrow')
-    expect(chromeMode(40)).toBe('narrow')
-    expect(chromeMode(0)).toBe('narrow') // degenerate input stays well-formed
-  })
-})
-
-describe('statusSegments — progressive disclosure table', () => {
+describe('statusSegments — progressive disclosure table (chrome v3 order)', () => {
   test('full width shows everything', () => {
     expect(statusSegments(220)).toEqual({
       ctxDetail: true,
-      duration: true,
-      compressions: true,
       cost: true,
+      up: true,
+      compressions: true,
       profile: true,
       bg: true,
       mcp: true
     })
   })
 
-  test('segments drop in reverse priority as width shrinks: mcp → bg → profile → cost → duration/cmp → ctx detail', () => {
+  test('segments drop whole in reverse priority as width shrinks: mcp → bg → profile → cmp → up → cost → ctx detail', () => {
     // each row: [width, expected visible flags]
     const table: Array<[number, Partial<ReturnType<typeof statusSegments>>]> = [
-      [115, { mcp: false, bg: true }], // mcp drops first
-      [107, { mcp: false, bg: false, profile: true }], // then bg
-      [99, { profile: false, cost: true }], // then profile
-      [91, { cost: false, duration: true, compressions: true }], // then cost
-      [79, { duration: false, compressions: false, ctxDetail: true }], // then duration/cmp
-      [71, { ctxDetail: false }] // finally the bar/token detail collapses to bare `42%`
+      [125, { mcp: false, bg: true }], // mcp drops first
+      [117, { mcp: false, bg: false, profile: true }], // then bg
+      [107, { profile: false, compressions: true }], // then profile
+      [93, { compressions: false, up: true }], // then cmp
+      [87, { up: false, cost: true }], // then uptime
+      [79, { cost: false, ctxDetail: true }], // then cost
+      [71, { ctxDetail: false }] // finally the bar/token detail collapses to `ctx: 42%`
     ]
     for (const [width, expected] of table) {
       expect(statusSegments(width)).toMatchObject(expected)
@@ -149,6 +139,19 @@ describe('statusSegments — progressive disclosure table', () => {
     // even at absurdly narrow widths the table stays well-formed (booleans, no throw)
     const segs = statusSegments(10)
     expect(Object.values(segs).every(v => v === false)).toBe(true)
+  })
+})
+
+describe('ctxBarCells — the gauge breathes (10–14 cells, vs the old 5)', () => {
+  test('14 cells wide, 12 at normal widths, 10 when tight', () => {
+    expect(ctxBarCells(220)).toBe(14)
+    expect(ctxBarCells(160)).toBe(14)
+    expect(ctxBarCells(159)).toBe(12)
+    expect(ctxBarCells(120)).toBe(12)
+    expect(ctxBarCells(100)).toBe(12)
+    expect(ctxBarCells(99)).toBe(10)
+    expect(ctxBarCells(80)).toBe(10)
+    expect(ctxBarCells(0)).toBe(10) // degenerate input stays well-formed
   })
 })
 
@@ -213,72 +216,76 @@ function bar(store: SessionStore) {
   )
 }
 
-describe('StatusBar frames (responsive chrome)', () => {
-  test('WIDE (160) spreads into the two-line layout: vitals line + environment line', async () => {
-    const frame = await captureFrame(bar(seededStore()), { width: 160, height: 4 })
-    // every segment present…
-    expect(frame).toContain('claude-opus-4-8')
-    expect(frame).toContain('·high') // effort suffix
-    expect(frame).toContain('42%')
-    expect(frame).toContain('84k/200k') // wide ctx zone shows used/max tokens
-    expect(frame).toContain('░') // the meter is partially filled at 42%
-    expect(frame).toContain('$0.41')
-    expect(frame).toContain('cmp 2')
-    expect(frame).toContain('researcher') // profile badge
-    expect(frame).toContain('2 mcp')
-    expect(frame).toContain('/tmp/proj (main)')
-    expect(frame).toContain('│')
-    // …split across TWO lines: vitals (model + cost) up, environment (profile +
-    // cwd) below.
-    const rows = frame.split('\n')
-    const vitals = rows.findIndex(r => r.includes('claude-opus-4-8'))
-    const env = rows.findIndex(r => r.includes('researcher'))
-    expect(vitals).toBeGreaterThanOrEqual(0)
-    expect(env).toBe(vitals + 1)
-    expect(rows[vitals]).toContain('$0.41')
-    expect(rows[vitals]).toContain('42%')
-    expect(rows[env]).toContain('2 mcp')
-    expect(rows[env]).toContain('/tmp/proj (main)')
-  })
-
-  test('MEDIUM (120) keeps the dense single line (model and cwd share a row)', async () => {
-    const frame = await captureFrame(bar(seededStore()), { width: 120, height: 3 })
-    const rows = frame.split('\n')
+describe('StatusBar frames (one left-aligned labeled line)', () => {
+  test('WIDE (220) renders every labeled segment in order on ONE line, cwd last', async () => {
+    const frame = await captureFrame(bar(seededStore()), { width: 220, height: 4 })
+    const rows = frame.split('\n').filter(r => r.trim())
     const row = rows.find(r => r.includes('claude-opus-4-8')) ?? ''
+    // ONE line carries everything…
+    expect(row).toContain('·high') // effort suffix
+    expect(row).toContain('ctx: ') // labeled gauge
     expect(row).toContain('42%')
-    expect(row).toContain('$0.41')
+    expect(row).toContain('· 84k')
+    expect(row).toContain('█'.repeat(6)) // 42% of a 14-cell bar = 6 filled
+    expect(row).toContain('░')
+    expect(row).toContain('cost: $0.41')
+    expect(row).toContain('up: ')
+    expect(row).toContain('cmp: 2')
+    expect(row).toContain('researcher') // profile badge, plain
+    expect(row).toContain('mcp: 2')
     expect(row).toContain('/tmp/proj (main)')
+    expect(row).toContain('│')
+    // …in the v3 order: model → ctx → cost → up → cmp → profile → mcp → cwd
+    const order = ['claude-opus-4-8', 'ctx: ', 'cost: ', 'up: ', 'cmp: ', 'researcher', 'mcp: ', '/tmp/proj']
+    const positions = order.map(s => row.indexOf(s))
+    expect(positions.every(p => p >= 0)).toBe(true)
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions)
+    // …and no other row carries chrome: the bar never restacks to two lines.
+    expect(rows.filter(r => r.includes('│')).length).toBe(1)
   })
 
-  test('WIDE line 2 carries the agents-running count when subagents are live', async () => {
-    const store = seededStore()
-    store.apply({ payload: { goal: 'crunch data', subagent_id: 'sa1' }, type: 'subagent.start' })
-    const frame = await captureFrame(bar(store), { width: 160, height: 4 })
-    expect(frame).toContain('1 agent running')
-    const rows = frame.split('\n')
-    const env = rows.find(r => r.includes('researcher')) ?? ''
-    expect(env).toContain('1 agent running')
+  test('left-aligned: no right-pinned cwd — the row ends where the segments end', async () => {
+    const frame = await captureFrame(bar(seededStore()), { width: 220, height: 4 })
+    const row = frame.split('\n').find(r => r.includes('claude-opus-4-8')) ?? ''
+    // the cwd flows immediately after the mcp segment, not at the right edge:
+    // a 220-col row with a left-flowing tail has a long blank run after it.
+    expect(row.trimEnd().length).toBeLessThan(160)
   })
 
-  test('WIDE update notice rides line 2 (no line borrowing — segments stay)', async () => {
-    const store = seededStore()
-    store.applyInfo({ update_behind: 3, update_command: 'hermes update' })
-    const frame = await captureFrame(bar(store), { width: 200, height: 4 })
-    expect(frame).toContain('3 commits behind')
-    expect(frame).toContain('$0.41') // vitals NOT replaced in wide mode
-    expect(frame).toContain('claude-opus-4-8')
+  test('MEDIUM (120) keeps one labeled line; the cwd tail-truncates into the leftover budget', async () => {
+    const frame = await captureFrame(bar(seededStore()), { width: 120, height: 3 })
+    const rows = frame.split('\n').filter(r => r.trim())
+    const row = rows.find(r => r.includes('claude-opus-4-8')) ?? ''
+    expect(row).toContain('ctx: ')
+    expect(row).toContain('█'.repeat(5)) // 42% of a 12-cell bar = 5 filled
+    expect(row).toContain('cost: $0.41')
+    expect(row).toContain('cmp: 2')
+    expect(row).toContain('researcher')
+    expect(row).not.toContain('mcp:') // mcp dropped below 126 cols
+    expect(row).toContain('(main)') // cwd survives (tail-truncated)
+    expect(rows.filter(r => r.includes('│')).length).toBe(1) // still ONE line
   })
 
-  test('narrow width drops the tail (no mcp/profile/cost) and compacts the context read-out', async () => {
+  test('narrow (78) drops the tail whole (no cost/up/cmp/profile/mcp) and compacts the gauge', async () => {
+    const frame = await captureFrame(bar(seededStore()), { width: 78, height: 3 })
+    expect(frame).toContain('claude-opus-4-8') // pinned
+    expect(frame).toContain('ctx: ') // pinned, still labeled
+    expect(frame).toContain('42%')
+    expect(frame).toContain('█') // ctxDetail holds at ≥72
+    expect(frame).not.toContain('cost:')
+    expect(frame).not.toContain('up:')
+    expect(frame).not.toContain('cmp:')
+    expect(frame).not.toContain('researcher')
+    expect(frame).not.toContain('mcp:')
+  })
+
+  test('very narrow (70) collapses the gauge to a bare labeled percent', async () => {
     const frame = await captureFrame(bar(seededStore()), { width: 70, height: 3 })
     expect(frame).toContain('claude-opus-4-8') // pinned
-    expect(frame).toContain('42%') // pinned (compact)
+    expect(frame).toContain('ctx: 42%') // pinned (compact, still labeled)
     expect(frame).not.toContain('█') // bar detail dropped
     expect(frame).not.toContain('84k')
     expect(frame).not.toContain('$0.41')
-    expect(frame).not.toContain('cmp 2')
-    expect(frame).not.toContain('researcher')
-    expect(frame).not.toContain('mcp')
   })
 
   test('update notice borrows the line and Esc dismisses it back to the normal bar', async () => {

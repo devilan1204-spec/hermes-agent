@@ -14,12 +14,18 @@
  * interstitial narration text demotes to muted and only the FINAL text block
  * keeps the full-bright answer color (see `lastTextId`).
  *
- * Per-block copy (piece 2): every settled assistant text block and every user
- * prompt carries a quiet `⧉` chip at its top-right — muted chrome
- * (selectable=false) that disappears into the frame until wanted. Click →
- * copies that block's SOURCE text (the markdown source in the store, same as
- * `/copy` — not the concealed rendered text) via logic/blockCopy and flashes
- * "Copied" on the existing hint line.
+ * Per-block copy (piece 2, relocated in the chrome-v3 pass): every settled
+ * assistant text block and every user prompt carries a quiet `⧉ copy` run on
+ * its own line at the block's BOTTOM-LEFT — muted chrome (selectable=false)
+ * that disappears into the frame until wanted. Bottom-left because the old
+ * top-right chip sat in the scrollbar's column (the user's complaint); the
+ * left gutter belongs to the role glyph and is only 1 cell of click target,
+ * while a trailing `⧉ copy` line never overlaps the scrollbar, keeps a 6-cell
+ * click target, and reads as a quiet footer. Click → copies that block's
+ * SOURCE text (the markdown source in the store, same as `/copy` — not the
+ * concealed rendered text) via logic/blockCopy and flashes "Copied" on the
+ * existing hint line. /compact hides the chip line entirely — density mode
+ * sheds chrome rows first (`/copy` still covers whole-response copy there).
  *
  * Stable `id` per part as the <For> key so a new tool part below a streaming text
  * part doesn't remount it.
@@ -85,16 +91,19 @@ export function lastTextId(parts: readonly Part[] | undefined): string | undefin
 }
 
 /**
- * The quiet per-block copy chip — muted `⧉` chrome at a block's top-right.
- * Click copies the block's SOURCE (markdown source / prompt text) and flashes
- * "Copied". selectable=false: it must never ride along in a drag-selection.
+ * The quiet per-block copy chip — a muted `⧉ copy` run on its own line at the
+ * block's BOTTOM-LEFT (never the right edge: that column belongs to the
+ * scrollbar). `alignSelf: flex-start` shrinks the click target to the run
+ * itself (6 cells) instead of the whole row. Click copies the block's SOURCE
+ * (markdown source / prompt text) and flashes "Copied". selectable=false: it
+ * must never ride along in a drag-selection.
  */
 function CopyChip(props: { source: () => string }) {
   const theme = useTheme()
   return (
-    <box style={{ flexShrink: 0, marginLeft: 1 }} onMouseDown={() => copyBlock(props.source())}>
+    <box style={{ flexShrink: 0, alignSelf: 'flex-start' }} onMouseDown={() => copyBlock(props.source())}>
       <text selectable={false}>
-        <span style={{ fg: theme().color.muted }}>⧉</span>
+        <span style={{ fg: theme().color.muted }}>⧉ copy</span>
       </text>
     </box>
   )
@@ -147,15 +156,14 @@ export function MessageLine(props: { message: Message; latest?: boolean }) {
                 // themed selection: a solid muted/accent bar that preserves the
                 // text fg (no selectionFg → the original color shows through, so a
                 // highlight over content reads as a clean bar, not SGR-inverse).
-                // A quiet ⧉ chip trails the block (user prompts + settled
-                // assistant rows; system notes are chrome, nothing to copy).
-                <box style={{ flexDirection: 'row', flexShrink: 0 }}>
-                  <box style={{ flexGrow: 1, minWidth: 0 }}>
-                    <text selectionBg={theme().color.selectionBg}>
-                      <span style={{ fg: bodyFg() }}>{m().text}</span>
-                    </text>
-                  </box>
-                  <Show when={m().role !== 'system' && m().text.trim()}>
+                // A quiet ⧉ copy run sits bottom-left under the block (user
+                // prompts + settled assistant rows; system notes are chrome,
+                // nothing to copy) — never the right edge: scrollbar column.
+                <box style={{ flexDirection: 'column', flexShrink: 0 }}>
+                  <text selectionBg={theme().color.selectionBg}>
+                    <span style={{ fg: bodyFg() }}>{m().text}</span>
+                  </text>
+                  <Show when={m().role !== 'system' && m().text.trim() && !display().compact}>
                     <CopyChip source={() => m().text} />
                   </Show>
                 </box>
@@ -190,17 +198,16 @@ export function MessageLine(props: { message: Message; latest?: boolean }) {
                       tables natively (#3). Leading/trailing blanks stripped so the
                       column `gap` is the sole inter-part spacing (item 5).
                       Interstitial narration demotes to muted once settled; a
-                      quiet ⧉ copy chip sits at the settled block's top-right. */}
+                      quiet ⧉ copy run sits bottom-left under the settled block
+                      (off the scrollbar's right-edge column). */}
                   {t => (
-                    <box style={{ flexDirection: 'row', flexShrink: 0 }}>
-                      <box style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
-                        <Markdown
-                          text={t().text.replace(/^\n+|\n+$/g, '')}
-                          streaming={m().streaming ?? false}
-                          fg={textFg(t().id)}
-                        />
-                      </box>
-                      <Show when={!m().streaming}>
+                    <box style={{ flexDirection: 'column', flexShrink: 0 }}>
+                      <Markdown
+                        text={t().text.replace(/^\n+|\n+$/g, '')}
+                        streaming={m().streaming ?? false}
+                        fg={textFg(t().id)}
+                      />
+                      <Show when={!m().streaming && !display().compact}>
                         <CopyChip source={() => t().text} />
                       </Show>
                     </box>
