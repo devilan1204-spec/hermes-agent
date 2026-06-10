@@ -235,6 +235,91 @@ describe('bash tool renderer — command + full output (Epic 2.4)', () => {
   })
 })
 
+describe('file tool renderer — relative path + diff stats (Epic 2.3)', () => {
+  // NOTE: the EXPANDED native <diff> is deliberately untested here — like
+  // <markdown> it tokenizes via Tree-sitter ASYNCHRONOUSLY and may not settle
+  // in the headless renderer. The diff visuals belong to the live smoke; these
+  // tests pin the LOGIC surface (collapsed header, fallback body).
+  const DIFF = ['--- a/src/main.ts', '+++ b/src/main.ts', '@@ -1,3 +1,4 @@', ' ctx', '-old', '+new', '+more'].join('\n')
+
+  test('collapsed write_file shows the cwd-RELATIVE path and the themed +N −M stats', async () => {
+    const store = createSessionStore()
+    store.apply({ type: 'session.info', payload: { cwd: '/home/u/proj' } })
+    seedTool(
+      store,
+      { tool_id: 'f1', name: 'write_file', context: '/home/u/proj/src/main.ts' },
+      {
+        tool_id: 'f1',
+        name: 'write_file',
+        args: { path: '/home/u/proj/src/main.ts', content: 'new\nmore\n' },
+        diff_unified: DIFF + '\n',
+        duration_s: 0.1,
+        result: '{"success": true}'
+      }
+    )
+
+    const probe = await mountApp(store)
+    try {
+      const frame = await probe.waitForFrame(f => f.includes('write_file'))
+      expect(frame).toContain('src/main.ts') // relative to the session cwd…
+      expect(frame).not.toContain('/home/u/proj/src/main.ts') // …never absolute
+      expect(frame).toContain('+2') // added (excludes the +++ header)
+      expect(frame).toContain('−1') // removed (excludes the --- header)
+    } finally {
+      probe.destroy()
+    }
+  })
+
+  test('read_file gets NO diff body — expanded falls back to labeled fields + output', async () => {
+    const store = createSessionStore()
+    store.apply({ type: 'session.info', payload: { cwd: '/home/u/proj' } })
+    seedTool(
+      store,
+      { tool_id: 'f2', name: 'read_file' },
+      {
+        tool_id: 'f2',
+        name: 'read_file',
+        args: { path: '/home/u/proj/notes.md', limit: 50 },
+        result_text: '1|# Notes\n2|hello'
+      }
+    )
+
+    const probe = await mountApp(store)
+    try {
+      const collapsed = await probe.waitForFrame(f => f.includes('read_file'))
+      expect(collapsed).toContain('notes.md') // relpath subtitle
+      expect(collapsed).not.toContain('+0') // no diff → no stats summary
+
+      await clickHeader(probe, 'read_file')
+      const expanded = await probe.waitForFrame(f => f.includes('limit'))
+      expect(expanded).toContain('path') // default labeled fields…
+      expect(expanded).toContain('50')
+      expect(expanded).toContain('# Notes') // …and the output body
+      expect(expanded).not.toContain('@@') // never a diff
+    } finally {
+      probe.destroy()
+    }
+  })
+
+  test('store: tool.complete diff_unified lands on the part with computed stats', () => {
+    const store = createSessionStore()
+    seedTool(
+      store,
+      { tool_id: 'f3', name: 'patch' },
+      {
+        tool_id: 'f3',
+        name: 'patch',
+        args: { mode: 'replace', path: 'x.py' },
+        diff_unified: DIFF
+      }
+    )
+    const last = store.state.messages[store.state.messages.length - 1]
+    const part = last?.parts?.find((p): p is ToolPartState => p.type === 'tool' && p.id === 'f3')
+    expect(part?.diffUnified).toBe(DIFF)
+    expect(part?.diffStats).toEqual({ added: 2, removed: 1 })
+  })
+})
+
 describe('redaction precedence — gateway args_text wins over raw args (security)', () => {
   // The gateway redacts verbose `args_text` (server.py _tool_args_text) but
   // sends the raw `args` dict on tool.complete UNREDACTED. structuredArgs must

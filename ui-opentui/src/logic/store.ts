@@ -21,6 +21,7 @@ import {
   type CatalogDecoded,
   type SessionInfoPatchDecoded
 } from '../boundary/schema/SessionInfo.ts'
+import { diffStats, type DiffStats } from './diff.ts'
 import { stripAnsi, stripOmittedNote, stripToolEnvelope } from './toolOutput.ts'
 import { DEFAULT_THEME, type Theme, themeFromSkin } from './theme.ts'
 
@@ -46,6 +47,10 @@ export interface ToolPartState {
   duration?: number
   /** Tidy note when the gateway truncated output (e.g. "5 lines / 234 chars"). */
   omittedNote?: string
+  /** FULL raw unified diff from file-edit tools (gateway `diff_unified`, 512KB-capped). */
+  diffUnified?: string
+  /** `+N −M` line counts derived from diffUnified (collapsed header summary). */
+  diffStats?: DiffStats
 }
 
 /** One ordered piece of an assistant turn (§7). */
@@ -655,6 +660,9 @@ export function createSessionStore() {
         // when verbose `args_text` wasn't captured on start. `duration_s` → header.
         const argsObj = event.payload['args']
         const duration = readOptNum(event.payload, 'duration_s')
+        // FULL raw unified diff (file-edit tools; gateway caps at 512KB). Stats
+        // are computed once here, not per render.
+        const diffUnified = readStr(event.payload, 'diff_unified')
         setState(
           produce(draft => {
             let part = findToolPart(draft, id)
@@ -671,6 +679,10 @@ export function createSessionStore() {
             if (error) part.error = error
             if (duration !== undefined) part.duration = duration
             if (omittedNote) part.omittedNote = omittedNote
+            if (diffUnified) {
+              part.diffUnified = diffUnified
+              part.diffStats = diffStats(diffUnified)
+            }
             // argsPreview (from tool.start `context`) is intentionally NOT overwritten.
             if (argsObj && typeof argsObj === 'object') {
               // structured args feed the per-tool renderers (labeled fields, bash command).

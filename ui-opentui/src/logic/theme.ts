@@ -48,6 +48,13 @@ export interface ThemeColors {
   diffRemoved: string
   diffAddedWord: string
   diffRemovedWord: string
+  // Line backgrounds for the NATIVE `<diff>` renderable (file-tool renderer).
+  // Separate from the Ink-parity diffAdded/diffRemoved pair above: those are
+  // `rgb(…)` strings (Ink parses them; OpenTUI's parseColor only takes hex /
+  // CSS names / "transparent"), and they're pastel full-line fills tuned for
+  // Ink's fg-on-bg rendering — the native diff wants darker hex backgrounds.
+  diffAddedBg: string
+  diffRemovedBg: string
 
   shellDollar: string
 }
@@ -272,6 +279,8 @@ export const DARK_THEME: Theme = {
     diffRemoved: 'rgb(255,220,220)',
     diffAddedWord: 'rgb(36,138,61)',
     diffRemovedWord: 'rgb(207,34,46)',
+    diffAddedBg: '#1a4d1a',
+    diffRemovedBg: '#4d1a1a',
     shellDollar: '#4dabf7'
   },
   brand: BRAND,
@@ -312,6 +321,8 @@ export const LIGHT_THEME: Theme = {
     diffRemoved: 'rgb(240,200,200)',
     diffAddedWord: 'rgb(27,94,32)',
     diffRemovedWord: 'rgb(183,28,28)',
+    diffAddedBg: '#c8f0c8',
+    diffRemovedBg: '#f0c8c8',
     shellDollar: '#1565C0'
   },
   brand: BRAND,
@@ -467,6 +478,8 @@ export function fromSkin(
         diffRemoved: d.color.diffRemoved,
         diffAddedWord: d.color.diffAddedWord,
         diffRemovedWord: d.color.diffRemovedWord,
+        diffAddedBg: c('diff_added_bg') ?? d.color.diffAddedBg,
+        diffRemovedBg: c('diff_removed_bg') ?? d.color.diffRemovedBg,
         shellDollar: c('shell_dollar') ?? d.color.shellDollar
       },
 

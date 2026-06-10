@@ -20,6 +20,7 @@ import { createSignal, Show } from 'solid-js'
 
 import { truncate } from '../logic/toolOutput.ts'
 import { useScrollAnchor } from './scrollAnchor.tsx'
+import { useSessionInfo } from './sessionInfo.tsx'
 import { useTheme } from './theme.tsx'
 import { resultLines } from './tools/defaultTool.tsx'
 import { rendererFor } from './tools/registry.tsx'
@@ -37,6 +38,7 @@ function fmtDuration(s: number): string {
 export function ToolPart(props: { part: ToolPartState }) {
   const theme = useTheme()
   const dims = useDimensions()
+  const info = useSessionInfo() // session cwd for path-relativizing renderers
   const anchor = useScrollAnchor()
   const [expanded, setExpanded] = createSignal(false)
   const toggle = () => anchor(() => setExpanded(e => !e))
@@ -49,8 +51,10 @@ export function ToolPart(props: { part: ToolPartState }) {
   // Expandable when the renderer says there's a body to reveal beyond the header.
   const collapsible = () => !running() && renderer().expandable(props.part)
   // Header subtitle: errors win; otherwise the renderer's collapsed summary.
-  const subtitle = () => (props.part.error ? `✗ ${props.part.error}` : renderer().subtitle(props.part))
+  const subtitle = () => (props.part.error ? `✗ ${props.part.error}` : renderer().subtitle(props.part, info().cwd))
   const hint = () => renderer().hint?.(props.part)
+  // Optional `+N −M` change summary (file tools) — themed, settled parts only.
+  const stats = () => (running() || props.part.error ? undefined : renderer().stats?.(props.part))
 
   const headGlyph = () => (collapsible() ? (expanded() ? '▼' : '▶') : '⚡')
   // accent glyph MARKS the tool (draws the eye); the rest is muted so tools read
@@ -84,6 +88,16 @@ export function ToolPart(props: { part: ToolPartState }) {
                 {`  ${truncate(subtitle(), subWidth())}`}
               </span>
             </Show>
+            <Show when={stats()}>
+              {/* `+N −M` change summary (file tools) — added in the ok/added color,
+                  removed in the error/removed color (themed, never hardcoded). */}
+              {s => (
+                <>
+                  <span style={{ fg: theme().color.ok }}>{`  +${s().added}`}</span>
+                  <span style={{ fg: theme().color.error }}>{` −${s().removed}`}</span>
+                </>
+              )}
+            </Show>
             <Show when={hint()}>
               {/* per-tool muted hint (e.g. delegate_task's "(/agents to monitor)") —
                   shown while running too, Ink parity. */}
@@ -110,7 +124,7 @@ export function ToolPart(props: { part: ToolPartState }) {
         >
           {(() => {
             const Body = renderer().Body
-            return <Body part={props.part} width={bodyWidth() - 2} />
+            return <Body part={props.part} width={bodyWidth() - 2} cwd={info().cwd} />
           })()}
         </box>
       </Show>

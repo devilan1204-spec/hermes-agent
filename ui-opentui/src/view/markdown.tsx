@@ -51,7 +51,9 @@ function buildSyntaxStyle(theme: Theme): SyntaxStyle {
 }
 
 let cache: { theme: Theme; style: SyntaxStyle } | undefined
-function syntaxStyleFor(theme: Theme): SyntaxStyle {
+/** Theme-derived SyntaxStyle, cached by theme identity — shared with the
+ *  file-tool `<diff>` renderable (one instance per skin, same as markdown). */
+export function syntaxStyleFor(theme: Theme): SyntaxStyle {
   if (cache && cache.theme === theme) return cache.style
   const style = buildSyntaxStyle(theme)
   cache = { style, theme }
