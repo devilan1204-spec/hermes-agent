@@ -94,3 +94,14 @@ invocation used.
   bar has a 1Hz uptime clock; the transcript region itself is deterministic).
 - The headless `scripts/mem-bench.tsx` numbers are diagnostic-only and flagged
   `instrumented`/`diagnostic_only` — never headlined.
+
+## Build/run parity vs an installed hermes (audit, 2026-06-11)
+- Both UIs are built by their own repo build scripts (same artifacts an install produces) and
+  spawned at their real entries: otui `node --experimental-ffi --no-warnings dist/main.js`
+  (identical to production); ink `dist/entry.js` with env mirroring `_launch_tui`
+  (NODE_ENV=production).
+- Two deviations: (1) ink's spawn adds `--expose-gc` — audited: nothing ever calls gc(), the
+  flag is inert; kept for the instrumented sampler runs, harmless in clean runs. (2) both UIs
+  run on the pinned Node 26.3 per protocol ("never compare across Node majors") — installed ink
+  commonly runs Node 20/22, so ink's ABSOLUTE numbers are "ink on Node 26"; the relative
+  comparison is unaffected. An as-installed-Node ink re-run is a worthwhile extra cell.
