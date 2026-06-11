@@ -1,0 +1,895 @@
+{
+ "meta": {
+  "cell": "chaos",
+  "ui": "ink",
+  "config": "ink",
+  "mode": "chaos",
+  "rep": "gw-kill-stream",
+  "run_id": "mq8yh0ow-bj6k",
+  "utc": "2026-06-11T03:46:21.249Z",
+  "sha": "af1e4bb9a",
+  "node": "/home/daimon/.local/share/fnm/node-versions/v26.3.0/installation/bin/node",
+  "node_version": "v26.3.0",
+  "pty": {
+   "cols": 120,
+   "rows": 40,
+   "term": "xterm-256color"
+  },
+  "heap_mb": 8192,
+  "memory_max": "2G",
+  "container_cap": false,
+  "container_memory": null,
+  "opentui_cap": null,
+  "fixture": {
+   "path": "/home/daimon/github/worktrees/hermes-agent/lively-thrush/hermes-agent/bench/.cache/fixture-300.ndjson",
+   "msgs": 300,
+   "sha256": "ac81e975c299da7d50cfda7fc0fee33c356bd31a4e17a7f0f8e49905e205051a"
+  },
+  "sample_every": 25,
+  "mode_params": {
+   "flaps": 30,
+   "scenario": "gw-kill-stream",
+   "dieAt": "150:kill"
+  },
+  "ui_pid": 2797236,
+  "gw_pid": 2797266,
+  "cgroup": "/sys/fs/cgroup/user.slice/user-1001.slice/user@1001.service/app.slice/hermes-bench-mq8yh0ow-bj6k.scope",
+  "load_avg_at_start": [
+   0.15,
+   0.21,
+   0.25
+  ],
+  "instrumented": false
+ },
+ "samples": [
+  {
+   "kind": "periodic",
+   "t_ms": 52,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 0,
+   "pty_writes": 0,
+   "rss_kb": 57488,
+   "pss_kb": 31355,
+   "private_dirty_kb": 20064,
+   "vmhwm_kb": 57488,
+   "utime_ticks": 2,
+   "stime_ticks": 1,
+   "cg_current": 21925888,
+   "cg_peak": 22122496,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 1063,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 6601,
+   "pty_writes": 12,
+   "rss_kb": 106968,
+   "pss_kb": 68061,
+   "private_dirty_kb": 48168,
+   "vmhwm_kb": 106968,
+   "utime_ticks": 24,
+   "stime_ticks": 2,
+   "cg_current": 62205952,
+   "cg_peak": 63172608,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1740,
+   "msgs": 25,
+   "events": 90,
+   "pty_bytes": 6646,
+   "pty_writes": 13,
+   "rss_kb": 111160,
+   "pss_kb": 72184,
+   "private_dirty_kb": 51700,
+   "vmhwm_kb": 111172,
+   "utime_ticks": 27,
+   "stime_ticks": 2,
+   "cg_current": 68341760,
+   "cg_peak": 68603904,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1741,
+   "msgs": 51,
+   "events": 169,
+   "pty_bytes": 6646,
+   "pty_writes": 13,
+   "rss_kb": 111416,
+   "pss_kb": 72440,
+   "private_dirty_kb": 51956,
+   "vmhwm_kb": 111424,
+   "utime_ticks": 27,
+   "stime_ticks": 2,
+   "cg_current": 68431872,
+   "cg_peak": 68694016,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1742,
+   "msgs": 76,
+   "events": 261,
+   "pty_bytes": 6646,
+   "pty_writes": 13,
+   "rss_kb": 111660,
+   "pss_kb": 72684,
+   "private_dirty_kb": 52200,
+   "vmhwm_kb": 111676,
+   "utime_ticks": 27,
+   "stime_ticks": 2,
+   "cg_current": 68956160,
+   "cg_peak": 68956160,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1764,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 10116,
+   "pty_writes": 15,
+   "rss_kb": 123580,
+   "pss_kb": 84476,
+   "private_dirty_kb": 63864,
+   "vmhwm_kb": 123716,
+   "utime_ticks": 32,
+   "stime_ticks": 2,
+   "cg_current": 82059264,
+   "cg_peak": 82059264,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1766,
+   "msgs": 125,
+   "events": 434,
+   "pty_bytes": 10116,
+   "pty_writes": 15,
+   "rss_kb": 123836,
+   "pss_kb": 84732,
+   "private_dirty_kb": 64120,
+   "vmhwm_kb": 124124,
+   "utime_ticks": 32,
+   "stime_ticks": 2,
+   "cg_current": 82583552,
+   "cg_peak": 82583552,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1789,
+   "msgs": 151,
+   "events": 521,
+   "pty_bytes": 14298,
+   "pty_writes": 17,
+   "rss_kb": 132920,
+   "pss_kb": 96860,
+   "private_dirty_kb": 73076,
+   "vmhwm_kb": 132936,
+   "utime_ticks": 37,
+   "stime_ticks": 3,
+   "cg_current": 78594048,
+   "cg_peak": 84942848,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 2067,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 28162,
+   "pty_writes": 24,
+   "rss_kb": 160612,
+   "pss_kb": 121428,
+   "private_dirty_kb": 100704,
+   "vmhwm_kb": 160612,
+   "utime_ticks": 46,
+   "stime_ticks": 4,
+   "cg_current": 117395456,
+   "cg_peak": 117862400,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 3072,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 53544,
+   "pty_writes": 38,
+   "rss_kb": 162876,
+   "pss_kb": 123662,
+   "private_dirty_kb": 102908,
+   "vmhwm_kb": 162876,
+   "utime_ticks": 52,
+   "stime_ticks": 5,
+   "cg_current": 119590912,
+   "cg_peak": 120819712,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3373,
+   "msgs": 25,
+   "events": 90,
+   "pty_bytes": 57809,
+   "pty_writes": 41,
+   "rss_kb": 165044,
+   "pss_kb": 125740,
+   "private_dirty_kb": 105012,
+   "vmhwm_kb": 165124,
+   "utime_ticks": 57,
+   "stime_ticks": 5,
+   "cg_current": 125566976,
+   "cg_peak": 125566976,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3375,
+   "msgs": 51,
+   "events": 169,
+   "pty_bytes": 57809,
+   "pty_writes": 41,
+   "rss_kb": 165144,
+   "pss_kb": 125840,
+   "private_dirty_kb": 105112,
+   "vmhwm_kb": 165396,
+   "utime_ticks": 57,
+   "stime_ticks": 5,
+   "cg_current": 126091264,
+   "cg_peak": 126091264,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3375,
+   "msgs": 76,
+   "events": 261,
+   "pty_bytes": 57809,
+   "pty_writes": 41,
+   "rss_kb": 165396,
+   "pss_kb": 126092,
+   "private_dirty_kb": 105364,
+   "vmhwm_kb": 165396,
+   "utime_ticks": 57,
+   "stime_ticks": 5,
+   "cg_current": 126091264,
+   "cg_peak": 126091264,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3376,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 57809,
+   "pty_writes": 41,
+   "rss_kb": 165552,
+   "pss_kb": 126248,
+   "private_dirty_kb": 105520,
+   "vmhwm_kb": 165672,
+   "utime_ticks": 57,
+   "stime_ticks": 5,
+   "cg_current": 126353408,
+   "cg_peak": 126353408,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3377,
+   "msgs": 125,
+   "events": 434,
+   "pty_bytes": 57809,
+   "pty_writes": 41,
+   "rss_kb": 165816,
+   "pss_kb": 126512,
+   "private_dirty_kb": 105784,
+   "vmhwm_kb": 165840,
+   "utime_ticks": 57,
+   "stime_ticks": 5,
+   "cg_current": 126353408,
+   "cg_peak": 126353408,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3377,
+   "msgs": 151,
+   "events": 521,
+   "pty_bytes": 57809,
+   "pty_writes": 41,
+   "rss_kb": 165948,
+   "pss_kb": 126644,
+   "private_dirty_kb": 105916,
+   "vmhwm_kb": 166092,
+   "utime_ticks": 57,
+   "stime_ticks": 5,
+   "cg_current": 126615552,
+   "cg_peak": 126615552,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3378,
+   "msgs": 176,
+   "events": 631,
+   "pty_bytes": 57809,
+   "pty_writes": 41,
+   "rss_kb": 166212,
+   "pss_kb": 126908,
+   "private_dirty_kb": 106180,
+   "vmhwm_kb": 166216,
+   "utime_ticks": 58,
+   "stime_ticks": 5,
+   "cg_current": 126877696,
+   "cg_peak": 126877696,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3399,
+   "msgs": 200,
+   "events": 738,
+   "pty_bytes": 62124,
+   "pty_writes": 43,
+   "rss_kb": 176636,
+   "pss_kb": 137311,
+   "private_dirty_kb": 116604,
+   "vmhwm_kb": 176724,
+   "utime_ticks": 62,
+   "stime_ticks": 5,
+   "cg_current": 137777152,
+   "cg_peak": 137777152,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3401,
+   "msgs": 225,
+   "events": 812,
+   "pty_bytes": 62124,
+   "pty_writes": 43,
+   "rss_kb": 177124,
+   "pss_kb": 137799,
+   "private_dirty_kb": 117092,
+   "vmhwm_kb": 177216,
+   "utime_ticks": 62,
+   "stime_ticks": 5,
+   "cg_current": 138190848,
+   "cg_peak": 138190848,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3422,
+   "msgs": 251,
+   "events": 913,
+   "pty_bytes": 66258,
+   "pty_writes": 45,
+   "rss_kb": 173628,
+   "pss_kb": 134303,
+   "private_dirty_kb": 113596,
+   "vmhwm_kb": 179400,
+   "utime_ticks": 67,
+   "stime_ticks": 6,
+   "cg_current": 134746112,
+   "cg_peak": 141537280,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3424,
+   "msgs": 276,
+   "events": 992,
+   "pty_bytes": 66258,
+   "pty_writes": 45,
+   "rss_kb": 173828,
+   "pss_kb": 134503,
+   "private_dirty_kb": 113796,
+   "vmhwm_kb": 179400,
+   "utime_ticks": 67,
+   "stime_ticks": 6,
+   "cg_current": 134746112,
+   "cg_peak": 141537280,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3424,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 66258,
+   "pty_writes": 45,
+   "rss_kb": 173832,
+   "pss_kb": 134507,
+   "private_dirty_kb": 113800,
+   "vmhwm_kb": 179400,
+   "utime_ticks": 67,
+   "stime_ticks": 6,
+   "cg_current": 134746112,
+   "cg_peak": 141537280,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "done",
+   "t_ms": 3425,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 66258,
+   "pty_writes": 45,
+   "rss_kb": 173832,
+   "pss_kb": 134507,
+   "private_dirty_kb": 113800,
+   "vmhwm_kb": 179400,
+   "utime_ticks": 67,
+   "stime_ticks": 6,
+   "cg_current": 134746112,
+   "cg_peak": 141537280,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 4079,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 78013,
+   "pty_writes": 50,
+   "rss_kb": 200204,
+   "pss_kb": 160874,
+   "private_dirty_kb": 140172,
+   "vmhwm_kb": 200204,
+   "utime_ticks": 79,
+   "stime_ticks": 7,
+   "cg_current": 161730560,
+   "cg_peak": 162324480,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "final",
+   "t_ms": 4664,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 78013,
+   "pty_writes": 50,
+   "rss_kb": 200204,
+   "pss_kb": 160874,
+   "private_dirty_kb": 140172,
+   "vmhwm_kb": 200204,
+   "utime_ticks": 79,
+   "stime_ticks": 7,
+   "cg_current": 161730560,
+   "cg_peak": 162324480,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 5084,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 88694,
+   "pty_writes": 57,
+   "rss_kb": 203104,
+   "pss_kb": 163774,
+   "private_dirty_kb": 143072,
+   "vmhwm_kb": 203104,
+   "utime_ticks": 81,
+   "stime_ticks": 7,
+   "cg_current": 165236736,
+   "cg_peak": 165236736,
+   "cg_oom_kill": 0
+  }
+ ],
+ "events": [
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 204
+  },
+  {
+   "kind": "rpc",
+   "method": "commands.catalog",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "setup.status",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "session.create",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 229
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 254
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1742
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1763
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 1763
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1766
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1788
+  },
+  {
+   "kind": "gw-dying",
+   "die_kind": "kill",
+   "msgs": 151,
+   "t_ms": 1789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "commands.catalog",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "setup.status",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "session.resume",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2090
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2090
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 2190
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2265
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2441
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2441
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 2542
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2617
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3375
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 3375
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3377
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3377
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3378
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3395
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3425
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3470
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3470
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4679
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4679
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 4780
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4830
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 4855
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5031
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5031
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5132
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5182
+  }
+ ],
+ "summary": {
+  "result": "completed",
+  "cap_hit": false,
+  "cap_hit_basis": null,
+  "at_messages": null,
+  "exit": {
+   "exitCode": 0,
+   "signal": 0,
+   "t": 5926
+  },
+  "stream_done": true,
+  "msgs_streamed": 300,
+  "events_streamed": 1051,
+  "pty_bytes_total": 92527,
+  "pty_data_callbacks": 72,
+  "first_byte_ms": 85,
+  "session_create_ms": 229,
+  "stream_start_ms": 1738,
+  "vmhwm_kb": 203104,
+  "cg_peak": 165236736,
+  "drain_max_loop_lag_ms": 7,
+  "drain_lag_violations": 0,
+  "drain_ok": true,
+  "digest": null,
+  "chaos": {
+   "scenario": "gw-kill-stream",
+   "kill_seen": true,
+   "pre_kill_code_idx": 44,
+   "died_at_msgs": 151,
+   "first_gw_pid": 2797244,
+   "transcript_preserved": true,
+   "post_kill_screen_sha": "02df1050c3aa49f66f5db881f12ea3e95b928c2b6d8841e4fb402a5f28d5c1ca",
+   "post_kill_screen_chars": 3288,
+   "gateway_respawned": true,
+   "respawn_gw_pid": 2797266,
+   "time_to_respawn_ms": 87,
+   "stream_resumed": true,
+   "final_screen_sha": "7775bee02e57da2be0f73880cfe828666f51e08209a28ba81ec599817b95eb2c",
+   "final_screen_code_idx": 140,
+   "final_screen_has_fixture": true,
+   "ui_survived": true,
+   "orphans": [],
+   "ui_exit": {
+    "exitCode": 0,
+    "signal": 0,
+    "t": 5926
+   }
+  }
+ }
+}

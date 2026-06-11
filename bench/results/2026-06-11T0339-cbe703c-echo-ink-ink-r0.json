@@ -1,0 +1,1024 @@
+{
+ "meta": {
+  "cell": "echo",
+  "ui": "ink",
+  "config": "ink",
+  "mode": "echo",
+  "rep": 0,
+  "run_id": "mq8y83ho-2313",
+  "utc": "2026-06-11T03:39:24.972Z",
+  "sha": "cbe703cf4",
+  "node": "/home/daimon/.local/share/fnm/node-versions/v26.3.0/installation/bin/node",
+  "node_version": "v26.3.0",
+  "pty": {
+   "cols": 120,
+   "rows": 40,
+   "term": "xterm-256color"
+  },
+  "heap_mb": 8192,
+  "memory_max": "2G",
+  "container_cap": false,
+  "container_memory": null,
+  "opentui_cap": null,
+  "fixture": {
+   "path": "/home/daimon/github/worktrees/hermes-agent/lively-thrush/hermes-agent/bench/.cache/fixture-100.ndjson",
+   "msgs": 100,
+   "sha256": "0c583ebe8dd97aecb72cc947ae3fe83dc85539c87e8d70d17fb8994117d37a44"
+  },
+  "sample_every": 100,
+  "mode_params": {},
+  "ui_pid": 2789132,
+  "gw_pid": 2789154,
+  "cgroup": "/sys/fs/cgroup/user.slice/user-1001.slice/user@1001.service/app.slice/hermes-bench-mq8y83ho-2313.scope",
+  "load_avg_at_start": [
+   0.3,
+   0.41,
+   0.33
+  ],
+  "instrumented": false
+ },
+ "samples": [
+  {
+   "kind": "periodic",
+   "t_ms": 53,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 0,
+   "pty_writes": 0,
+   "rss_kb": 57512,
+   "pss_kb": 31359,
+   "private_dirty_kb": 20068,
+   "vmhwm_kb": 57524,
+   "utime_ticks": 3,
+   "stime_ticks": 0,
+   "cg_current": 22122496,
+   "cg_peak": 22134784,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 1056,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 6607,
+   "pty_writes": 11,
+   "rss_kb": 108716,
+   "pss_kb": 69574,
+   "private_dirty_kb": 49500,
+   "vmhwm_kb": 108716,
+   "utime_ticks": 24,
+   "stime_ticks": 2,
+   "cg_current": 63598592,
+   "cg_peak": 64454656,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1758,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 10461,
+   "pty_writes": 13,
+   "rss_kb": 122524,
+   "pss_kb": 83276,
+   "private_dirty_kb": 62584,
+   "vmhwm_kb": 122568,
+   "utime_ticks": 30,
+   "stime_ticks": 2,
+   "cg_current": 79675392,
+   "cg_peak": 79675392,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "done",
+   "t_ms": 1760,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 10461,
+   "pty_writes": 13,
+   "rss_kb": 122636,
+   "pss_kb": 83388,
+   "private_dirty_kb": 62696,
+   "vmhwm_kb": 122784,
+   "utime_ticks": 31,
+   "stime_ticks": 2,
+   "cg_current": 79937536,
+   "cg_peak": 79937536,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 2060,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 22621,
+   "pty_writes": 18,
+   "rss_kb": 182096,
+   "pss_kb": 142848,
+   "private_dirty_kb": 122156,
+   "vmhwm_kb": 182096,
+   "utime_ticks": 48,
+   "stime_ticks": 4,
+   "cg_current": 141291520,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "final",
+   "t_ms": 3041,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 22666,
+   "pty_writes": 19,
+   "rss_kb": 175900,
+   "pss_kb": 136652,
+   "private_dirty_kb": 115960,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 49,
+   "stime_ticks": 4,
+   "cg_current": 134918144,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 3068,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 22694,
+   "pty_writes": 20,
+   "rss_kb": 175984,
+   "pss_kb": 136736,
+   "private_dirty_kb": 116044,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 49,
+   "stime_ticks": 4,
+   "cg_current": 135704576,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 4076,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 22797,
+   "pty_writes": 25,
+   "rss_kb": 176008,
+   "pss_kb": 136760,
+   "private_dirty_kb": 116068,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 50,
+   "stime_ticks": 4,
+   "cg_current": 135823360,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 5081,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 22900,
+   "pty_writes": 30,
+   "rss_kb": 176056,
+   "pss_kb": 136808,
+   "private_dirty_kb": 116116,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 51,
+   "stime_ticks": 4,
+   "cg_current": 135356416,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 6083,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23005,
+   "pty_writes": 35,
+   "rss_kb": 176132,
+   "pss_kb": 136884,
+   "private_dirty_kb": 116192,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 52,
+   "stime_ticks": 4,
+   "cg_current": 135229440,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 7094,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23113,
+   "pty_writes": 40,
+   "rss_kb": 176288,
+   "pss_kb": 137040,
+   "private_dirty_kb": 116348,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 52,
+   "stime_ticks": 4,
+   "cg_current": 135659520,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 8101,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23221,
+   "pty_writes": 45,
+   "rss_kb": 176308,
+   "pss_kb": 137060,
+   "private_dirty_kb": 116368,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 53,
+   "stime_ticks": 4,
+   "cg_current": 135442432,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 9103,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23329,
+   "pty_writes": 50,
+   "rss_kb": 176396,
+   "pss_kb": 137148,
+   "private_dirty_kb": 116456,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 54,
+   "stime_ticks": 4,
+   "cg_current": 135815168,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 10108,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23437,
+   "pty_writes": 55,
+   "rss_kb": 176416,
+   "pss_kb": 137168,
+   "private_dirty_kb": 116476,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 54,
+   "stime_ticks": 4,
+   "cg_current": 135950336,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 11110,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23564,
+   "pty_writes": 60,
+   "rss_kb": 176428,
+   "pss_kb": 137180,
+   "private_dirty_kb": 116488,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 55,
+   "stime_ticks": 4,
+   "cg_current": 135962624,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 12115,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23672,
+   "pty_writes": 65,
+   "rss_kb": 176436,
+   "pss_kb": 137188,
+   "private_dirty_kb": 116496,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 55,
+   "stime_ticks": 4,
+   "cg_current": 135970816,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 13122,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23780,
+   "pty_writes": 70,
+   "rss_kb": 176464,
+   "pss_kb": 137216,
+   "private_dirty_kb": 116524,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 56,
+   "stime_ticks": 4,
+   "cg_current": 135999488,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 14127,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23888,
+   "pty_writes": 75,
+   "rss_kb": 160372,
+   "pss_kb": 121124,
+   "private_dirty_kb": 100432,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 57,
+   "stime_ticks": 4,
+   "cg_current": 118947840,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 15139,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 23996,
+   "pty_writes": 80,
+   "rss_kb": 160380,
+   "pss_kb": 121132,
+   "private_dirty_kb": 100440,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 57,
+   "stime_ticks": 4,
+   "cg_current": 118960128,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 16149,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 24104,
+   "pty_writes": 85,
+   "rss_kb": 160388,
+   "pss_kb": 121140,
+   "private_dirty_kb": 100448,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 58,
+   "stime_ticks": 4,
+   "cg_current": 118968320,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 17161,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 24212,
+   "pty_writes": 90,
+   "rss_kb": 160412,
+   "pss_kb": 121164,
+   "private_dirty_kb": 100476,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 58,
+   "stime_ticks": 4,
+   "cg_current": 118992896,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 18177,
+   "msgs": 100,
+   "events": null,
+   "pty_bytes": 31863,
+   "pty_writes": 98,
+   "rss_kb": 162284,
+   "pss_kb": 123036,
+   "private_dirty_kb": 102348,
+   "vmhwm_kb": 181520,
+   "utime_ticks": 63,
+   "stime_ticks": 5,
+   "cg_current": 121417728,
+   "cg_peak": 141959168,
+   "cg_oom_kill": 0
+  }
+ ],
+ "events": [
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 203
+  },
+  {
+   "kind": "rpc",
+   "method": "commands.catalog",
+   "t_ms": 203
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 228
+  },
+  {
+   "kind": "rpc",
+   "method": "setup.status",
+   "t_ms": 228
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 228
+  },
+  {
+   "kind": "rpc",
+   "method": "session.create",
+   "t_ms": 228
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 228
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 228
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 253
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 253
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 253
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 253
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 253
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1732
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1757
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 1757
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1760
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1782
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1782
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1808
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1832
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1832
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1857
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1857
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3066
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3066
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 3267
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3572
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3572
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4074
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4074
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4577
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4577
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 4752
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5079
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5079
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5229
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5579
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5579
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6081
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6081
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 6257
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6585
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6585
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7067
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7067
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7570
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7570
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 7770
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 8074
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 8074
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 8574
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 8574
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 9076
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 9076
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 9251
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 9579
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 9579
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 10081
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 10081
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 10231
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 10581
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 10581
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 10757
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 11083
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 11083
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 11584
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 11584
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 12063
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 12089
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 12265
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 12566
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 12566
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 13070
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 13070
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 13574
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 13574
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 13749
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 14075
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 14075
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 14578
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 14578
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 15088
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 15088
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 15238
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 15264
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 15567
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 15567
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 16071
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 16071
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 16578
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 16578
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 16755
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17084
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17084
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17568
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17568
+  },
+  {
+   "kind": "rpc",
+   "method": "input.detect_drop",
+   "t_ms": 18050
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 18050
+  },
+  {
+   "kind": "rpc",
+   "method": "prompt.submit",
+   "t_ms": 18050
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 18050
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 18075
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 18075
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 18101
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 18101
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 18101
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 18251
+  }
+ ],
+ "summary": {
+  "result": "completed",
+  "cap_hit": false,
+  "cap_hit_basis": null,
+  "at_messages": null,
+  "exit": {
+   "exitCode": 0,
+   "signal": 0,
+   "t": 18752
+  },
+  "stream_done": true,
+  "msgs_streamed": 100,
+  "events_streamed": 355,
+  "pty_bytes_total": 32089,
+  "pty_data_callbacks": 100,
+  "first_byte_ms": 80,
+  "session_create_ms": 228,
+  "stream_start_ms": 1732,
+  "vmhwm_kb": 181520,
+  "cg_peak": 141959168,
+  "drain_max_loop_lag_ms": 3,
+  "drain_lag_violations": 0,
+  "drain_ok": true,
+  "digest": null,
+  "echo": {
+   "keystrokes_sent": 30,
+   "keystrokes_matched": 30,
+   "echo_ms": {
+    "p50": 1,
+    "p95": 1.5499999999999972,
+    "p99": 4.130000000000003
+   },
+   "first_chunk_ms": {
+    "p50": 1,
+    "p95": 1.5499999999999972
+   },
+   "submit_first_token_paint_ms": 44,
+   "latencies_ms": [
+    5,
+    1,
+    1,
+    1,
+    0,
+    1,
+    2,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    1
+   ]
+  }
+ }
+}

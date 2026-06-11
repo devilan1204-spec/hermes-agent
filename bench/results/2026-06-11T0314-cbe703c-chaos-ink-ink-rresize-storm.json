@@ -1,0 +1,1808 @@
+{
+ "meta": {
+  "cell": "chaos",
+  "ui": "ink",
+  "config": "ink",
+  "mode": "chaos",
+  "rep": "resize-storm",
+  "run_id": "mq8xcnmx-498v",
+  "utc": "2026-06-11T03:14:58.089Z",
+  "sha": "cbe703cf4",
+  "node": "/home/daimon/.local/share/fnm/node-versions/v26.3.0/installation/bin/node",
+  "node_version": "v26.3.0",
+  "pty": {
+   "cols": 120,
+   "rows": 40,
+   "term": "xterm-256color"
+  },
+  "heap_mb": 8192,
+  "memory_max": "2G",
+  "container_cap": false,
+  "container_memory": null,
+  "opentui_cap": null,
+  "fixture": {
+   "path": "/home/daimon/github/worktrees/hermes-agent/lively-thrush/hermes-agent/bench/.cache/fixture-300.ndjson",
+   "msgs": 300,
+   "sha256": "ac81e975c299da7d50cfda7fc0fee33c356bd31a4e17a7f0f8e49905e205051a"
+  },
+  "sample_every": 25,
+  "mode_params": {
+   "flaps": 30,
+   "scenario": "resize-storm"
+  },
+  "ui_pid": 2764259,
+  "gw_pid": 2764267,
+  "cgroup": "/sys/fs/cgroup/user.slice/user-1001.slice/session-7421.scope",
+  "load_avg_at_start": [
+   0.25,
+   0.26,
+   0.26
+  ],
+  "instrumented": false
+ },
+ "samples": [
+  {
+   "kind": "periodic",
+   "t_ms": 25,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 0,
+   "pty_writes": 0,
+   "rss_kb": 31292,
+   "pss_kb": 13058,
+   "private_dirty_kb": 5692,
+   "vmhwm_kb": 31316,
+   "utime_ticks": 0,
+   "stime_ticks": 0,
+   "cg_current": 1424306176,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 1036,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 6602,
+   "pty_writes": 9,
+   "rss_kb": 109952,
+   "pss_kb": 69839,
+   "private_dirty_kb": 50764,
+   "vmhwm_kb": 109952,
+   "utime_ticks": 23,
+   "stime_ticks": 3,
+   "cg_current": 1425293312,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1714,
+   "msgs": 25,
+   "events": 90,
+   "pty_bytes": 6647,
+   "pty_writes": 10,
+   "rss_kb": 110788,
+   "pss_kb": 70654,
+   "private_dirty_kb": 51600,
+   "vmhwm_kb": 110788,
+   "utime_ticks": 24,
+   "stime_ticks": 3,
+   "cg_current": 1425444864,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1715,
+   "msgs": 51,
+   "events": 169,
+   "pty_bytes": 6647,
+   "pty_writes": 10,
+   "rss_kb": 110868,
+   "pss_kb": 70734,
+   "private_dirty_kb": 51680,
+   "vmhwm_kb": 110872,
+   "utime_ticks": 24,
+   "stime_ticks": 3,
+   "cg_current": 1425444864,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1716,
+   "msgs": 76,
+   "events": 261,
+   "pty_bytes": 6647,
+   "pty_writes": 10,
+   "rss_kb": 110904,
+   "pss_kb": 70770,
+   "private_dirty_kb": 51716,
+   "vmhwm_kb": 110916,
+   "utime_ticks": 24,
+   "stime_ticks": 3,
+   "cg_current": 1425444864,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1767,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 10281,
+   "pty_writes": 12,
+   "rss_kb": 126696,
+   "pss_kb": 86530,
+   "private_dirty_kb": 66784,
+   "vmhwm_kb": 126844,
+   "utime_ticks": 32,
+   "stime_ticks": 3,
+   "cg_current": 1427316736,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1768,
+   "msgs": 125,
+   "events": 434,
+   "pty_bytes": 10281,
+   "pty_writes": 12,
+   "rss_kb": 126844,
+   "pss_kb": 86678,
+   "private_dirty_kb": 66932,
+   "vmhwm_kb": 126848,
+   "utime_ticks": 32,
+   "stime_ticks": 3,
+   "cg_current": 1427316736,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1791,
+   "msgs": 151,
+   "events": 521,
+   "pty_bytes": 14408,
+   "pty_writes": 14,
+   "rss_kb": 132856,
+   "pss_kb": 92669,
+   "private_dirty_kb": 72944,
+   "vmhwm_kb": 133088,
+   "utime_ticks": 36,
+   "stime_ticks": 4,
+   "cg_current": 1427116032,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1792,
+   "msgs": 176,
+   "events": 631,
+   "pty_bytes": 14408,
+   "pty_writes": 14,
+   "rss_kb": 133440,
+   "pss_kb": 93253,
+   "private_dirty_kb": 73528,
+   "vmhwm_kb": 133500,
+   "utime_ticks": 36,
+   "stime_ticks": 4,
+   "cg_current": 1427116032,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1841,
+   "msgs": 200,
+   "events": 738,
+   "pty_bytes": 20890,
+   "pty_writes": 16,
+   "rss_kb": 167060,
+   "pss_kb": 126825,
+   "private_dirty_kb": 107084,
+   "vmhwm_kb": 167076,
+   "utime_ticks": 44,
+   "stime_ticks": 5,
+   "cg_current": 1426690048,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1843,
+   "msgs": 225,
+   "events": 812,
+   "pty_bytes": 20890,
+   "pty_writes": 16,
+   "rss_kb": 167192,
+   "pss_kb": 126957,
+   "private_dirty_kb": 107216,
+   "vmhwm_kb": 167196,
+   "utime_ticks": 44,
+   "stime_ticks": 5,
+   "cg_current": 1426690048,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1843,
+   "msgs": 251,
+   "events": 913,
+   "pty_bytes": 20890,
+   "pty_writes": 16,
+   "rss_kb": 167324,
+   "pss_kb": 127089,
+   "private_dirty_kb": 107348,
+   "vmhwm_kb": 167372,
+   "utime_ticks": 44,
+   "stime_ticks": 5,
+   "cg_current": 1426690048,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1844,
+   "msgs": 276,
+   "events": 992,
+   "pty_bytes": 20890,
+   "pty_writes": 16,
+   "rss_kb": 167464,
+   "pss_kb": 127229,
+   "private_dirty_kb": 107488,
+   "vmhwm_kb": 167624,
+   "utime_ticks": 44,
+   "stime_ticks": 5,
+   "cg_current": 1426690048,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1844,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 20890,
+   "pty_writes": 16,
+   "rss_kb": 167728,
+   "pss_kb": 127493,
+   "private_dirty_kb": 107752,
+   "vmhwm_kb": 167876,
+   "utime_ticks": 44,
+   "stime_ticks": 5,
+   "cg_current": 1426690048,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "done",
+   "t_ms": 1845,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 20890,
+   "pty_writes": 16,
+   "rss_kb": 167992,
+   "pss_kb": 127757,
+   "private_dirty_kb": 108016,
+   "vmhwm_kb": 168136,
+   "utime_ticks": 44,
+   "stime_ticks": 5,
+   "cg_current": 1426690048,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 2043,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 32073,
+   "pty_writes": 23,
+   "rss_kb": 178492,
+   "pss_kb": 138257,
+   "private_dirty_kb": 118516,
+   "vmhwm_kb": 187120,
+   "utime_ticks": 58,
+   "stime_ticks": 6,
+   "cg_current": 1404801024,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 3047,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 35632,
+   "pty_writes": 26,
+   "rss_kb": 179000,
+   "pss_kb": 138765,
+   "private_dirty_kb": 119024,
+   "vmhwm_kb": 187120,
+   "utime_ticks": 60,
+   "stime_ticks": 6,
+   "cg_current": 1371648000,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 4052,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 46342,
+   "pty_writes": 32,
+   "rss_kb": 180192,
+   "pss_kb": 139957,
+   "private_dirty_kb": 120216,
+   "vmhwm_kb": 187120,
+   "utime_ticks": 64,
+   "stime_ticks": 6,
+   "cg_current": 1378271232,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 5063,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 71659,
+   "pty_writes": 57,
+   "rss_kb": 199724,
+   "pss_kb": 159489,
+   "private_dirty_kb": 139748,
+   "vmhwm_kb": 206804,
+   "utime_ticks": 83,
+   "stime_ticks": 8,
+   "cg_current": 1376296960,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 6065,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 102136,
+   "pty_writes": 88,
+   "rss_kb": 206596,
+   "pss_kb": 166361,
+   "private_dirty_kb": 146620,
+   "vmhwm_kb": 206804,
+   "utime_ticks": 94,
+   "stime_ticks": 9,
+   "cg_current": 1376366592,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 7067,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 127906,
+   "pty_writes": 119,
+   "rss_kb": 213308,
+   "pss_kb": 173073,
+   "private_dirty_kb": 153332,
+   "vmhwm_kb": 213308,
+   "utime_ticks": 105,
+   "stime_ticks": 9,
+   "cg_current": 1376100352,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 8074,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 136621,
+   "pty_writes": 127,
+   "rss_kb": 214856,
+   "pss_kb": 174621,
+   "private_dirty_kb": 154880,
+   "vmhwm_kb": 214856,
+   "utime_ticks": 107,
+   "stime_ticks": 9,
+   "cg_current": 1376350208,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 9080,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 136666,
+   "pty_writes": 128,
+   "rss_kb": 214856,
+   "pss_kb": 174621,
+   "private_dirty_kb": 154880,
+   "vmhwm_kb": 214856,
+   "utime_ticks": 107,
+   "stime_ticks": 9,
+   "cg_current": 1376956416,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 10089,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 136711,
+   "pty_writes": 129,
+   "rss_kb": 214868,
+   "pss_kb": 174633,
+   "private_dirty_kb": 154892,
+   "vmhwm_kb": 214868,
+   "utime_ticks": 107,
+   "stime_ticks": 9,
+   "cg_current": 1376923648,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 11092,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 136775,
+   "pty_writes": 130,
+   "rss_kb": 214876,
+   "pss_kb": 174630,
+   "private_dirty_kb": 154900,
+   "vmhwm_kb": 214876,
+   "utime_ticks": 107,
+   "stime_ticks": 9,
+   "cg_current": 1377091584,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 12101,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 136820,
+   "pty_writes": 131,
+   "rss_kb": 214876,
+   "pss_kb": 174630,
+   "private_dirty_kb": 154900,
+   "vmhwm_kb": 214876,
+   "utime_ticks": 108,
+   "stime_ticks": 9,
+   "cg_current": 1377280000,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 13106,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 136865,
+   "pty_writes": 132,
+   "rss_kb": 214892,
+   "pss_kb": 174646,
+   "private_dirty_kb": 154916,
+   "vmhwm_kb": 214892,
+   "utime_ticks": 108,
+   "stime_ticks": 9,
+   "cg_current": 1377787904,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 14114,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 136910,
+   "pty_writes": 133,
+   "rss_kb": 214892,
+   "pss_kb": 174646,
+   "private_dirty_kb": 154916,
+   "vmhwm_kb": 214892,
+   "utime_ticks": 108,
+   "stime_ticks": 9,
+   "cg_current": 1377538048,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 15121,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 136955,
+   "pty_writes": 134,
+   "rss_kb": 214896,
+   "pss_kb": 174650,
+   "private_dirty_kb": 154920,
+   "vmhwm_kb": 214896,
+   "utime_ticks": 108,
+   "stime_ticks": 9,
+   "cg_current": 1378050048,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 16124,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 137000,
+   "pty_writes": 135,
+   "rss_kb": 214896,
+   "pss_kb": 174650,
+   "private_dirty_kb": 154920,
+   "vmhwm_kb": 214896,
+   "utime_ticks": 108,
+   "stime_ticks": 9,
+   "cg_current": 1378144256,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 17132,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 137045,
+   "pty_writes": 136,
+   "rss_kb": 214900,
+   "pss_kb": 174654,
+   "private_dirty_kb": 154924,
+   "vmhwm_kb": 214900,
+   "utime_ticks": 108,
+   "stime_ticks": 9,
+   "cg_current": 1378025472,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 18137,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 151201,
+   "pty_writes": 144,
+   "rss_kb": 215892,
+   "pss_kb": 175625,
+   "private_dirty_kb": 155916,
+   "vmhwm_kb": 215892,
+   "utime_ticks": 110,
+   "stime_ticks": 9,
+   "cg_current": 1378062336,
+   "cg_peak": 2533130240,
+   "cg_oom_kill": 0
+  }
+ ],
+ "events": [
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 200
+  },
+  {
+   "kind": "rpc",
+   "method": "commands.catalog",
+   "t_ms": 200
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 200
+  },
+  {
+   "kind": "rpc",
+   "method": "setup.status",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "session.create",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1739
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1764
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 1764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1768
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1792
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1814
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1843
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1843
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1845
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1914
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1914
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1914
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1939
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3044
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3044
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 3145
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3195
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 3270
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3395
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3395
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 3497
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3547
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4302
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4302
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4302
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4328
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4328
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 4402
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4402
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4402
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4402
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4402
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 4502
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4502
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4502
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4502
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4502
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4502
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 4603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4603
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 4679
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4705
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4705
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4705
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4705
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4705
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4705
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 4780
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 4780
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4780
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4805
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4805
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4805
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 4881
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4881
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4906
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4906
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4906
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4906
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 4983
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4983
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4983
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4983
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5008
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5083
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5083
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5109
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5109
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5109
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5109
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5185
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5185
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5185
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5185
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5210
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5235
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5285
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5285
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5285
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5285
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5311
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5311
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5386
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5386
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5386
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5386
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5411
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5486
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5486
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5486
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5511
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5511
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5511
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5511
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5587
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5587
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5587
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5587
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5587
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5713
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5788
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5788
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5788
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5788
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5788
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5889
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 5988
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5988
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5988
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5988
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6013
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6013
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6088
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6088
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6088
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6088
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6112
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6112
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6188
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6188
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6188
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6188
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6213
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6213
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 6263
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6288
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6288
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6288
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6288
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6288
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6288
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6388
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6388
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6388
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6388
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6413
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6413
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6488
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6488
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6488
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6513
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6513
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6513
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6588
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6588
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6588
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6613
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6613
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6688
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6713
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6713
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6788
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6788
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6788
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6788
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6813
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6813
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6888
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6888
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6888
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6888
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6914
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6914
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 6989
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6989
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6989
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6989
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7015
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7015
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 7090
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7090
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7090
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7090
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7090
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7090
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7190
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7190
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7190
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7190
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7215
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 7291
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 7367
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 7770
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 9280
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 10238
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 10764
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 12276
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 13784
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 15219
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 15270
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 16777
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17305
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17305
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 17406
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17456
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17656
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17656
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 17758
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 17809
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 18286
+  }
+ ],
+ "summary": {
+  "result": "completed",
+  "cap_hit": false,
+  "cap_hit_basis": null,
+  "at_messages": null,
+  "exit": {
+   "exitCode": 0,
+   "signal": 0,
+   "t": 18547
+  },
+  "stream_done": true,
+  "msgs_streamed": 300,
+  "events_streamed": 1051,
+  "pty_bytes_total": 151491,
+  "pty_data_callbacks": 148,
+  "first_byte_ms": 77,
+  "session_create_ms": 226,
+  "stream_start_ms": 1713,
+  "vmhwm_kb": 215892,
+  "cg_peak": 2533130240,
+  "drain_max_loop_lag_ms": 4,
+  "drain_lag_violations": 0,
+  "drain_ok": true,
+  "digest": null,
+  "chaos": {
+   "scenario": "resize-storm",
+   "loaded": true,
+   "pre_storm_code_idx": 140,
+   "flaps": 30,
+   "storm_ms": 3007,
+   "ui_survived_storm": true,
+   "transcript_preserved": true,
+   "post_storm_screen_sha": "51c8014d6dbf2df996af63229577ec8c93bf458d4860fa8991370c8f50e896f6",
+   "ui_survived": true,
+   "orphans": [],
+   "ui_exit": {
+    "exitCode": 0,
+    "signal": 0,
+    "t": 18547
+   }
+  }
+ }
+}

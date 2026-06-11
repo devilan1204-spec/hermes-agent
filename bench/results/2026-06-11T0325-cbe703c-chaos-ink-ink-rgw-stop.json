@@ -1,0 +1,6692 @@
+{
+ "meta": {
+  "cell": "chaos",
+  "ui": "ink",
+  "config": "ink",
+  "mode": "chaos",
+  "rep": "gw-stop",
+  "run_id": "mq8xpyhb-wg3u",
+  "utc": "2026-06-11T03:25:18.672Z",
+  "sha": "cbe703cf4",
+  "node": "/home/daimon/.local/share/fnm/node-versions/v26.3.0/installation/bin/node",
+  "node_version": "v26.3.0",
+  "pty": {
+   "cols": 120,
+   "rows": 40,
+   "term": "xterm-256color"
+  },
+  "heap_mb": 8192,
+  "memory_max": "2G",
+  "container_cap": false,
+  "container_memory": null,
+  "opentui_cap": null,
+  "fixture": {
+   "path": "/home/daimon/github/worktrees/hermes-agent/lively-thrush/hermes-agent/bench/.cache/fixture-300.ndjson",
+   "msgs": 300,
+   "sha256": "ac81e975c299da7d50cfda7fc0fee33c356bd31a4e17a7f0f8e49905e205051a"
+  },
+  "sample_every": 25,
+  "mode_params": {
+   "flaps": 30,
+   "scenario": "gw-stop",
+   "stopAt": 150,
+   "fakeMode": "paced"
+  },
+  "ui_pid": 2775029,
+  "gw_pid": 2775710,
+  "cgroup": "/sys/fs/cgroup/user.slice/user-1001.slice/user@1001.service/app.slice/hermes-bench-mq8xpyhb-wg3u.scope",
+  "load_avg_at_start": [
+   0.07,
+   0.09,
+   0.16
+  ],
+  "instrumented": false
+ },
+ "samples": [
+  {
+   "kind": "periodic",
+   "t_ms": 53,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 0,
+   "pty_writes": 0,
+   "rss_kb": 57524,
+   "pss_kb": 31375,
+   "private_dirty_kb": 20084,
+   "vmhwm_kb": 57524,
+   "utime_ticks": 3,
+   "stime_ticks": 0,
+   "cg_current": 21770240,
+   "cg_peak": 21770240,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 1060,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 6601,
+   "pty_writes": 11,
+   "rss_kb": 110228,
+   "pss_kb": 71295,
+   "private_dirty_kb": 51412,
+   "vmhwm_kb": 110228,
+   "utime_ticks": 24,
+   "stime_ticks": 3,
+   "cg_current": 65540096,
+   "cg_peak": 65961984,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 2067,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 53999,
+   "pty_writes": 51,
+   "rss_kb": 150076,
+   "pss_kb": 110852,
+   "private_dirty_kb": 90156,
+   "vmhwm_kb": 158804,
+   "utime_ticks": 57,
+   "stime_ticks": 5,
+   "cg_current": 108199936,
+   "cg_peak": 118423552,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 2469,
+   "msgs": 25,
+   "events": 90,
+   "pty_bytes": 134223,
+   "pty_writes": 90,
+   "rss_kb": 175388,
+   "pss_kb": 136164,
+   "private_dirty_kb": 115468,
+   "vmhwm_kb": 175688,
+   "utime_ticks": 86,
+   "stime_ticks": 6,
+   "cg_current": 135770112,
+   "cg_peak": 135770112,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 3071,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 248896,
+   "pty_writes": 150,
+   "rss_kb": 173088,
+   "pss_kb": 133864,
+   "private_dirty_kb": 113168,
+   "vmhwm_kb": 175156,
+   "utime_ticks": 123,
+   "stime_ticks": 7,
+   "cg_current": 132980736,
+   "cg_peak": 136032256,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3146,
+   "msgs": 51,
+   "events": 169,
+   "pty_bytes": 260932,
+   "pty_writes": 161,
+   "rss_kb": 173088,
+   "pss_kb": 133848,
+   "private_dirty_kb": 113168,
+   "vmhwm_kb": 175156,
+   "utime_ticks": 126,
+   "stime_ticks": 7,
+   "cg_current": 133320704,
+   "cg_peak": 136032256,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 3900,
+   "msgs": 76,
+   "events": 261,
+   "pty_bytes": 391344,
+   "pty_writes": 233,
+   "rss_kb": 205848,
+   "pss_kb": 166538,
+   "private_dirty_kb": 145864,
+   "vmhwm_kb": 209192,
+   "utime_ticks": 186,
+   "stime_ticks": 9,
+   "cg_current": 169926656,
+   "cg_peak": 174395392,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 4076,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 416812,
+   "pty_writes": 250,
+   "rss_kb": 212728,
+   "pss_kb": 173418,
+   "private_dirty_kb": 152744,
+   "vmhwm_kb": 212728,
+   "utime_ticks": 198,
+   "stime_ticks": 9,
+   "cg_current": 178020352,
+   "cg_peak": 178434048,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 4679,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 532800,
+   "pty_writes": 300,
+   "rss_kb": 234160,
+   "pss_kb": 194850,
+   "private_dirty_kb": 174176,
+   "vmhwm_kb": 240340,
+   "utime_ticks": 253,
+   "stime_ticks": 10,
+   "cg_current": 200491008,
+   "cg_peak": 207966208,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 5081,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 598118,
+   "pty_writes": 333,
+   "rss_kb": 248704,
+   "pss_kb": 209378,
+   "private_dirty_kb": 188720,
+   "vmhwm_kb": 248704,
+   "utime_ticks": 293,
+   "stime_ticks": 10,
+   "cg_current": 215343104,
+   "cg_peak": 215343104,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 5356,
+   "msgs": 125,
+   "events": 434,
+   "pty_bytes": 637672,
+   "pty_writes": 347,
+   "rss_kb": 251864,
+   "pss_kb": 212538,
+   "private_dirty_kb": 191880,
+   "vmhwm_kb": 251864,
+   "utime_ticks": 320,
+   "stime_ticks": 11,
+   "cg_current": 218894336,
+   "cg_peak": 218894336,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 6058,
+   "msgs": 151,
+   "events": 521,
+   "pty_bytes": 732213,
+   "pty_writes": 391,
+   "rss_kb": 261496,
+   "pss_kb": 222170,
+   "private_dirty_kb": 201512,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 394,
+   "stime_ticks": 12,
+   "cg_current": 230158336,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 6083,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 732213,
+   "pty_writes": 391,
+   "rss_kb": 261820,
+   "pss_kb": 222494,
+   "private_dirty_kb": 201836,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 397,
+   "stime_ticks": 12,
+   "cg_current": 230187008,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 7097,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 742648,
+   "pty_writes": 405,
+   "rss_kb": 262188,
+   "pss_kb": 222841,
+   "private_dirty_kb": 202204,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 405,
+   "stime_ticks": 12,
+   "cg_current": 230342656,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 8104,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 743292,
+   "pty_writes": 419,
+   "rss_kb": 247732,
+   "pss_kb": 208385,
+   "private_dirty_kb": 187748,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 410,
+   "stime_ticks": 12,
+   "cg_current": 214790144,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 9108,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 744034,
+   "pty_writes": 433,
+   "rss_kb": 247732,
+   "pss_kb": 208385,
+   "private_dirty_kb": 187748,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 411,
+   "stime_ticks": 12,
+   "cg_current": 214790144,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 10120,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 744586,
+   "pty_writes": 445,
+   "rss_kb": 247732,
+   "pss_kb": 208385,
+   "private_dirty_kb": 187748,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 413,
+   "stime_ticks": 12,
+   "cg_current": 215052288,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 11123,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 745291,
+   "pty_writes": 458,
+   "rss_kb": 247732,
+   "pss_kb": 208385,
+   "private_dirty_kb": 187748,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 415,
+   "stime_ticks": 12,
+   "cg_current": 214790144,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 12130,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 745797,
+   "pty_writes": 469,
+   "rss_kb": 247732,
+   "pss_kb": 208385,
+   "private_dirty_kb": 187748,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 416,
+   "stime_ticks": 12,
+   "cg_current": 214790144,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 13141,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 746441,
+   "pty_writes": 483,
+   "rss_kb": 217864,
+   "pss_kb": 178517,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 418,
+   "stime_ticks": 12,
+   "cg_current": 183128064,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 14156,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 747156,
+   "pty_writes": 498,
+   "rss_kb": 217864,
+   "pss_kb": 178517,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 420,
+   "stime_ticks": 12,
+   "cg_current": 183390208,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 15165,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 747708,
+   "pty_writes": 510,
+   "rss_kb": 217864,
+   "pss_kb": 178512,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 422,
+   "stime_ticks": 12,
+   "cg_current": 183132160,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 16181,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 748404,
+   "pty_writes": 522,
+   "rss_kb": 217864,
+   "pss_kb": 178512,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 424,
+   "stime_ticks": 12,
+   "cg_current": 183132160,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 17190,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 748860,
+   "pty_writes": 532,
+   "rss_kb": 217864,
+   "pss_kb": 178512,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 425,
+   "stime_ticks": 12,
+   "cg_current": 183132160,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 18204,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 749454,
+   "pty_writes": 545,
+   "rss_kb": 217864,
+   "pss_kb": 178512,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 427,
+   "stime_ticks": 12,
+   "cg_current": 183132160,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 19215,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 750196,
+   "pty_writes": 559,
+   "rss_kb": 217864,
+   "pss_kb": 178512,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 429,
+   "stime_ticks": 12,
+   "cg_current": 183132160,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 20227,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 750698,
+   "pty_writes": 570,
+   "rss_kb": 217864,
+   "pss_kb": 178512,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 431,
+   "stime_ticks": 12,
+   "cg_current": 183136256,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 21236,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 751283,
+   "pty_writes": 581,
+   "rss_kb": 217864,
+   "pss_kb": 178512,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 432,
+   "stime_ticks": 12,
+   "cg_current": 183398400,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 22250,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 751739,
+   "pty_writes": 591,
+   "rss_kb": 217864,
+   "pss_kb": 178512,
+   "private_dirty_kb": 157880,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 433,
+   "stime_ticks": 12,
+   "cg_current": 183136256,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 23258,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 752333,
+   "pty_writes": 604,
+   "rss_kb": 218092,
+   "pss_kb": 178740,
+   "private_dirty_kb": 158108,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 435,
+   "stime_ticks": 12,
+   "cg_current": 183377920,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 24268,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 753060,
+   "pty_writes": 618,
+   "rss_kb": 218092,
+   "pss_kb": 178740,
+   "private_dirty_kb": 158108,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 437,
+   "stime_ticks": 12,
+   "cg_current": 183377920,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 25273,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 753608,
+   "pty_writes": 630,
+   "rss_kb": 218092,
+   "pss_kb": 178740,
+   "private_dirty_kb": 158108,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 439,
+   "stime_ticks": 12,
+   "cg_current": 183640064,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 26286,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 754149,
+   "pty_writes": 640,
+   "rss_kb": 218320,
+   "pss_kb": 178968,
+   "private_dirty_kb": 158336,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 440,
+   "stime_ticks": 12,
+   "cg_current": 183623680,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 27293,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 754605,
+   "pty_writes": 650,
+   "rss_kb": 218320,
+   "pss_kb": 178968,
+   "private_dirty_kb": 158336,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 441,
+   "stime_ticks": 12,
+   "cg_current": 183623680,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 28300,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 755153,
+   "pty_writes": 662,
+   "rss_kb": 218320,
+   "pss_kb": 178968,
+   "private_dirty_kb": 158336,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 443,
+   "stime_ticks": 13,
+   "cg_current": 183623680,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 29312,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 755885,
+   "pty_writes": 676,
+   "rss_kb": 218320,
+   "pss_kb": 178968,
+   "private_dirty_kb": 158336,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 445,
+   "stime_ticks": 13,
+   "cg_current": 183623680,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 30319,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 756434,
+   "pty_writes": 688,
+   "rss_kb": 218320,
+   "pss_kb": 178968,
+   "private_dirty_kb": 158336,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 447,
+   "stime_ticks": 13,
+   "cg_current": 183627776,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 31326,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 757012,
+   "pty_writes": 698,
+   "rss_kb": 218320,
+   "pss_kb": 178968,
+   "private_dirty_kb": 158336,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 448,
+   "stime_ticks": 13,
+   "cg_current": 183627776,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 32333,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 757468,
+   "pty_writes": 708,
+   "rss_kb": 218320,
+   "pss_kb": 178968,
+   "private_dirty_kb": 158336,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 449,
+   "stime_ticks": 13,
+   "cg_current": 183627776,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 33341,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 758016,
+   "pty_writes": 720,
+   "rss_kb": 218320,
+   "pss_kb": 178968,
+   "private_dirty_kb": 158336,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 451,
+   "stime_ticks": 13,
+   "cg_current": 183889920,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 34345,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 758696,
+   "pty_writes": 734,
+   "rss_kb": 218384,
+   "pss_kb": 179032,
+   "private_dirty_kb": 158400,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 453,
+   "stime_ticks": 13,
+   "cg_current": 183693312,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 35353,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 759244,
+   "pty_writes": 746,
+   "rss_kb": 218384,
+   "pss_kb": 179032,
+   "private_dirty_kb": 158400,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 455,
+   "stime_ticks": 13,
+   "cg_current": 183955456,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 36360,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 763065,
+   "pty_writes": 758,
+   "rss_kb": 227444,
+   "pss_kb": 188092,
+   "private_dirty_kb": 167460,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 458,
+   "stime_ticks": 13,
+   "cg_current": 193171456,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 37362,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 773408,
+   "pty_writes": 771,
+   "rss_kb": 227860,
+   "pss_kb": 188508,
+   "private_dirty_kb": 167876,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 463,
+   "stime_ticks": 13,
+   "cg_current": 193429504,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 37542,
+   "msgs": 176,
+   "events": 631,
+   "pty_bytes": 773454,
+   "pty_writes": 772,
+   "rss_kb": 228244,
+   "pss_kb": 188876,
+   "private_dirty_kb": 168260,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 466,
+   "stime_ticks": 13,
+   "cg_current": 195280896,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 37544,
+   "msgs": 200,
+   "events": 738,
+   "pty_bytes": 773454,
+   "pty_writes": 772,
+   "rss_kb": 228244,
+   "pss_kb": 188876,
+   "private_dirty_kb": 168260,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 467,
+   "stime_ticks": 13,
+   "cg_current": 195280896,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 37566,
+   "msgs": 225,
+   "events": 812,
+   "pty_bytes": 777620,
+   "pty_writes": 774,
+   "rss_kb": 235508,
+   "pss_kb": 196140,
+   "private_dirty_kb": 175524,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 472,
+   "stime_ticks": 13,
+   "cg_current": 203304960,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 37568,
+   "msgs": 251,
+   "events": 913,
+   "pty_bytes": 777620,
+   "pty_writes": 774,
+   "rss_kb": 228196,
+   "pss_kb": 188828,
+   "private_dirty_kb": 168212,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 472,
+   "stime_ticks": 13,
+   "cg_current": 195710976,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 37569,
+   "msgs": 276,
+   "events": 992,
+   "pty_bytes": 777620,
+   "pty_writes": 774,
+   "rss_kb": 228196,
+   "pss_kb": 188828,
+   "private_dirty_kb": 168212,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 472,
+   "stime_ticks": 13,
+   "cg_current": 195678208,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 37591,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 785398,
+   "pty_writes": 776,
+   "rss_kb": 229948,
+   "pss_kb": 190580,
+   "private_dirty_kb": 169964,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 475,
+   "stime_ticks": 14,
+   "cg_current": 197529600,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "done",
+   "t_ms": 37592,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 785398,
+   "pty_writes": 776,
+   "rss_kb": 229976,
+   "pss_kb": 190608,
+   "private_dirty_kb": 169992,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 475,
+   "stime_ticks": 14,
+   "cg_current": 197529600,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 38368,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 800834,
+   "pty_writes": 783,
+   "rss_kb": 239536,
+   "pss_kb": 200221,
+   "private_dirty_kb": 179424,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 484,
+   "stime_ticks": 15,
+   "cg_current": 199704576,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 39371,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 812995,
+   "pty_writes": 800,
+   "rss_kb": 200656,
+   "pss_kb": 161330,
+   "private_dirty_kb": 140544,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 487,
+   "stime_ticks": 15,
+   "cg_current": 161710080,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 40023,
+   "msgs": 25,
+   "events": 90,
+   "pty_bytes": 929733,
+   "pty_writes": 867,
+   "rss_kb": 216240,
+   "pss_kb": 176882,
+   "private_dirty_kb": 156128,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 523,
+   "stime_ticks": 16,
+   "cg_current": 177917952,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 40372,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 992122,
+   "pty_writes": 904,
+   "rss_kb": 217184,
+   "pss_kb": 177826,
+   "private_dirty_kb": 157072,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 539,
+   "stime_ticks": 17,
+   "cg_current": 178663424,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 40673,
+   "msgs": 51,
+   "events": 169,
+   "pty_bytes": 1052655,
+   "pty_writes": 933,
+   "rss_kb": 218364,
+   "pss_kb": 178990,
+   "private_dirty_kb": 158252,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 557,
+   "stime_ticks": 17,
+   "cg_current": 181030912,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 41376,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 1165858,
+   "pty_writes": 988,
+   "rss_kb": 230604,
+   "pss_kb": 191209,
+   "private_dirty_kb": 170492,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 616,
+   "stime_ticks": 18,
+   "cg_current": 195289088,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 41452,
+   "msgs": 76,
+   "events": 261,
+   "pty_bytes": 1178952,
+   "pty_writes": 995,
+   "rss_kb": 236060,
+   "pss_kb": 196665,
+   "private_dirty_kb": 175948,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 624,
+   "stime_ticks": 18,
+   "cg_current": 201265152,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 42228,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 1293836,
+   "pty_writes": 1049,
+   "rss_kb": 260784,
+   "pss_kb": 221389,
+   "private_dirty_kb": 200672,
+   "vmhwm_kb": 262616,
+   "utime_ticks": 696,
+   "stime_ticks": 20,
+   "cg_current": 227852288,
+   "cg_peak": 230875136,
+   "cg_oom_kill": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 42379,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 1309702,
+   "pty_writes": 1058,
+   "rss_kb": 264880,
+   "pss_kb": 224588,
+   "private_dirty_kb": 204768,
+   "vmhwm_kb": 264880,
+   "utime_ticks": 709,
+   "stime_ticks": 20,
+   "cg_current": 232415232,
+   "cg_peak": 232415232,
+   "cg_oom_kill": 0
+  }
+ ],
+ "events": [
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 201
+  },
+  {
+   "kind": "rpc",
+   "method": "commands.catalog",
+   "t_ms": 201
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "setup.status",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "session.create",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 251
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1739
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 1739
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1739
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1815
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1815
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1815
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1815
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1815
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1839
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1839
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1839
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1839
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1839
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1839
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1864
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1889
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1914
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1939
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1939
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1939
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1939
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1939
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1939
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1964
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1964
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1964
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1964
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1964
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1964
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1989
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1989
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1989
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2014
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2014
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2014
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2014
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2039
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2039
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2039
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2039
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2065
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2065
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2065
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2065
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2065
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2089
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2089
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2089
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2089
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2114
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2114
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2138
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2138
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2138
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2138
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2138
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2138
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2138
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2164
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2164
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2164
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2164
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2164
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2164
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2189
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2189
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2189
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2189
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2189
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2189
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2214
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2214
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2214
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2214
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2214
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2214
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2239
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2265
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2265
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2265
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2265
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2265
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2291
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2291
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2291
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2291
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2316
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2316
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2316
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2316
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2316
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2341
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2341
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2341
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2341
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2366
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2366
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2366
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2366
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2391
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2391
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2391
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2391
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2416
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2416
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2416
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2416
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2416
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2442
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2442
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2442
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2442
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2467
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2467
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2469
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2469
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2492
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2492
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2492
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2492
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2492
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2492
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2492
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2517
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2517
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2542
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2542
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2542
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2542
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2542
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2542
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2567
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2567
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2567
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2567
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2567
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2593
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2593
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2593
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2618
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2618
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2618
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2618
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2618
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2618
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2618
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2643
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2643
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2668
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2668
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2668
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2668
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2668
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2668
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2693
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2693
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2693
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2693
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2693
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2693
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2718
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2718
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2718
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2718
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2718
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2743
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2743
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2743
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2743
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2768
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2768
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2768
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2768
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2768
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2793
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2793
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2793
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2793
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2818
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2818
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2818
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2818
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2818
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2818
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2843
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2843
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2843
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2843
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2868
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2868
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2868
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2868
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2893
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2893
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2893
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2893
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2918
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2918
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2918
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2918
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2944
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2944
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2944
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2944
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2994
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2994
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2994
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3020
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3020
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3020
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3020
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3020
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3044
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3044
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3044
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3069
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3069
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3069
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3094
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3094
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3094
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3094
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3094
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3119
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3119
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3119
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3119
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3119
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3119
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3146
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3146
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3146
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3146
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3146
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3146
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3195
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3195
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3195
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3195
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3220
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 3245
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3245
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3245
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3245
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3270
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3270
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3270
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3270
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3295
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3295
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3320
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3320
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3320
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3320
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3345
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3345
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3345
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3370
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3370
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3370
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3396
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3396
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3396
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3396
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3421
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3446
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3446
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3446
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3446
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3446
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3446
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3471
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3471
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3471
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3471
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3496
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3496
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3496
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3496
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3496
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3521
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3521
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3521
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3547
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3547
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3547
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3572
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3572
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3572
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3572
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3597
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3597
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3597
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3597
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3623
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3623
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3623
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3623
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3623
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3623
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3647
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3647
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3647
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3647
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3647
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3647
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3672
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3672
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3698
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3698
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3698
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3722
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3722
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3747
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3747
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3747
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3747
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3772
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3772
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3772
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3772
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3797
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3797
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3822
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3822
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3822
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3822
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3822
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3847
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3847
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3847
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3847
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3847
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3872
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3872
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3872
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3872
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3872
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3900
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3900
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3900
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3900
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3900
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3900
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3923
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3923
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3948
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3948
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3948
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3948
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3948
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3973
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3973
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3973
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3973
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3973
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3973
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4024
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4024
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4024
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4048
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4048
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4048
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4074
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4074
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4074
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4099
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4099
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4099
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4125
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4125
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4125
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4150
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4150
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4175
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4175
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4175
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4200
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4200
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4225
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4225
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4225
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4225
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4250
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4250
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4275
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4275
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4275
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4275
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4275
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4275
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4326
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4326
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4326
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4326
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4326
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4351
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4351
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4351
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4351
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4351
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4376
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4376
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4401
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4401
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4401
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4426
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4426
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4451
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4451
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4451
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4451
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4476
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4476
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4476
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4476
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4476
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4476
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4501
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4501
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4501
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4526
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4526
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4526
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4526
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4526
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4526
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4552
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4552
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4552
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4578
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4578
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4578
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4602
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4602
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4602
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4627
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4627
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4627
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4652
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4652
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4652
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4677
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4679
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4679
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4702
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4702
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4702
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4702
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4702
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4702
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4727
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4727
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4727
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4752
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4752
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 4752
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4752
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4752
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4752
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4777
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4777
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4777
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4802
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4802
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4802
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4802
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4827
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4853
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4853
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4878
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4878
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4903
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4928
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4928
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4928
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4953
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 4978
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5003
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5028
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5028
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5028
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5028
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5028
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5028
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5053
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5053
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5053
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5053
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5053
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5078
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5078
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5078
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5103
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5129
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5129
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5129
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5129
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5153
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5153
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5178
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5178
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5178
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5203
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5203
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5228
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5253
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5253
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5278
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5303
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5328
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5328
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5356
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5356
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5356
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5378
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5378
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5378
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5378
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5378
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5403
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5428
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5453
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5478
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5503
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5503
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5528
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5553
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5578
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5578
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5603
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5628
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5628
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5628
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5628
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5628
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5653
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5653
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5653
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5679
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5679
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5679
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5704
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5729
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5754
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5779
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5804
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5804
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5854
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5879
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5904
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5904
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5954
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5954
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 5979
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6004
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6029
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6029
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6054
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6054
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6116
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6116
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 6116
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37544
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37569
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37589
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37592
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37592
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37592
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37614
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37614
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37639
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37639
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "commands.catalog",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "setup.status",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "session.resume",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37764
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 37789
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39269
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39269
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 39269
+  },
+  {
+   "kind": "rpc",
+   "method": "session.interrupt",
+   "t_ms": 39294
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39294
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39294
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39294
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39294
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39319
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39344
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39344
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39344
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39344
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39344
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39344
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39369
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39369
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39369
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39369
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39369
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39369
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39394
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39394
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39419
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39419
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39419
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39419
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39419
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39419
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "session.interrupt",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39470
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39470
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39470
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39545
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39545
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39545
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39545
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39545
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39570
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39570
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39570
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39570
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39595
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39595
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39595
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39595
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39595
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39620
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39620
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39620
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39620
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39645
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39645
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39645
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39645
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39645
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39670
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39670
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39670
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39670
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39670
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39695
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39695
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39720
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39720
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39720
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39720
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39720
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39720
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39745
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39745
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39745
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39745
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39745
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39745
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39770
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39770
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39770
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39770
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39770
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39795
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39795
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39795
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39795
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39820
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39820
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39820
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39820
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39845
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39845
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39845
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39845
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39870
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39870
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39870
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39870
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39870
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39895
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39895
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39895
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39895
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39920
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39920
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39920
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39920
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39945
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39945
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39945
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39945
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39945
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39970
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39995
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39995
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39995
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 39995
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40045
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40045
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40045
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40045
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40045
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40070
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40070
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40070
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40070
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40070
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40070
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40095
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40095
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40095
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40121
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40121
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40121
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40121
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40145
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40145
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40145
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40145
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40145
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40145
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40170
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40195
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40195
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40220
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40245
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40245
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40245
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40245
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40270
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40270
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40270
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40295
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40295
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40295
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40295
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40295
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40295
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40320
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40320
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40320
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40345
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40345
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40345
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40345
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40370
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40370
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40370
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40370
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40395
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40395
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40395
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40395
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40395
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40395
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40420
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40445
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40470
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40470
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40470
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40495
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40520
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40546
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40546
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40546
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40546
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40571
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40571
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40571
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40571
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40596
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40596
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40596
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40596
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40621
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40621
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40621
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40621
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40646
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40646
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40646
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40646
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40646
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40646
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40646
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40671
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40673
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40673
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40673
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40673
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40696
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40696
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40721
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40721
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40721
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40721
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40721
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40746
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40746
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40746
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40746
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40771
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40771
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 40797
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40797
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40797
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40797
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40797
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40821
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40847
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40847
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40872
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40872
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40872
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40897
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40897
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40897
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40922
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40948
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40948
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40948
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40973
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40973
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 40998
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41023
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41048
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41048
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41073
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41073
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41073
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41098
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41098
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41123
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41123
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41148
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41148
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41148
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41148
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41148
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41148
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41148
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41148
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41173
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41173
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41199
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41199
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41199
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41199
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41199
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41199
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41199
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41199
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41224
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41249
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41274
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41299
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41324
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41349
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41374
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41374
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41399
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41399
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41399
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41399
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41399
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41424
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41424
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41424
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41452
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41452
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41474
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41474
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41474
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41474
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41474
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41474
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41499
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41499
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41524
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41524
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41524
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41524
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41524
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41524
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41524
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41524
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41549
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41574
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41599
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41624
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41624
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41649
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41674
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41674
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41699
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41725
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41725
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41749
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41775
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41800
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41800
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41800
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41800
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41826
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41826
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41826
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41851
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41851
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41877
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41877
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41901
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41901
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41901
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41901
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41901
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41901
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41927
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41927
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41927
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 41951
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42001
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42001
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42001
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42026
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42026
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42051
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42051
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42076
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42101
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42126
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42151
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42151
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42176
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42201
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42228
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42228
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42251
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42251
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42277
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42277
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 42301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42301
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42326
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42326
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42352
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42377
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42403
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 42429
+  }
+ ],
+ "summary": {
+  "result": "completed",
+  "cap_hit": false,
+  "cap_hit_basis": null,
+  "at_messages": null,
+  "exit": {
+   "exitCode": 143,
+   "signal": 0,
+   "t": 42452
+  },
+  "stream_done": true,
+  "msgs_streamed": 300,
+  "events_streamed": 1051,
+  "pty_bytes_total": 1321335,
+  "pty_data_callbacks": 1074,
+  "first_byte_ms": 83,
+  "session_create_ms": 226,
+  "stream_start_ms": 1739,
+  "vmhwm_kb": 264880,
+  "cg_peak": 232415232,
+  "drain_max_loop_lag_ms": 13,
+  "drain_lag_violations": 1,
+  "drain_ok": false,
+  "digest": null,
+  "chaos": {
+   "scenario": "gw-stop",
+   "stop_at_msgs": 150,
+   "stop_reached": true,
+   "gw_pid": 2775107,
+   "pre_stop_code_idx": 67,
+   "gw_state_after_stop": "T",
+   "freeze_observe_s": 30,
+   "ui_alive_during_freeze": "30/30",
+   "ui_survived_freeze": true,
+   "transcript_preserved": true,
+   "frozen_screen_sha": "caf6914afdb8d3c7ba4b547415f4e87957712472429563a6e7e061b067c74ba4",
+   "gateway_respawned": true,
+   "time_to_respawn_ms": 35,
+   "stream_resumed": true,
+   "ui_survived": true,
+   "orphans": [],
+   "ui_exit": {
+    "exitCode": 143,
+    "signal": 0,
+    "t": 42452
+   }
+  }
+ }
+}
