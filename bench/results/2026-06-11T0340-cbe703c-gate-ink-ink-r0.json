@@ -1,0 +1,405 @@
+{
+ "meta": {
+  "cell": "gate",
+  "ui": "ink",
+  "config": "ink",
+  "mode": "digest",
+  "rep": 0,
+  "run_id": "mq8y9wb4-jfc2",
+  "utc": "2026-06-11T03:40:48.977Z",
+  "sha": "cbe703cf4",
+  "node": "/home/daimon/.local/share/fnm/node-versions/v26.3.0/installation/bin/node",
+  "node_version": "v26.3.0",
+  "pty": {
+   "cols": 120,
+   "rows": 40,
+   "term": "xterm-256color"
+  },
+  "heap_mb": 8192,
+  "memory_max": null,
+  "container_cap": false,
+  "container_memory": null,
+  "opentui_cap": null,
+  "fixture": {
+   "path": "/home/daimon/github/worktrees/hermes-agent/lively-thrush/hermes-agent/bench/.cache/fixture-300.ndjson",
+   "msgs": 300,
+   "sha256": "ac81e975c299da7d50cfda7fc0fee33c356bd31a4e17a7f0f8e49905e205051a"
+  },
+  "sample_every": 100,
+  "mode_params": {},
+  "ui_pid": 2790566,
+  "gw_pid": 2790574,
+  "cgroup": null,
+  "load_avg_at_start": [
+   0.16,
+   0.34,
+   0.3
+  ],
+  "instrumented": false
+ },
+ "samples": [
+  {
+   "kind": "periodic",
+   "t_ms": 27,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 0,
+   "pty_writes": 0,
+   "rss_kb": 56576,
+   "pss_kb": 30478,
+   "private_dirty_kb": 19188,
+   "vmhwm_kb": 56576,
+   "utime_ticks": 2,
+   "stime_ticks": 0
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 1037,
+   "msgs": null,
+   "events": null,
+   "pty_bytes": 6602,
+   "pty_writes": 11,
+   "rss_kb": 107208,
+   "pss_kb": 68326,
+   "private_dirty_kb": 48444,
+   "vmhwm_kb": 107208,
+   "utime_ticks": 24,
+   "stime_ticks": 2
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1440,
+   "msgs": 100,
+   "events": 355,
+   "pty_bytes": 6696,
+   "pty_writes": 13,
+   "rss_kb": 123580,
+   "pss_kb": 84520,
+   "private_dirty_kb": 63840,
+   "vmhwm_kb": 123584,
+   "utime_ticks": 30,
+   "stime_ticks": 2
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1517,
+   "msgs": 200,
+   "events": 738,
+   "pty_bytes": 21092,
+   "pty_writes": 18,
+   "rss_kb": 163196,
+   "pss_kb": 123976,
+   "private_dirty_kb": 103264,
+   "vmhwm_kb": 163276,
+   "utime_ticks": 45,
+   "stime_ticks": 4
+  },
+  {
+   "kind": "boundary",
+   "t_ms": 1518,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 21092,
+   "pty_writes": 18,
+   "rss_kb": 163400,
+   "pss_kb": 124180,
+   "private_dirty_kb": 103468,
+   "vmhwm_kb": 163556,
+   "utime_ticks": 45,
+   "stime_ticks": 4
+  },
+  {
+   "kind": "done",
+   "t_ms": 1519,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 21092,
+   "pty_writes": 18,
+   "rss_kb": 163664,
+   "pss_kb": 124444,
+   "private_dirty_kb": 103732,
+   "vmhwm_kb": 163804,
+   "utime_ticks": 45,
+   "stime_ticks": 4
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 2046,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 32637,
+   "pty_writes": 26,
+   "rss_kb": 180276,
+   "pss_kb": 141024,
+   "private_dirty_kb": 120344,
+   "vmhwm_kb": 182012,
+   "utime_ticks": 59,
+   "stime_ticks": 5
+  },
+  {
+   "kind": "final",
+   "t_ms": 2928,
+   "msgs": 300,
+   "events": 1051,
+   "pty_bytes": 32682,
+   "pty_writes": 27,
+   "rss_kb": 180292,
+   "pss_kb": 141040,
+   "private_dirty_kb": 120360,
+   "vmhwm_kb": 182012,
+   "utime_ticks": 59,
+   "stime_ticks": 5
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 3057,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 36196,
+   "pty_writes": 29,
+   "rss_kb": 185356,
+   "pss_kb": 146104,
+   "private_dirty_kb": 125424,
+   "vmhwm_kb": 185356,
+   "utime_ticks": 62,
+   "stime_ticks": 5
+  },
+  {
+   "kind": "periodic",
+   "t_ms": 4065,
+   "msgs": 300,
+   "events": null,
+   "pty_bytes": 46906,
+   "pty_writes": 35,
+   "rss_kb": 187608,
+   "pss_kb": 148356,
+   "private_dirty_kb": 127676,
+   "vmhwm_kb": 187608,
+   "utime_ticks": 64,
+   "stime_ticks": 5
+  }
+ ],
+ "events": [
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 176
+  },
+  {
+   "kind": "rpc",
+   "method": "commands.catalog",
+   "t_ms": 201
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 201
+  },
+  {
+   "kind": "rpc",
+   "method": "setup.status",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "session.create",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 226
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1413
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1439
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1439
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1464
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1464
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1489
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1489
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1517
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1517
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1519
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1539
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1565
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1565
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1589
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1589
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1615
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 1615
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 1715
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2931
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 2956
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 3031
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3107
+  },
+  {
+   "kind": "rpc",
+   "method": "session.active_list",
+   "t_ms": 3233
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3334
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3334
+  },
+  {
+   "kind": "rpc",
+   "method": "terminal.resize",
+   "t_ms": 3434
+  },
+  {
+   "kind": "rpc",
+   "method": "config.get",
+   "t_ms": 3509
+  }
+ ],
+ "summary": {
+  "result": "completed",
+  "cap_hit": false,
+  "cap_hit_basis": null,
+  "at_messages": null,
+  "exit": {
+   "exitCode": 0,
+   "signal": 0,
+   "t": 4541
+  },
+  "stream_done": true,
+  "msgs_streamed": 300,
+  "events_streamed": 1051,
+  "pty_bytes_total": 47132,
+  "pty_data_callbacks": 46,
+  "first_byte_ms": 73,
+  "session_create_ms": 226,
+  "stream_start_ms": 1413,
+  "vmhwm_kb": 187608,
+  "cg_peak": null,
+  "drain_max_loop_lag_ms": 5,
+  "drain_lag_violations": 0,
+  "drain_ok": true,
+  "digest": "7775bee02e57da2be0f73880cfe828666f51e08209a28ba81ec599817b95eb2c"
+ },
+ "digest_text": "Excepteur irure nostrud tempor ipsum cupidatat voluptate ullamco labore sit.│Amet culpa cillum commodo enim adipiscing deserunt nulla duis veniam sed.│Quis eiusmod lorem occaecat reprehenderit exercitation incididunt dolor proident velit laboris magna.│Esse aliquip aliqua consectetur officia fugiat consequat minim elit mollit pariatur aute quis.│Anim excepteur irure nostrud tempor ipsum cupidatat voluptate ullamco labore sit sunt esse aliquip.│Magna amet culpa cillum.│Aute quis eiusmod lorem occaecat.│ └─ ● Terminal(\"Proident velit laboris magna.\") (0.3s)│ └─ Args:│Proident velit laboris magna amet culpa cillum commodo enim adipiscing deserunt nulla.│Elit mollit pariatur aute quis eiusmod lorem occaecat reprehenderit exercitation incididunt dolor proident.│Ullamco labore sit sunt esse aliquip aliqua consectetur officia fugiat consequat minim elit mollit.│Nulla duis veniam sed.│Dolor proident velit laboris magna.│Result:│Pariatur aute quis eiusmod lorem occaecat reprehenderit exercitation incididunt dolor proident velit laboris.│Sit sunt esse aliquip aliqua consectetur officia fugiat consequat minim elit mollit pariatur aute.││┊ Minimelitmollitpariaturautequiseiusmodloremoccaecatreprehenderitexercitationincididuntdolor.Officia│fugiatconsequatminimelitmollitpariaturautequiseiusmodloremoccaecatreprehenderitexercitation.│┊ Temporipsumcupidatatvoluptateullamcolaboresitsuntessealiquipaliqua.Excepteurirurenostrudtempor│ipsumcupidatatvoluptateullamcolaboresitsuntesse.Veniamsedanimexcepteurirurenostrudtempor│ipsumcupidatatvoluptateullamcolaboresit.││• Suntessealiquipaliquaconsectetur.│• Consequatminimelitmollitpariaturautequis.│• Eiusmodloremoccaecatreprehenderit.││─ ts│constx4=58│functionf3(){│returnx│}││Exercitationincididuntdolorproidentvelitlaborismagnaametculpacillum.Loremoccaecatreprehenderit┃exercitationincididuntdolorproidentvelitlaborismagnaamet.─ ready │ fake model │ 3s │ voice off ─ …es-agent (…i-native-engine)❯│┃Excepteur irure nostrud tempor ipsum cupidatat voluptate ullamco labore sit.│Amet culpa cillum commodo enim adipiscing deserunt nulla duis veniam sed.│Quis eiusmod lorem occaecat reprehenderit exercitation incididunt dolor proident velit laboris magna.│Esse aliquip aliqua consectetur officia fugiat consequat minim elit mollit pariatur aute quis.│Anim excepteur irure nostrud tempor ipsum cupidatat voluptate ullamco labore sit sunt esse aliquip.│Magna amet culpa cillum.│Aute quis eiusmod lorem occaecat.│ └─ ● Terminal(\"Proident velit laboris magna.\") (0.3s)│ └─ Args:│Proident velit laboris magna amet culpa cillum commodo enim adipiscing deserunt nulla.│Elit mollit pariatur aute quis eiusmod lorem occaecat reprehenderit exercitation incididunt dolor proident.│Ullamco labore sit sunt esse aliquip aliqua consectetur officia fugiat consequat minim elit mollit.│Nulla duis veniam sed.│Dolor proident velit laboris magna.│Result:│Pariatur aute quis eiusmod lorem occaecat reprehenderit exercitation incididunt dolor proident velit laboris.│Sit sunt esse aliquip aliqua consectetur officia fugiat consequat minim elit mollit pariatur aute.││┊ Minimelitmollitpariaturautequiseiusmodloremoccaecatreprehenderitexercitationincididuntdolor.Officia│fugiatconsequatminimelitmollitpariaturautequiseiusmodloremoccaecatreprehenderitexercitation.│┊ Temporipsumcupidatatvoluptateullamcolaboresitsuntessealiquipaliqua.Excepteurirurenostrudtempor│ipsumcupidatatvoluptateullamcolaboresitsuntesse.Veniamsedanimexcepteurirurenostrudtempor│ipsumcupidatatvoluptateullamcolaboresit.││• Suntessealiquipaliquaconsectetur.│• Consequatminimelitmollitpariaturautequis.│• Eiusmodloremoccaecatreprehenderit.││─ ts│constx4=58│functionf3(){│returnx│}││Exercitationincididuntdolorproidentvelitlaborismagnaametculpacillum.Loremoccaecatreprehenderit│exercitationincididuntdolorproidentvelitlaborismagnaamet.┃─ ready │ fake model │ 3s │ voice off ─ …es-agent (…i-native-engine)❯4"
+}
