@@ -97,6 +97,27 @@ function commOf(pid) {
   }
 }
 
+function procStateOf(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0]
+  } catch {
+    return null
+  }
+}
+
+// Alive = signalable AND not a zombie (a destroyed-PTY child may linger as Z
+// until reaped — that is not an orphan, just an unreaped corpse).
+function pidAlive(pid) {
+  if (!pid) return false
+  try {
+    process.kill(pid, 0)
+  } catch {
+    return false
+  }
+  return procStateOf(pid) !== 'Z'
+}
+
 // ── ANSI strip for the determinism digest ──────────────────────────────
 // Removes CSI/OSC/DCS/SOS/PM/APC sequences, single ESC sequences, and control
 // chars, then normalizes whitespace. Good enough to compare final rendered
@@ -165,7 +186,9 @@ function uiArgv(ui) {
  *   ui: 'ink' | 'opentui'
  *   configName: 'ink' | 'otui-capped' | 'otui-uncapped'
  *   opentuiCap: number|null            (HERMES_TUI_MAX_MESSAGES)
- *   mode: 'mem' | 'cpu-paced' | 'scroll' | 'startup' | 'digest'
+ *   mode: 'mem' | 'cpu-paced' | 'scroll' | 'startup' | 'digest' | 'chaos'
+ *   chaos: { scenario, dieAt?, stopAt?, flaps?, fakeMode? }   (chaos mode)
+ *     scenario: 'gw-kill-stream' | 'gw-kill-tool' | 'gw-stop' | 'resize-storm' | 'pty-eof'
  *   fixturePath, fixtureMsgs, fixtureSha
  *   memoryMax: string|null             ('2G' → systemd-run --user --scope)
  *   heapMb: number                     (--max-old-space-size)
@@ -202,13 +225,30 @@ export async function runScenario(opts) {
   const activeSessionFile = join(tmpdir(), `hermes-bench-session-${runId}.json`)
   writeFileSync(progressFile, '')
 
+  const chaosSpec = mode === 'chaos' ? { flaps: 30, ...(opts.chaos ?? {}) } : null
   const fakeEnv = {
     HERMES_FAKE_FIXTURE: fixturePath,
-    HERMES_FAKE_MODE: mode === 'cpu-paced' ? 'paced' : mode === 'scroll' ? 'load-then-idle' : 'burst',
+    HERMES_FAKE_MODE:
+      mode === 'cpu-paced'
+        ? 'paced'
+        : mode === 'scroll'
+          ? 'load-then-idle'
+          : mode === 'chaos'
+            ? (chaosSpec.fakeMode ?? 'burst')
+            : 'burst',
     HERMES_FAKE_RATE: String(pacedRate),
     HERMES_FAKE_START_DELAY_MS: String(startDelayMs),
     HERMES_FAKE_SAMPLE_EVERY: String(sampleEvery),
     HERMES_FAKE_PROGRESS: progressFile
+  }
+  // Gateway pid discovery (the UI spawns the gateway, env flows through): the
+  // fake gateway writes its pid here at startup; an auto-heal respawn REWRITES
+  // it — that rewrite is the respawn-detection signal in chaos cells.
+  const gwPidFile = mode === 'chaos' ? join(tmpdir(), `hermes-bench-gwpid-${runId}`) : null
+  if (gwPidFile) fakeEnv.HERMES_FAKE_PIDFILE = gwPidFile
+  if (chaosSpec?.dieAt) {
+    fakeEnv.HERMES_FAKE_DIE_AT = chaosSpec.dieAt
+    fakeEnv.HERMES_FAKE_DIE_FLAG = `${gwPidFile}.dieflag`
   }
   const env = composeEnv({ ui, opentuiCap, heapMb, fakeEnv, activeSessionFile })
   const { file, args, cwd } = uiArgv(ui)
@@ -315,16 +355,16 @@ export async function runScenario(opts) {
   // Wait for that flip (scope registration / sh exec take a moment); fall back
   // to a child walk in case a future wrapper forks instead.
   let uiPid = term.pid
+  // Node 26 names its main thread: comm is 'node-MainThread'.
+  const isNodeComm = pid => commOf(pid).startsWith('node')
   if (memoryMax || opts.inkNodeSampler) {
     uiPid = null
-    // Node 26 names its main thread: comm is 'node-MainThread'.
-    const isNode = pid => commOf(pid).startsWith('node')
     for (let i = 0; i < 200 && !exited; i++) {
-      if (isNode(term.pid)) {
+      if (isNodeComm(term.pid)) {
         uiPid = term.pid
         break
       }
-      const nodeKid = childrenOf(term.pid).find(k => isNode(k))
+      const nodeKid = childrenOf(term.pid).find(k => isNodeComm(k))
       if (nodeKid) {
         uiPid = nodeKid
         break
@@ -345,6 +385,26 @@ export async function runScenario(opts) {
   let doneInfo = null
   let sessionCreateAt = null
   let gwPid = null
+  let lastBoundaryMsgs = 0
+  let streamStarts = 0
+  let dyingItem = null // {k:'dying', kind, msgs, wall} from the fake gateway's last gasp
+
+  // Gateway pid tracking via the pidfile (chaos/pipeline). A respawned
+  // gateway rewrites the file → a new entry appears here.
+  const gwPidHistory = [] // {pid, at}  (at = epoch ms first observed)
+  const readGwPidfile = () => {
+    if (!gwPidFile) return null
+    try {
+      const v = Number(readFileSync(gwPidFile, 'utf8').trim())
+      return Number.isFinite(v) && v > 0 ? v : null
+    } catch {
+      return null
+    }
+  }
+  const pollGwPid = () => {
+    const p = readGwPidfile()
+    if (p && gwPidHistory[gwPidHistory.length - 1]?.pid !== p) gwPidHistory.push({ pid: p, at: now() })
+  }
 
   const takeSample = (kind, msgs, evCount) => {
     if (!uiPid) return
@@ -407,8 +467,18 @@ export async function runScenario(opts) {
       events.push({ kind: 'rpc', method: item.method, t_ms: now() - t0 })
       if (item.method === 'session.create' && sessionCreateAt === null) sessionCreateAt = now()
     }
-    if (item.k === 'stream_start') streamStartT = now()
-    if (item.k === 'boundary') takeSample('boundary', item.msgs, item.events)
+    if (item.k === 'stream_start') {
+      if (streamStartT === null) streamStartT = now()
+      streamStarts++
+    }
+    if (item.k === 'boundary') {
+      lastBoundaryMsgs = item.msgs
+      takeSample('boundary', item.msgs, item.events)
+    }
+    if (item.k === 'dying' && dyingItem === null) {
+      dyingItem = item
+      events.push({ kind: 'gw-dying', die_kind: item.kind, msgs: item.msgs, t_ms: now() - t0 })
+    }
     if (item.k === 'done') {
       streamDone = true
       doneInfo = { msgs: item.msgs, events: item.events }
@@ -422,6 +492,7 @@ export async function runScenario(opts) {
     let lastPeriodic = 0
     pollTimer = setInterval(() => {
       for (const item of tailProgress()) handleProgress(item)
+      if (gwPidFile) pollGwPid()
       const t = now()
       if (t - lastPeriodic >= 1000) {
         lastPeriodic = t
@@ -491,6 +562,225 @@ export async function runScenario(opts) {
   let digest = null
   let digestText = null
 
+  // ── chaos helpers ─────────────────────────────────────────────────────
+  const sha256 = text => createHash('sha256').update(text).digest('hex')
+  // Resize-jiggle forces a full repaint (like digest mode) so the captured
+  // tail is the CURRENT screen, not just incremental damage since the reset.
+  const forcedScreen = async () => {
+    if (!exited) {
+      try {
+        resetTail()
+        term.resize(120, 39)
+        await sleep(350)
+        resetTail()
+        term.resize(120, 40)
+        await sleep(900)
+      } catch {
+        /* pty gone mid-jiggle */
+      }
+    }
+    return stripAnsi(tailBuf.join(''))
+  }
+  // Fixture code blocks carry `const xN = M` tokens whose (N,M) pairs are
+  // unique and appear in fixture order — a position marker. Build the ordered
+  // key list from the fixture file; the highest ordinal rendered pre-kill is
+  // the transcript-preservation marker. Preservation = the post-event
+  // full-repaint screen still shows a marker from a recent pre-kill turn.
+  // Rendered screens collapse whitespace (`constx4=58`), hence the \s* regex.
+  const CODE_TOKEN_RE = /const\s*x(\d+)\s*=\s*(\d+)/g
+  const markerOrder = (() => {
+    const order = new Map()
+    try {
+      const raw = readFileSync(fixturePath, 'utf8')
+      let i = 0
+      for (const m of raw.matchAll(/const x(\d+) = (\d+)/g)) {
+        const key = `${m[1]}=${m[2]}`
+        if (!order.has(key)) order.set(key, i++)
+      }
+    } catch {
+      /* no fixture */
+    }
+    return order
+  })()
+  const lastCodeIdx = text => {
+    let max = null
+    for (const m of text.matchAll(CODE_TOKEN_RE)) {
+      const ord = markerOrder.get(`${m[1]}=${m[2]}`)
+      if (ord !== undefined && (max === null || ord > max)) max = ord
+    }
+    return max
+  }
+  const screenPreserves = (screen, idx) => {
+    // No pre marker, or a screen window that happens to show no code block at
+    // all (≈0.9 blocks/turn): fall back to "screen not blank".
+    const seen = lastCodeIdx(screen)
+    if (idx === null || seen === null) return screen.length > 500
+    // Preserved = the screen shows content at-or-after the pre-event region
+    // (>= idx-10). No upper bound: the UI legitimately keeps painting events
+    // it already buffered (pipe + coalesce queue), so the screen may be AHEAD
+    // of the captured pre-event tail. Only a transcript reset — a re-stream
+    // from scratch showing early-fixture markers — fails this.
+    return seen >= idx - 10
+  }
+
+  const runChaos = async () => {
+    const scen = chaosSpec.scenario
+    const chaos = { scenario: scen }
+
+    if (scen === 'gw-kill-stream' || scen === 'gw-kill-tool') {
+      // The fake gateway self-SIGKILLs (HERMES_FAKE_DIE_AT) and leaves a
+      // 'dying' progress line — the precise kill wall-clock.
+      chaos.kill_seen = await waitFor(() => dyingItem !== null, 90_000)
+      const preIdx = lastCodeIdx(stripAnsi(tailBuf.join('')))
+      chaos.pre_kill_code_idx = preIdx
+      chaos.died_at_msgs = dyingItem?.msgs ?? null
+      chaos.first_gw_pid = gwPidHistory[0]?.pid ?? null
+      // Snapshot the screen post-kill but pre-restream: did the transcript survive?
+      await sleep(250)
+      const postKill = await forcedScreen()
+      chaos.transcript_preserved = screenPreserves(postKill, preIdx)
+      chaos.post_kill_screen_sha = sha256(postKill)
+      chaos.post_kill_screen_chars = postKill.length
+      // Auto-heal detection: the respawned gateway rewrites the pidfile.
+      await waitFor(() => gwPidHistory.length >= 2, 30_000)
+      chaos.gateway_respawned = gwPidHistory.length >= 2
+      chaos.respawn_gw_pid = gwPidHistory[1]?.pid ?? null
+      chaos.time_to_respawn_ms = chaos.gateway_respawned && dyingItem ? gwPidHistory[1].at - dyingItem.wall : null
+      // Resume: the respawned gateway re-streams to completion ('done').
+      const resumed = await waitFor(() => streamDone, 120_000)
+      chaos.stream_resumed = resumed && streamStarts >= 2
+      if (resumed) {
+        await quiesce(quiesceMs)
+        takeSample('final', doneInfo?.msgs ?? null, doneInfo?.events ?? null)
+      }
+      const fin = await forcedScreen()
+      chaos.final_screen_sha = sha256(fin)
+      chaos.final_screen_code_idx = lastCodeIdx(fin)
+      chaos.final_screen_has_fixture = fin.length > 500
+    } else if (scen === 'gw-stop') {
+      // SIGSTOP must be external (a stopped process can't stop itself): the
+      // harness reads the pidfile and signals at the stopAt boundary.
+      const stopAt = chaosSpec.stopAt ?? 150
+      chaos.stop_at_msgs = stopAt
+      chaos.stop_reached = await waitFor(() => lastBoundaryMsgs >= stopAt, 180_000)
+      const gwp = gwPidHistory[gwPidHistory.length - 1]?.pid ?? gwPid
+      chaos.gw_pid = gwp
+      if (chaos.stop_reached && gwp) {
+        const preIdx = lastCodeIdx(stripAnsi(tailBuf.join('')))
+        chaos.pre_stop_code_idx = preIdx
+        try {
+          process.kill(gwp, 'SIGSTOP')
+        } catch {
+          /* gone */
+        }
+        await sleep(100)
+        chaos.gw_state_after_stop = procStateOf(gwp) // expect 'T'
+        const tFreeze = now()
+        let checks = 0
+        let aliveOk = 0
+        while (now() - tFreeze < 30_000 && !exited) {
+          await sleep(1000)
+          checks++
+          if (uiPid && readProcSample(uiPid)) aliveOk++
+        }
+        chaos.freeze_observe_s = 30
+        chaos.ui_alive_during_freeze = `${aliveOk}/${checks}`
+        chaos.ui_survived_freeze = !exited
+        const frozenScreen = await forcedScreen()
+        chaos.transcript_preserved = screenPreserves(frozenScreen, preIdx)
+        chaos.frozen_screen_sha = sha256(frozenScreen)
+        // End the run: CONT first (cleanup needs a running process), then KILL.
+        try {
+          process.kill(gwp, 'SIGCONT')
+        } catch {
+          /* gone */
+        }
+        await sleep(200)
+        const tKill = now()
+        try {
+          process.kill(gwp, 'SIGKILL')
+        } catch {
+          /* gone */
+        }
+        await waitFor(() => gwPidHistory[gwPidHistory.length - 1]?.pid !== gwp, 25_000)
+        chaos.gateway_respawned = gwPidHistory[gwPidHistory.length - 1]?.pid !== gwp
+        chaos.time_to_respawn_ms = chaos.gateway_respawned ? gwPidHistory[gwPidHistory.length - 1].at - tKill : null
+        chaos.stream_resumed = await waitFor(() => streamStarts >= 2, 30_000)
+      }
+    } else if (scen === 'resize-storm') {
+      chaos.loaded = await waitFor(() => streamDone, 180_000)
+      if (chaos.loaded) await quiesce(quiesceMs)
+      const pre = await forcedScreen()
+      const preIdx = lastCodeIdx(pre)
+      chaos.pre_storm_code_idx = preIdx
+      const flaps = chaosSpec.flaps ?? 30
+      const tStorm = now()
+      let flapped = 0
+      for (let i = 0; i < flaps && !exited; i++) {
+        try {
+          term.resize(i % 2 === 0 ? 80 : 120, i % 2 === 0 ? 20 : 40)
+          flapped++
+        } catch {
+          break
+        }
+        await sleep(100)
+      }
+      try {
+        if (!exited) term.resize(120, 40)
+      } catch {
+        /* gone */
+      }
+      chaos.flaps = flapped
+      chaos.storm_ms = now() - tStorm
+      await sleep(10_000) // settle
+      chaos.ui_survived_storm = !exited
+      const post = await forcedScreen()
+      chaos.transcript_preserved = screenPreserves(post, preIdx)
+      chaos.post_storm_screen_sha = sha256(post)
+    } else if (scen === 'pty-eof') {
+      chaos.loaded = await waitFor(() => streamDone, 180_000)
+      if (chaos.loaded) await quiesce(quiesceMs)
+      const gwp = gwPidHistory[gwPidHistory.length - 1]?.pid ?? gwPid
+      chaos.gw_pid = gwp
+      // Destroy the PTY master: the UI sees EOF/EIO + SIGHUP — the "terminal
+      // window closed" case. Does it exit cleanly and reap its gateway?
+      let how = null
+      try {
+        if (typeof term.destroy === 'function') {
+          term.destroy()
+          how = 'master destroy()'
+        }
+      } catch {
+        /* ignore */
+      }
+      if (!how) {
+        try {
+          term.kill('SIGHUP')
+          how = 'SIGHUP (no destroy())'
+        } catch {
+          how = 'failed'
+        }
+      }
+      chaos.master_close = how
+      const tEof = now()
+      let uiGoneAt = null
+      let gwGoneAt = null
+      while (now() - tEof < 15_000) {
+        if (uiGoneAt === null && !pidAlive(uiPid)) uiGoneAt = now()
+        if (gwGoneAt === null && gwp && !pidAlive(gwp)) gwGoneAt = now()
+        if (uiGoneAt !== null && (gwGoneAt !== null || !gwp)) break
+        await sleep(100)
+      }
+      chaos.ui_exited_after_eof = uiGoneAt !== null
+      chaos.ui_exit_after_eof_ms = uiGoneAt !== null ? uiGoneAt - tEof : null
+      chaos.gateway_reaped = gwGoneAt !== null
+      chaos.gateway_reaped_ms = gwGoneAt !== null ? gwGoneAt - tEof : null
+    }
+
+    chaos.ui_survived = uiPid ? pidAlive(uiPid) : !exited
+    return chaos
+  }
+
   const sessionStarted = await waitFor(() => sessionCreateAt !== null, 30_000)
   if (!sessionStarted && !exited) {
     events.push({ kind: 'error', message: 'no session.create within 30s', t_ms: now() - t0 })
@@ -500,6 +790,8 @@ export async function runScenario(opts) {
     // settle: boot RPCs done + paint quiet
     await quiesce(quiesceMs)
     takeSample('final', 0, 0)
+  } else if (mode === 'chaos') {
+    result.chaos = await runChaos()
   } else {
     // wait for the stream to finish (or the UI to die — cap-hit IS a result)
     const ok = await waitFor(() => streamDone, runTimeoutMs, 100)
@@ -556,6 +848,36 @@ export async function runScenario(opts) {
   await gracefulQuit()
   clearInterval(pollTimer)
   clearInterval(lagTimer)
+
+  // chaos: orphan sweep — any gateway pid ever recorded (or the UI itself)
+  // still alive after teardown is an orphan: record, then reap (specific pids
+  // only — never a broad pkill).
+  if (mode === 'chaos' && result.chaos) {
+    await sleep(1000)
+    const orphans = []
+    const seen = new Set(gwPidHistory.map(e => e.pid))
+    if (gwPid) seen.add(gwPid)
+    for (const pid of seen) {
+      if (pidAlive(pid)) {
+        orphans.push({ pid, comm: commOf(pid), role: 'gateway' })
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch {
+          /* raced */
+        }
+      }
+    }
+    if (uiPid && pidAlive(uiPid)) {
+      orphans.push({ pid: uiPid, comm: commOf(uiPid), role: 'ui' })
+      try {
+        process.kill(uiPid, 'SIGKILL')
+      } catch {
+        /* raced */
+      }
+    }
+    result.chaos.orphans = orphans
+    result.chaos.ui_exit = exited
+  }
 
   // cap-hit determination
   const finalCg = lastCg
@@ -638,7 +960,7 @@ export async function runScenario(opts) {
       opentui_cap: opentuiCap,
       fixture: { path: fixturePath, msgs: fixtureMsgs, sha256: fixtureSha },
       sample_every: sampleEvery,
-      mode_params: mode === 'cpu-paced' ? { rate: pacedRate } : mode === 'scroll' ? scroll : {},
+      mode_params: mode === 'cpu-paced' ? { rate: pacedRate } : mode === 'scroll' ? scroll : mode === 'chaos' ? chaosSpec : {},
       ui_pid: uiPid,
       gw_pid: gwPid,
       cgroup: cgPath,
@@ -678,6 +1000,15 @@ export async function runScenario(opts) {
     unlinkSync(activeSessionFile)
   } catch {
     /* ignore */
+  }
+  if (gwPidFile) {
+    for (const f of [gwPidFile, `${gwPidFile}.dieflag`]) {
+      try {
+        unlinkSync(f)
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   if (outFile) {

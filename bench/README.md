@@ -32,8 +32,25 @@ node run.mjs --cell nodes         # instrumented node counts (ink fd-3 sampler; 
 node run.mjs --cell cpu           # paced 30 ev/s streaming ×3
 node run.mjs --cell scroll        # SGR wheel 30Hz×15s on a 3000-msg transcript ×3
 node run.mjs --cell startup       # ×10, fake gateway
+node run.mjs --cell chaos         # stability: gw SIGKILL mid-stream/mid-tool, SIGSTOP 30s, resize storm, PTY EOF — 5 scenarios × {ink, otui-capped}
 node render.mjs                   # report.html + report-assets/*.png
 ```
+
+### Chaos cell notes
+
+- **chaos** (5 scenarios × ink/otui-capped, one JSON each, `summary.chaos`):
+  gateway death is SELF-inflicted (`HERMES_FAKE_DIE_AT=<msg>:<kill|tool-kill>`
+  → SIGKILL at fixture msg N, or at the first `tool.*` event after N) because
+  self-termination is deterministic vs racy external timing; a die-once flag
+  file keeps the auto-heal respawn from dying again. SIGSTOP (gw-stop) is
+  external via `HERMES_FAKE_PIDFILE`. Respawn detection = the respawned
+  gateway REWRITING that pidfile. Both UIs auto-heal (budget 3 respawns/60s):
+  OpenTUI with exponential backoff (`ui-opentui/src/boundary/gateway/liveGateway.ts`
+  `onExit`), Ink immediately (`ui-tui/src/app/useMainApp.ts` `exitHandler`).
+  `transcript_preserved` = after a forced full repaint (resize jiggle), the
+  screen still shows a recent pre-kill turn (`const xN` fixture markers).
+  `summary.result` keeps its usual semantics — for pty-eof the UI *should*
+  die, so read `summary.chaos`, not `summary.result`, for the verdicts.
 
 Configs: `ink` · `otui-capped` (`HERMES_TUI_MAX_MESSAGES=3000`, the default) ·
 `otui-uncapped` (`=100000`). Launch parity with `hermes_cli/main.py`:

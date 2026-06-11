@@ -20,6 +20,16 @@
 //   HERMES_FAKE_START_DELAY_MS delay after session.create reply before streaming (default 1500)
 //   HERMES_FAKE_SAMPLE_EVERY   fixture-msg boundary cadence for progress lines (default 100)
 //   HERMES_FAKE_PROGRESS       progress NDJSON file path (required for harness runs)
+//   HERMES_FAKE_PIDFILE        write own pid here at startup (harness discovers the
+//                              gateway pid; a REWRITE by a respawned instance is the
+//                              harness's auto-heal detection signal)
+//   HERMES_FAKE_DIE_AT         "<msgIndex>:<kill|tool-kill>" — chaos cells: self-SIGKILL
+//                              at fixture msg N (kill), or at the first tool.* event
+//                              after msg N (tool-kill). Self-termination is deterministic
+//                              vs racy external timing. SIGSTOP stays external (a stopped
+//                              process can't stop itself usefully).
+//   HERMES_FAKE_DIE_FLAG       die-once flag file: created just before the self-kill so
+//                              the UI's auto-heal RESPAWN (same env) does not die again
 //
 // Modes: burst = write as fast as the pipe accepts (await 'drain' on
 // backpressure, so emission tracks UI ingestion within the ~64KB pipe buffer);
@@ -27,7 +37,7 @@
 // (scroll-latency runs drive input afterwards). Exits on stdin EOF (the UIs
 // close stdin to stop the gateway) — same lifecycle as the real child.
 
-import { appendFileSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 const FIXTURE = process.env.HERMES_FAKE_FIXTURE || ''
@@ -36,6 +46,30 @@ const RATE = Math.max(1, Number.parseInt(process.env.HERMES_FAKE_RATE ?? '30', 1
 const START_DELAY_MS = Number.parseInt(process.env.HERMES_FAKE_START_DELAY_MS ?? '1500', 10) || 1500
 const SAMPLE_EVERY = Math.max(1, Number.parseInt(process.env.HERMES_FAKE_SAMPLE_EVERY ?? '100', 10) || 100)
 const PROGRESS = process.env.HERMES_FAKE_PROGRESS || ''
+const PIDFILE = process.env.HERMES_FAKE_PIDFILE || ''
+const DIE_FLAG = process.env.HERMES_FAKE_DIE_FLAG || ''
+
+// Chaos self-termination (deterministic, no external kill races). Die-once:
+// if the flag file exists a previous instance already died here — this is the
+// auto-heal respawn, which must stream to completion.
+let dieAtMsgs = null
+let dieKind = 'kill'
+{
+  const m = (process.env.HERMES_FAKE_DIE_AT || '').match(/^(\d+):(kill|tool-kill)$/)
+  if (m) {
+    dieAtMsgs = Number(m[1])
+    dieKind = m[2]
+  }
+  if (dieAtMsgs !== null && DIE_FLAG && existsSync(DIE_FLAG)) dieAtMsgs = null
+}
+
+if (PIDFILE) {
+  try {
+    writeFileSync(PIDFILE, String(process.pid))
+  } catch {
+    /* best-effort */
+  }
+}
 
 const t0 = Date.now()
 const progress = obj => {
@@ -105,6 +139,21 @@ function resultFor(method, params) {
   }
 }
 
+// ── Chaos self-kill ────────────────────────────────────────────────────
+// Flag first (sync — survives SIGKILL), then a 'dying' progress line (gives
+// the harness the precise kill wall-clock), then SIGKILL self.
+function dieNow(msgs) {
+  if (DIE_FLAG) {
+    try {
+      writeFileSync(DIE_FLAG, '1')
+    } catch {
+      /* best-effort */
+    }
+  }
+  progress({ k: 'dying', kind: dieKind, msgs })
+  process.kill(process.pid, 'SIGKILL')
+}
+
 // ── Fixture streaming ──────────────────────────────────────────────────
 let streaming = false
 async function streamFixture() {
@@ -130,12 +179,19 @@ async function streamFixture() {
       const drained = emitEvent(item.v)
       if (drained) await drained
       events++
+      // tool-kill: die exactly as a tool-call event goes over the wire (the
+      // first tool.* event after the armed msg index — the UI is left with a
+      // started, never-completed tool).
+      if (dieAtMsgs !== null && dieKind === 'tool-kill' && msgs >= dieAtMsgs && typeof item.v?.type === 'string' && item.v.type.startsWith('tool.')) {
+        dieNow(msgs)
+      }
     } else if (item.k === 't') {
       msgs = item.msgs
       if (msgs >= nextBoundary) {
         progress({ k: 'boundary', msgs, events })
         while (nextBoundary <= msgs) nextBoundary += SAMPLE_EVERY
       }
+      if (dieAtMsgs !== null && dieKind === 'kill' && msgs >= dieAtMsgs) dieNow(msgs)
     }
     // {"k":"r"} row markers: composer-local rows, nothing on the wire.
   }

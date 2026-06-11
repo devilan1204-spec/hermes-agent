@@ -6,7 +6,7 @@
 // bench/results/<utc>-<sha7>-<cell>-<ui>-<config>-r<rep>.json.
 //
 // Usage:
-//   node run.mjs --cell gate|mem3000|slope10k|nodes|cpu|scroll|startup
+//   node run.mjs --cell gate|mem3000|slope10k|nodes|cpu|scroll|startup|chaos
 //   node run.mjs --all            (the full E1 host sequence, gate first)
 // Knobs: --reps N, --msgs N, --cap 2G|none, --seed N
 
@@ -300,6 +300,47 @@ async function cellScroll(opts) {
   }
 }
 
+// ── chaos/stability cell ─────────────────────────────────────────────────
+// 5 scenarios × {ink, otui-capped} = 10 sequential runs. The fake gateway
+// self-SIGKILLs deterministically (HERMES_FAKE_DIE_AT) for the kill scenarios;
+// SIGSTOP is external (harness reads HERMES_FAKE_PIDFILE). Auto-heal detection
+// = pidfile rewrite by the respawned gateway. Results carry summary.chaos.
+const CHAOS_SCENARIOS = ['gw-kill-stream', 'gw-kill-tool', 'gw-stop', 'resize-storm', 'pty-eof']
+
+async function cellChaos(opts) {
+  const msgs = opts.msgs ?? 300
+  const half = Math.floor(msgs / 2)
+  const fx = await ensureFixture(msgs)
+  const configs = opts.configs ?? ['ink', 'otui-capped']
+  const scenarios = opts.scenarios ?? CHAOS_SCENARIOS
+  for (const config of configs) {
+    for (const scenario of scenarios) {
+      const chaos = { scenario }
+      let extra = {}
+      if (scenario === 'gw-kill-stream') chaos.dieAt = `${half}:kill`
+      if (scenario === 'gw-kill-tool') chaos.dieAt = `${half}:tool-kill`
+      if (scenario === 'gw-stop') {
+        // paced so "mid-stream" exists long enough to land an external SIGSTOP
+        chaos.stopAt = half
+        chaos.fakeMode = 'paced'
+        extra = { pacedRate: 120 }
+      }
+      await doRun('chaos', config, scenario, {
+        mode: 'chaos',
+        chaos,
+        fixturePath: fx.path,
+        fixtureMsgs: fx.msgs,
+        fixtureSha: fx.sha256,
+        memoryMax: '2G',
+        heapMb: 8192,
+        sampleEvery: 25,
+        runTimeoutMs: 10 * 60 * 1000,
+        ...extra
+      })
+    }
+  }
+}
+
 async function cellStartup(opts) {
   const reps = opts.reps ?? 10
   const rand = rng(opts.seed ?? 4242)
@@ -331,7 +372,8 @@ const opts = {
   msgs: opt('msgs') ? Number(opt('msgs')) : undefined,
   cap: opt('cap'),
   seed: opt('seed') ? Number(opt('seed')) : undefined,
-  configs: opt('configs') ? opt('configs').split(',').filter(c => CONFIGS[c]) : undefined
+  configs: opt('configs') ? opt('configs').split(',').filter(c => CONFIGS[c]) : undefined,
+  scenarios: opt('scenarios') ? opt('scenarios').split(',').filter(s => CHAOS_SCENARIOS.includes(s)) : undefined
 }
 const cell = opt('cell')
 mkdirSync(RESULTS_DIR, { recursive: true })
@@ -343,7 +385,8 @@ const CELLS = {
   nodes: cellNodes,
   cpu: cellCpu,
   scroll: cellScroll,
-  startup: cellStartup
+  startup: cellStartup,
+  chaos: cellChaos
 }
 
 if (args.includes('--all')) {
