@@ -28,6 +28,7 @@ This starts a local web server and opens `http://127.0.0.1:9119` in your browser
 | `--host` | `127.0.0.1` | Bind address |
 | `--no-open` | — | Don't auto-open the browser |
 | `--insecure` | off | Allow binding to non-localhost hosts (**DANGEROUS** — exposes API keys on the network; pair with a firewall and strong auth) |
+| `--isolated` | off | When launched from a named profile (`worker dashboard`), run a dedicated per-profile server instead of routing to the machine dashboard |
 
 ```bash
 # Custom port
@@ -39,6 +40,43 @@ hermes dashboard --host 0.0.0.0
 # Start without opening browser
 hermes dashboard --no-open
 ```
+
+## Managing multiple profiles
+
+The dashboard is a **machine-level** management surface: one server manages
+every [profile](../profiles.md) on the machine. A profile switcher in the
+sidebar (visible whenever more than one profile exists) decides which
+profile the management pages read and write — Config, API Keys, Skills,
+MCP, Models, and the Chat tab all follow it. While a profile other than
+the dashboard's own is selected, an amber banner names the managed profile
+so the write target is never ambiguous.
+
+The selection lives in the URL (`?profile=<name>`), so deep links like
+`http://127.0.0.1:9119/skills?profile=worker` land with the switcher
+preselected and survive refresh.
+
+Launching the dashboard from a profile alias routes to the machine
+dashboard instead of starting a second server:
+
+```bash
+worker dashboard
+# → already running: opens the browser at ?profile=worker
+# → not running:     starts the machine dashboard with "worker" preselected
+```
+
+Pass `--isolated` to opt out and run a dedicated server scoped to that
+profile (the pre-unification behavior — useful if you deliberately expose
+different profiles' dashboards with different auth).
+
+The **Chat** tab follows the switcher too: a scoped chat spawns its PTY
+child with the selected profile's `HERMES_HOME`, so the conversation runs
+with that profile's model, skills, memory, and session history. Switching
+profiles starts a fresh terminal session.
+
+What stays per-profile and is *not* absorbed by the switcher: gateway
+processes (manage them via `hermes -p <name> gateway …`), each profile's
+session database, and cron schedulers (the Cron page already aggregates
+across profiles with its own filter).
 
 ## Prerequisites
 
